@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../dashboard/dashboard.dart';
 import '../forgot_password/forgot-password.dart';
 import '../signup/signup_home.dart';
 
@@ -24,9 +25,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _handleLogin() {
-    // TODO: Implement login logic
-    final email = _emailController.text;
-    final password = _passwordController.text;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const DashboardScreen()),
+    );
   }
 
   void _handleSignUp() {
