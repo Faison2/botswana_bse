@@ -184,7 +184,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildPortfolioCard() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -256,31 +256,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 8),
 
           // Percentage Change
-          Row(
-            children: [
-              const Icon(
-                Icons.arrow_upward,
-                color: Color(0xFF4CAF50),
-                size: 16,
-              ),
-              const SizedBox(width: 4),
-              const Text(
-                '10.9%',
-                style: TextStyle(
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.1), // Adjust opacity as needed
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.all(8), // Add some padding
+            child: Row(
+              mainAxisSize: MainAxisSize.min, // Makes the container fit the content
+              children: [
+                const Icon(
+                  Icons.arrow_upward,
                   color: Color(0xFF4CAF50),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+                  size: 16,
                 ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'in the past week',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
-                  fontSize: 14,
+                const SizedBox(width: 4),
+                const Text(
+                  '10.9%',
+                  style: TextStyle(
+                    color: Color(0xFF4CAF50),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 4),
+                Text(
+                  'in the past week',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.7),
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 20),
 
@@ -562,7 +570,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         const SizedBox(height: 10),
         _buildStockCard(
-          'Botswana Insurance Holdings Limited',
+          'g',
           'BIHL',
           '\$19.69',
           '\$19.30',
@@ -658,7 +666,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
               Text(
-                'Market Supply: $supply  Market Demand: $demand',
+                'Market: $supply  Market: $demand',
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.6),
                   fontSize: 11,
