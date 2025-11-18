@@ -82,9 +82,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFF2C1810),
-              const Color(0xFF8B4513).withOpacity(0.6),
-              const Color(0xFF654321).withOpacity(0.4),
+              const Color(0xFFFFF8DC),
+              const Color(0xFFFFF4D6),
+              const Color(0xFFFFEFCC),
             ],
           ),
         ),
@@ -123,7 +123,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 style: TextStyle(
                   fontSize: 30,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: Colors.grey,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -137,7 +137,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Title', style: TextStyle(color: Colors.white, fontSize: 13)),
+                      const Text('Title', style: TextStyle(color: Colors.grey, fontSize: 13)),
                       const SizedBox(height: 8),
                       Row(
                         children: [
@@ -204,7 +204,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            side: const BorderSide(color: Colors.white, width: 2),
+                            side: const BorderSide(color: Colors.black, width: 2),
                             fillColor: MaterialStateProperty.resolveWith(
                                   (states) {
                                 if (states.contains(MaterialState.selected)) {
@@ -309,7 +309,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Text(
         text,
         style: const TextStyle(
-          color: Colors.white,
+          color: Colors.grey,
           fontSize: 13,
           fontWeight: FontWeight.w500,
         ),
@@ -320,14 +320,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Widget _buildTextField(String hint, TextEditingController controller, {TextInputType? keyboardType}) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white.withOpacity(1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.3)),
+        border: Border.all(color: Colors.white),
       ),
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
-        style: const TextStyle(color: Colors.white, fontSize: 15),
+        style: const TextStyle(color: Colors.black, fontSize: 15),
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 15),

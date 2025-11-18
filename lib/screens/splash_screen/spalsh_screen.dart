@@ -57,9 +57,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFF2C1810),
-              const Color(0xFF1A1A1A),
-              const Color(0xFF0D0D0D),
+              const Color(0xFFFFF8DC),
+              const Color(0xFFFFF4D6),
+              const Color(0xFFFFEFCC),
             ],
           ),
         ),
@@ -144,7 +144,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: Colors.amber,
+                            color: Color(0xFF6B5D4F),
                             letterSpacing: 2,
                           ),
                         ),

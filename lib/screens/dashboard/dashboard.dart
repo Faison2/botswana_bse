@@ -399,7 +399,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               '-2.3%',
               false,
               const Color(0xFF4A2B2B),
-              '🔥',
+              'H',
               minergyData,
             ),
           ),
