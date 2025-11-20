@@ -1,7 +1,11 @@
+import 'package:bse/screens/buy_sell/buy_sell.dart';
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'dart:async';
 import 'package:fl_chart/fl_chart.dart';
+import '../market_watch/market_watch.dart';
+import '../portifolio/portifolio.dart';
+import '../transactions /transactions.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -20,12 +24,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Timer? _timer;
   double currentX = 0;
 
+  // 1. DEFINE THE LIST OF WIDGETS/SCREENS FOR THE BOTTOM NAVIGATION
+  late final List<Widget> _widgetOptions;
+
   @override
   void initState() {
     super.initState();
+
+    // Initialize the list of screens
+    // The screen at index 0 is your initial dashboard content,
+    // which is the main scrollable view we'll keep.
+    _widgetOptions = <Widget>[
+      // Index 0: Dashboard (The existing scrollable content)
+      _buildDashboardContent(),
+      // Index 1: Charts/Analysis
+      const TradingPage(),
+      // Index 2 is reserved for the FAB (MarketWatch)
+      Container(),
+      // Index 3: Transactions/Money
+      const TransactionsScreen(),
+      // Index 4: Portfolio
+      const PortfolioScreen(),
+    ];
+
     _initializeChartData();
     _startLiveDataUpdate();
   }
+// ... (The rest of your existing methods: _initializeChartData, _startLiveDataUpdate, dispose)
+// ... (Your chart data methods remain the same)
 
   void _initializeChartData() {
     // Initialize with some data points
@@ -38,6 +64,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _startLiveDataUpdate() {
     _timer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
+      if (!mounted) return; // Safety check
       setState(() {
         // Add new data point
         bolataData.add(FlSpot(currentX, 50 + math.Random().nextDouble() * 20 + (currentX * 0.2)));
@@ -67,47 +94,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
+
+  // Extracted the main dashboard content into a new method
+  Widget _buildDashboardContent() {
+    return Column(
+      children: [
+        // Header
+        _buildHeader(),
+
+        // Scrollable Content
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 20),
+                // Portfolio Balance Card
+                _buildPortfolioCard(),
+                const SizedBox(height: 30),
+                // My Portfolio Section
+                _buildSectionHeader('My Portfolio', 'View Details'),
+                const SizedBox(height: 15),
+                _buildMyPortfolio(),
+                const SizedBox(height: 30),
+                // Market Watch Section
+                _buildSectionHeader('Market Watch', 'Sell All'),
+                const SizedBox(height: 15),
+                _buildMarketWatch(),
+                const SizedBox(height: 100),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A1A),
+      // 2. USE IndexedStack OR _widgetOptions[_selectedIndex] IN THE BODY
       body: SafeArea(
-        child: Column(
-          children: [
-            // Header
-            _buildHeader(),
-
-            // Scrollable Content
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 20),
-
-                    // Portfolio Balance Card
-                    _buildPortfolioCard(),
-
-                    const SizedBox(height: 30),
-
-                    // My Portfolio Section
-                    _buildSectionHeader('My Portfolio', 'View Details'),
-                    const SizedBox(height: 15),
-                    _buildMyPortfolio(),
-
-                    const SizedBox(height: 30),
-
-                    // Market Watch Section
-                    _buildSectionHeader('Market Watch', 'Sell All'),
-                    const SizedBox(height: 15),
-                    _buildMarketWatch(),
-
-                    const SizedBox(height: 100),
-                  ],
-                ),
-              ),
-            ),
-          ],
+        // Use IndexedStack to preserve the state of the screens
+        child: IndexedStack(
+          index: _selectedIndex,
+          children: _widgetOptions,
         ),
       ),
 
@@ -119,8 +152,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
+// ... (The rest of your existing building methods)
+// ... (All your existing _buildHeader, _buildPortfolioCard, etc. methods remain the same)
+
+// The building methods need to be included in the final code.
+// I'll skip re-pasting them here for brevity, assuming you'll keep them in your file.
 
   Widget _buildHeader() {
+    // ... (Your existing _buildHeader code)
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Row(
@@ -182,9 +221,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildPortfolioCard() {
+    // ... (Your existing _buildPortfolioCard code)
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -246,97 +286,61 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           // Balance
           Text(
-            _isBalanceVisible ? '\$120,300.50' : '••••••••',
+            _isBalanceVisible ? 'BWP 120,300.50' : '••••••••',
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 42,
-              fontWeight: FontWeight.bold,
+              fontSize: 38,
+              fontWeight: FontWeight.w300,
+              letterSpacing: 1,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
 
           // Percentage Change
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.1), // Adjust opacity as needed
-              borderRadius: BorderRadius.circular(16),
-            ),
-            padding: const EdgeInsets.all(8), // Add some padding
-            child: Row(
-              mainAxisSize: MainAxisSize.min, // Makes the container fit the content
-              children: [
-                const Icon(
-                  Icons.arrow_upward,
+          Row(
+            children: [
+              const Icon(
+                Icons.arrow_upward,
+                color: Color(0xFF4CAF50),
+                size: 14,
+              ),
+              const SizedBox(width: 4),
+              const Text(
+                '10.9%',
+                style: TextStyle(
                   color: Color(0xFF4CAF50),
-                  size: 16,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
                 ),
-                const SizedBox(width: 4),
-                const Text(
-                  '10.9%',
-                  style: TextStyle(
-                    color: Color(0xFF4CAF50),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'in the past week',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 13,
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  'in the past week',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
           const SizedBox(height: 20),
 
           // Balance Details
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Cleared Cash: \$1,250.00',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Uncleared Cash\$1,250.00',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
+              Text(
+                'Cleared Cash: BWP1,250.00',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.9),
+                  fontSize: 13,
                 ),
               ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Total Amount: \$1,250.00',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Cash Balance: \$1,250.00',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
+              Text(
+                'Total Amount: BWP1,250.00',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.9),
+                  fontSize: 13,
                 ),
               ),
             ],
@@ -347,6 +351,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildSectionHeader(String title, String action) {
+    // ... (Your existing _buildSectionHeader code)
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
@@ -374,6 +379,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildMyPortfolio() {
+    // ... (Your existing _buildMyPortfolio code)
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
@@ -382,7 +388,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: _buildPortfolioCard1(
               'Bolata Energy Ltd',
               'BOTALA',
-              '\$12,300.00',
+              'BWP12,300.00',
               '+4.5%',
               true,
               const Color(0xFF2D4A2B),
@@ -395,11 +401,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: _buildPortfolioCard1(
               'Minergy Limited',
               'MINERGY',
-              '\$4,500.00',
+              'BWP4,500.00',
               '-2.3%',
               false,
               const Color(0xFF4A2B2B),
-              'H',
+              'M',
               minergyData,
             ),
           ),
@@ -418,8 +424,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       String icon,
       List<FlSpot> chartData,
       ) {
+    // ... (Your existing _buildPortfolioCard1 code)
     return Container(
-      height: 170,
+      height: 180,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: bgColor,
@@ -465,7 +472,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 child: Text(
                   icon,
-                  style: const TextStyle(fontSize: 16),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -527,7 +538,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Icon(
                     isPositive ? Icons.arrow_upward : Icons.arrow_downward,
                     color: isPositive ? const Color(0xFF4CAF50) : Colors.red,
-                    size: 14,
+                    size: 12,
                   ),
                   Text(
                     change,
@@ -547,46 +558,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildMarketWatch() {
+    // ... (Your existing _buildMarketWatch code)
     return Column(
       children: [
         _buildStockCard(
-          'Access Bank Botswana Limited',
-          'ACCESS',
-          '\$6.23',
-          '\$0.30',
-          '\$6.30',
+          'Sechaba Brewery Holdings Ltd',
+          'SECHAB',
+          'BWP6.23',
+          'BWP6.30',
+          'BWP6.30',
           '2,000',
           '100',
+          Icons.local_drink,
+          const Color(0xFF3D2F1F),
         ),
         const SizedBox(height: 10),
         _buildStockCard(
-          'ABSA Bank of Botswana Limited',
-          'ABSA',
-          '\$11.59',
-          '\$12.30',
-          '\$11.30',
+          'First National Bank of Botswana Ltd',
+          'FNBB',
+          'BWP11.59',
+          'BWP12.30',
+          'BWP11.30',
           '2,000',
           '100',
+          Icons.account_balance,
+          const Color(0xFF2A3F2F),
         ),
         const SizedBox(height: 10),
         _buildStockCard(
-          'g',
-          'BIHL',
-          '\$19.69',
-          '\$19.30',
-          '\$19.30',
+          'BBS Limited',
+          'BBS',
+          'BWP19.69',
+          'BWP19.30',
+          'BWP19.30',
           '600',
           '800',
+          Icons.business,
+          const Color(0xFF2F3A4A),
         ),
         const SizedBox(height: 10),
         _buildStockCard(
-          'Chobe Holdings Limited',
-          'CHOBE',
-          '\$29.39',
-          '\$29.66',
-          '\$29.88',
+          'PrimeTime Property Holdings Ltd',
+          'PRIMET',
+          'BWP29.39',
+          'BWP29.66',
+          'BWP29.88',
           '600',
           '900',
+          Icons.home_work,
+          const Color(0xFF4A2F2F),
         ),
       ],
     );
@@ -600,7 +620,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       String bestAsk,
       String supply,
       String demand,
+      IconData iconData,
+      Color iconBgColor,
       ) {
+    // ... (Your existing _buildStockCard code)
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.all(16),
@@ -608,78 +631,172 @@ class _DashboardScreenState extends State<DashboardScreen> {
         color: const Color(0xFF2A2A2A),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Column(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      ticker,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.5),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                price,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
+          // Company Icon/Logo
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: iconBgColor,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              iconData,
+              color: Colors.white,
+              size: 28,
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(width: 12),
 
-          // Stock Details
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // Company Info
+          // Expanded(
+          //   child:
+          // ),
+          Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+
+              Row(
                 children: [
-                  Text(
-                    'Best Bid: $bestBid  Best Ask: $bestAsk',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.6),
-                      fontSize: 11,
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        ticker,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 11,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+
+                    ],
                   ),
+                  Text(
+                    price,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  )
                 ],
               ),
-              Text(
-                'Market: $supply  Market: $demand',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.6),
-                  fontSize: 11,
-                ),
-              ),
+              Row(
+
+                children: [
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Best Bid:',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 10,
+                        ),
+                      ),
+                      Text(
+                        bestBid,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 4),
+
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Best Ask:',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 10,
+                        ),
+                      ),
+                      Text(
+                        bestAsk,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 2),
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Supply:',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 10,
+                        ),
+                      ),
+                      Text(
+                        supply,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 2),
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Demand:',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 10,
+                        ),
+                      ),
+                      Text(
+                        demand,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  )
+                ],
+              )
             ],
           ),
+          // Price
         ],
       ),
     );
   }
 
+
   Widget _buildBottomNavBar() {
+    // ... (Your existing _buildBottomNavBar code)
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF2A2A2A),
@@ -701,22 +818,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildNavItem(Icons.home, 0),
-            _buildNavItem(Icons.show_chart, 1),
-            const SizedBox(width: 50), // Space for FAB
-            _buildNavItem(Icons.attach_money, 3),
-            _buildNavItem(Icons.shopping_bag_outlined, 4),
+            _buildNavItem(Icons.home_outlined, 0),          // Home / Dashboard
+            _buildNavItem(Icons.bar_chart_outlined, 1),    // Charts / Analysis
+            const SizedBox(width: 50),             // Space for FAB (Index 2)
+            _buildNavItem(Icons.attach_money, 3),  // Transactions / Money
+            _buildNavItem(Icons.shopping_bag_outlined, 4), // Portfolio
           ],
         ),
       ),
     );
   }
 
+  // 3. UPDATED _buildNavItem to set index instead of pushing a new screen
   Widget _buildNavItem(IconData icon, int index) {
     final isSelected = _selectedIndex == index;
     return GestureDetector(
       onTap: () {
-        setState(() => _selectedIndex = index);
+        // Only change state if the new index is not the FAB placeholder (index 2)
+        if (index != 2) {
+          setState(() => _selectedIndex = index);
+        }
       },
       child: Container(
         padding: const EdgeInsets.all(12),
@@ -730,6 +851,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildFloatingActionButton() {
+    // ... (Your existing _buildFloatingActionButton code)
     return Container(
       width: 65,
       height: 65,
@@ -755,7 +877,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         onPressed: () {
-          // TODO: Implement trade action
+          // Keep this as a separate screen push, as it's a primary action
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const MarketWatchScreen()),
+          );
         },
         child: const Icon(
           Icons.trending_up,
@@ -765,49 +891,4 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
-}
-
-// Custom painter for mini chart
-class MiniChartPainter extends CustomPainter {
-  final bool isPositive;
-
-  MiniChartPainter({required this.isPositive});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = isPositive ? const Color(0xFF4CAF50) : Colors.red
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-
-    final path = Path();
-
-    // Generate curved line data
-    final points = 20;
-    for (int i = 0; i < points; i++) {
-      final x = (size.width / points) * i;
-      final baseY = size.height * 0.5;
-      final amplitude = size.height * 0.3;
-
-      double y;
-      if (isPositive) {
-        // Positive trend - ends higher
-        y = baseY - (math.sin(i * 0.5) * amplitude * 0.5) - (i / points * amplitude);
-      } else {
-        // Negative trend - ends lower
-        y = baseY - (math.sin(i * 0.5) * amplitude * 0.5) + (i / points * amplitude);
-      }
-
-      if (i == 0) {
-        path.moveTo(x, y);
-      } else {
-        path.lineTo(x, y);
-      }
-    }
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -59,6 +59,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
     print('Signup: ${_firstNameController.text} ${_lastNameController.text}');
     print('Email: ${_emailController.text}');
     print('Phone: $_selectedCountryCode${_phoneController.text}');
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const BankingDetailsScreen()),
+    );
   }
 
   void _showSnackBar(String message) {
@@ -66,7 +71,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.amber.shade800,
+        backgroundColor: const Color(0xFFD4A855),
       ),
     );
   }
@@ -102,17 +107,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.amber.withOpacity(0.3),
-                      blurRadius: 20,
-                      spreadRadius: 3,
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 15,
+                      spreadRadius: 2,
                     ),
                   ],
                 ),
                 padding: const EdgeInsets.all(10),
-                child: Image.asset(
-                  'assets/logo.png',
-                  fit: BoxFit.contain,
-                ),
+                child: Image.asset('assets/logo.png', fit: BoxFit.contain),
               ),
 
               const SizedBox(height: 15),
@@ -123,7 +125,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 style: TextStyle(
                   fontSize: 30,
                   fontWeight: FontWeight.bold,
-                  color: Colors.grey,
+                  color: Color(0xFF2C1810),
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -137,17 +139,37 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Title', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                      const Text(
+                        'Title',
+                        style: TextStyle(
+                          color: Color(0xFF6B5D4F),
+                          fontSize: 13,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          Expanded(child: _buildDropdownField('Title', _selectedTitle, ['Mr', 'Mrs', 'Ms', 'Dr'], (val) {
-                            setState(() => _selectedTitle = val!);
-                          })),
+                          Expanded(
+                            child: _buildDropdownField(
+                              'Title',
+                              _selectedTitle,
+                              ['Mr', 'Mrs', 'Ms', 'Dr'],
+                              (val) {
+                                setState(() => _selectedTitle = val!);
+                              },
+                            ),
+                          ),
                           const SizedBox(width: 10),
-                          Expanded(child: _buildDropdownField('Gender', _selectedGender, ['Male', 'Female', 'Other'], (val) {
-                            setState(() => _selectedGender = val!);
-                          })),
+                          Expanded(
+                            child: _buildDropdownField(
+                              'Gender',
+                              _selectedGender,
+                              ['Male', 'Female', 'Other'],
+                              (val) {
+                                setState(() => _selectedGender = val!);
+                              },
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 15),
@@ -161,7 +183,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       const SizedBox(height: 15),
 
                       _buildLabel('Email'),
-                      _buildTextField('vmasoke2@gmail.com', _emailController, keyboardType: TextInputType.emailAddress),
+                      _buildTextField(
+                        'vmasoke2@gmail.com',
+                        _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                      ),
                       const SizedBox(height: 15),
 
                       _buildLabel('ID Number'),
@@ -169,7 +195,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       const SizedBox(height: 15),
 
                       _buildLabel('Address'),
-                      _buildTextField('No3 Mandela Street Gaborone', _addressController),
+                      _buildTextField(
+                        'No3 Mandela Street Gaborone',
+                        _addressController,
+                      ),
                       const SizedBox(height: 15),
 
                       _buildLabel('Phone Number'),
@@ -204,21 +233,27 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            side: const BorderSide(color: Colors.black, width: 2),
-                            fillColor: MaterialStateProperty.resolveWith(
-                                  (states) {
-                                if (states.contains(MaterialState.selected)) {
-                                  return Colors.amber;
-                                }
-                                return Colors.transparent;
-                              },
+                            side: BorderSide(
+                              color: Colors.grey[400]!,
+                              width: 1.5,
                             ),
+                            fillColor: WidgetStateProperty.resolveWith((
+                              states,
+                            ) {
+                              if (states.contains(WidgetState.selected)) {
+                                return const Color(0xFFD4A855);
+                              }
+                              return Colors.transparent;
+                            }),
                           ),
                         ),
                         const SizedBox(width: 8),
                         const Text(
                           'I agree to the ',
-                          style: TextStyle(color: Colors.white, fontSize: 13),
+                          style: TextStyle(
+                            color: Color(0xFF6B5D4F),
+                            fontSize: 13,
+                          ),
                         ),
                         GestureDetector(
                           onTap: () {
@@ -227,7 +262,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           child: const Text(
                             'Terms & Conditions',
                             style: TextStyle(
-                              color: Colors.blue,
+                              color: Color(0xFFD4A855),
                               fontSize: 13,
                               decoration: TextDecoration.underline,
                             ),
@@ -245,7 +280,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             onPressed: () => Navigator.pop(context),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
-                              side: const BorderSide(color: Colors.amber, width: 2),
+                              side: const BorderSide(
+                                color: Color(0xFFD4A855),
+                                width: 2,
+                              ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -255,42 +293,33 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.amber,
+                                color: Color(0xFFD4A855),
                               ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 12),
-        Expanded(
-          child: ElevatedButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const BankingDetailsScreen(),
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.amber,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 0,
-            ),
-            child: const Text(
-              'Next',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        )
-
-
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _handleNext,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFD4A855),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: const Text(
+                              'Next',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -309,7 +338,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Text(
         text,
         style: const TextStyle(
-          color: Colors.grey,
+          color: Color(0xFF6B5D4F),
           fontSize: 13,
           fontWeight: FontWeight.w500,
         ),
@@ -317,47 +346,70 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  Widget _buildTextField(String hint, TextEditingController controller, {TextInputType? keyboardType}) {
+  Widget _buildTextField(
+    String hint,
+    TextEditingController controller, {
+    TextInputType? keyboardType,
+  }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(1),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white),
+        border: Border.all(color: const Color(0xFFE8D7B8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
-        style: const TextStyle(color: Colors.black, fontSize: 15),
+        style: const TextStyle(color: Colors.black87, fontSize: 15),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 15),
+          hintStyle: TextStyle(color: Colors.grey[400], fontSize: 15),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildDropdownField(String hint, String value, List<String> items, Function(String?) onChanged) {
+  Widget _buildDropdownField(
+    String hint,
+    String value,
+    List<String> items,
+    Function(String?) onChanged,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.3)),
+        border: Border.all(color: const Color(0xFFE8D7B8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: value,
           isExpanded: true,
-          dropdownColor: const Color(0xFF654321),
-          style: const TextStyle(color: Colors.white, fontSize: 15),
-          icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+          dropdownColor: Colors.white,
+          style: const TextStyle(color: Colors.black87, fontSize: 15),
+          icon: Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
           items: items.map((String item) {
-            return DropdownMenuItem<String>(
-              value: item,
-              child: Text(item),
-            );
+            return DropdownMenuItem<String>(value: item, child: Text(item));
           }).toList(),
           onChanged: onChanged,
         ),
@@ -368,9 +420,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Widget _buildPhoneField() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.3)),
+        border: Border.all(color: const Color(0xFFE8D7B8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -379,9 +438,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 value: _selectedCountryCode,
-                dropdownColor: const Color(0xFF654321),
-                style: const TextStyle(color: Colors.white, fontSize: 15),
-                icon: const Icon(Icons.arrow_drop_down, color: Colors.white, size: 20),
+                dropdownColor: Colors.white,
+                style: const TextStyle(color: Colors.black87, fontSize: 15),
+                icon: Icon(
+                  Icons.arrow_drop_down,
+                  color: Colors.grey[600],
+                  size: 20,
+                ),
                 items: ['+267', '+27', '+260', '+263'].map((String code) {
                   return DropdownMenuItem<String>(
                     value: code,
@@ -427,12 +490,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
             child: TextField(
               controller: _phoneController,
               keyboardType: TextInputType.phone,
-              style: const TextStyle(color: Colors.white, fontSize: 15),
+              style: const TextStyle(color: Colors.black87, fontSize: 15),
               decoration: InputDecoration(
                 hintText: '781977004',
-                hintStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 15),
+                hintStyle: TextStyle(color: Colors.grey[400], fontSize: 15),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 14,
+                ),
               ),
             ),
           ),
@@ -444,23 +510,35 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Widget _buildPasswordField() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.3)),
+        border: Border.all(color: const Color(0xFFE8D7B8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: TextField(
         controller: _passwordController,
         obscureText: _obscurePassword,
-        style: const TextStyle(color: Colors.white, fontSize: 15),
+        style: const TextStyle(color: Colors.black87, fontSize: 15),
         decoration: InputDecoration(
           hintText: '••••••••••',
-          hintStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 15),
+          hintStyle: TextStyle(color: Colors.grey[400], fontSize: 15),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
           suffixIcon: IconButton(
             icon: Icon(
-              _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-              color: Colors.white70,
+              _obscurePassword
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+              color: Colors.grey[600],
             ),
             onPressed: () {
               setState(() => _obscurePassword = !_obscurePassword);

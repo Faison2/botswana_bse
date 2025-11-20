@@ -60,7 +60,7 @@ class _BankingDetailsScreenState extends State<BankingDetailsScreen> {
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.amber.shade800,
+        backgroundColor: const Color(0xFFD4A855),
       ),
     );
   }
@@ -76,9 +76,9 @@ class _BankingDetailsScreenState extends State<BankingDetailsScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFF2C1810),
-              const Color(0xFF8B4513).withOpacity(0.6),
-              const Color(0xFF654321).withOpacity(0.4),
+              const Color(0xFFFFF8DC),
+              const Color(0xFFFFF4D6),
+              const Color(0xFFFFEFCC),
             ],
           ),
         ),
@@ -96,9 +96,9 @@ class _BankingDetailsScreenState extends State<BankingDetailsScreen> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.amber.withOpacity(0.3),
-                      blurRadius: 20,
-                      spreadRadius: 3,
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 15,
+                      spreadRadius: 2,
                     ),
                   ],
                 ),
@@ -117,7 +117,7 @@ class _BankingDetailsScreenState extends State<BankingDetailsScreen> {
                 style: TextStyle(
                   fontSize: 30,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: Color(0xFF2C1810),
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -131,7 +131,7 @@ class _BankingDetailsScreenState extends State<BankingDetailsScreen> {
                   'Create an account or log in to explore about our app',
                   style: TextStyle(
                     fontSize: 13,
-                    color: Colors.white70,
+                    color: Color(0xFF6B5D4F),
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -151,7 +151,7 @@ class _BankingDetailsScreenState extends State<BankingDetailsScreen> {
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          color: Color(0xFF2C1810),
                         ),
                       ),
                       const SizedBox(height: 25),
@@ -208,7 +208,7 @@ class _BankingDetailsScreenState extends State<BankingDetailsScreen> {
                         onPressed: () => Navigator.pop(context),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          side: const BorderSide(color: Colors.amber, width: 2),
+                          side: const BorderSide(color: Color(0xFFD4A855), width: 2),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -218,7 +218,7 @@ class _BankingDetailsScreenState extends State<BankingDetailsScreen> {
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
-                            color: Colors.amber,
+                            color: Color(0xFFD4A855),
                           ),
                         ),
                       ),
@@ -228,7 +228,7 @@ class _BankingDetailsScreenState extends State<BankingDetailsScreen> {
                       child: ElevatedButton(
                         onPressed: _handleNext,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.amber,
+                          backgroundColor: const Color(0xFFD4A855),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
@@ -261,7 +261,7 @@ class _BankingDetailsScreenState extends State<BankingDetailsScreen> {
       child: Text(
         text,
         style: const TextStyle(
-          color: Colors.white,
+          color: Color(0xFF6B5D4F),
           fontSize: 15,
           fontWeight: FontWeight.w500,
         ),
@@ -272,17 +272,24 @@ class _BankingDetailsScreenState extends State<BankingDetailsScreen> {
   Widget _buildTextField(String hint, TextEditingController controller) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.3)),
+        border: Border.all(color: const Color(0xFFE8D7B8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: TextField(
         controller: controller,
-        style: const TextStyle(color: Colors.white, fontSize: 16),
+        style: const TextStyle(color: Colors.black87, fontSize: 16),
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(
-            color: Colors.white.withOpacity(0.5),
+            color: Colors.grey[400],
             fontSize: 16,
           ),
           border: InputBorder.none,
@@ -303,17 +310,24 @@ class _BankingDetailsScreenState extends State<BankingDetailsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.3)),
+        border: Border.all(color: const Color(0xFFE8D7B8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: value,
           isExpanded: true,
-          dropdownColor: const Color(0xFF654321),
-          style: const TextStyle(color: Colors.white, fontSize: 16),
-          icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+          dropdownColor: Colors.white,
+          style: const TextStyle(color: Colors.black87, fontSize: 16),
+          icon: Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
           items: items.map((String item) {
             return DropdownMenuItem<String>(
               value: item,

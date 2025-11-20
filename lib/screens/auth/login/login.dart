@@ -84,10 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ],
                   ),
                   padding: const EdgeInsets.all(16),
-                  child: Image.asset(
-                    'assets/logo.png',
-                    fit: BoxFit.contain,
-                  ),
+                  child: Image.asset('assets/logo.png', fit: BoxFit.contain),
                 ),
 
                 const SizedBox(height: 40),
@@ -128,15 +125,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 12),
 
                       // Subtitle
-                      const Text(
-                        'Enter your email/csd number and password to login',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Color(0xFF6B5D4F),
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-
+                      // const Text(
+                      //   'Enter your email/csd number and password to login',
+                      //   style: TextStyle(
+                      //     fontSize: 14,
+                      //     color: Color(0xFF6B5D4F),
+                      //   ),
+                      //   textAlign: TextAlign.center,
+                      // ),
                       const SizedBox(height: 30),
 
                       // Email TextField
@@ -161,9 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           decoration: InputDecoration(
                             hintText: 'vmasoke2@gmail.com',
-                            hintStyle: TextStyle(
-                              color: Colors.grey[400],
-                            ),
+                            hintStyle: TextStyle(color: Colors.grey[400]),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide.none,
@@ -254,14 +248,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                     color: Colors.grey[400]!,
                                     width: 1.5,
                                   ),
-                                  fillColor: MaterialStateProperty.resolveWith(
-                                        (states) {
-                                      if (states.contains(MaterialState.selected)) {
-                                        return const Color(0xFFD4A855);
-                                      }
-                                      return Colors.transparent;
-                                    },
-                                  ),
+                                  fillColor: WidgetStateProperty.resolveWith((
+                                    states,
+                                  ) {
+                                    if (states.contains(WidgetState.selected)) {
+                                      return const Color(0xFFD4A855);
+                                    }
+                                    return Colors.transparent;
+                                  }),
                                 ),
                               ),
                               const SizedBox(width: 8),
