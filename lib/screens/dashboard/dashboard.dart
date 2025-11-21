@@ -18,43 +18,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
   bool _isBalanceVisible = true;
 
-  // Live data for charts
   List<FlSpot> bolataData = [];
   List<FlSpot> minergyData = [];
   Timer? _timer;
   double currentX = 0;
 
-  // 1. DEFINE THE LIST OF WIDGETS/SCREENS FOR THE BOTTOM NAVIGATION
   late final List<Widget> _widgetOptions;
 
   @override
   void initState() {
     super.initState();
 
-    // Initialize the list of screens
-    // The screen at index 0 is your initial dashboard content,
-    // which is the main scrollable view we'll keep.
     _widgetOptions = <Widget>[
-      // Index 0: Dashboard (The existing scrollable content)
       _buildDashboardContent(),
-      // Index 1: Charts/Analysis
       const TradingPage(),
-      // Index 2 is reserved for the FAB (MarketWatch)
       Container(),
-      // Index 3: Transactions/Money
       const TransactionsScreen(),
-      // Index 4: Portfolio
       const PortfolioScreen(),
     ];
 
     _initializeChartData();
     _startLiveDataUpdate();
   }
-// ... (The rest of your existing methods: _initializeChartData, _startLiveDataUpdate, dispose)
-// ... (Your chart data methods remain the same)
 
   void _initializeChartData() {
-    // Initialize with some data points
     for (int i = 0; i < 20; i++) {
       bolataData.add(FlSpot(i.toDouble(), 50 + math.Random().nextDouble() * 20));
       minergyData.add(FlSpot(i.toDouble(), 50 - math.Random().nextDouble() * 20));
@@ -64,18 +51,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _startLiveDataUpdate() {
     _timer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
-      if (!mounted) return; // Safety check
+      if (!mounted) return;
       setState(() {
-        // Add new data point
         bolataData.add(FlSpot(currentX, 50 + math.Random().nextDouble() * 20 + (currentX * 0.2)));
         minergyData.add(FlSpot(currentX, 50 - math.Random().nextDouble() * 20 - (currentX * 0.1)));
 
-        // Keep only last 20 points
         if (bolataData.length > 20) {
           bolataData.removeAt(0);
           minergyData.removeAt(0);
 
-          // Shift x values
           for (int i = 0; i < bolataData.length; i++) {
             bolataData[i] = FlSpot(i.toDouble(), bolataData[i].y);
             minergyData[i] = FlSpot(i.toDouble(), minergyData[i].y);
@@ -94,30 +78,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
-
-  // Extracted the main dashboard content into a new method
   Widget _buildDashboardContent() {
     return Column(
       children: [
-        // Header
         _buildHeader(),
-
-        // Scrollable Content
         Expanded(
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 20),
-                // Portfolio Balance Card
                 _buildPortfolioCard(),
                 const SizedBox(height: 30),
-                // My Portfolio Section
                 _buildSectionHeader('My Portfolio', 'View Details'),
                 const SizedBox(height: 15),
                 _buildMyPortfolio(),
                 const SizedBox(height: 30),
-                // Market Watch Section
                 _buildSectionHeader('Market Watch', 'Sell All'),
                 const SizedBox(height: 15),
                 _buildMarketWatch(),
@@ -130,41 +106,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A1A),
-      // 2. USE IndexedStack OR _widgetOptions[_selectedIndex] IN THE BODY
-      body: SafeArea(
-        // Use IndexedStack to preserve the state of the screens
-        child: IndexedStack(
-          index: _selectedIndex,
-          children: _widgetOptions,
+      backgroundColor: Colors.transparent,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF2C1810),
+              Color(0xFF1A1A1A),
+              Color(0xFF0D0D0D),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: IndexedStack(
+            index: _selectedIndex,
+            children: _widgetOptions,
+          ),
         ),
       ),
-
-      // Bottom Navigation Bar
       bottomNavigationBar: _buildBottomNavBar(),
-
-      // Floating Action Button
       floatingActionButton: _buildFloatingActionButton(),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
-// ... (The rest of your existing building methods)
-// ... (All your existing _buildHeader, _buildPortfolioCard, etc. methods remain the same)
-
-// The building methods need to be included in the final code.
-// I'll skip re-pasting them here for brevity, assuming you'll keep them in your file.
 
   Widget _buildHeader() {
-    // ... (Your existing _buildHeader code)
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Row(
         children: [
-          // Profile Picture
           CircleAvatar(
             radius: 25,
             backgroundColor: Colors.amber,
@@ -176,8 +151,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           const SizedBox(width: 12),
-
-          // Greeting
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -201,8 +174,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-
-          // Notification Icon
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
@@ -221,7 +192,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildPortfolioCard() {
-    // ... (Your existing _buildPortfolioCard code)
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.all(20),
@@ -246,7 +216,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title and Icons
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -283,10 +252,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 15),
-
-          // Balance
           Text(
-            _isBalanceVisible ? 'BWP 120,300.50' : '••••••••',
+            _isBalanceVisible ? 'BWP 12,300.50' : '••••••••',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 38,
@@ -295,8 +262,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // Percentage Change
           Row(
             children: [
               const Icon(
@@ -324,23 +289,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 20),
-
-          // Balance Details
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Cleared Cash: BWP1,250.00',
+                'Cash Balance: BWP1,250.00',
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.9),
-                  fontSize: 13,
+                  fontSize: 12,
                 ),
               ),
               Text(
                 'Total Amount: BWP1,250.00',
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.9),
-                  fontSize: 13,
+                  fontSize: 12,
                 ),
               ),
             ],
@@ -351,7 +314,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildSectionHeader(String title, String action) {
-    // ... (Your existing _buildSectionHeader code)
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
@@ -379,7 +341,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildMyPortfolio() {
-    // ... (Your existing _buildMyPortfolio code)
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
@@ -424,7 +385,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       String icon,
       List<FlSpot> chartData,
       ) {
-    // ... (Your existing _buildPortfolioCard1 code)
     return Container(
       height: 180,
       padding: const EdgeInsets.all(16),
@@ -482,8 +442,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 12),
-
-          // Live Chart
           Expanded(
             child: LineChart(
               LineChartData(
@@ -508,8 +466,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          (isPositive ? const Color(0xFF4CAF50) : Colors.red).withOpacity(0.3),
-                          (isPositive ? const Color(0xFF4CAF50) : Colors.red).withOpacity(0.0),
+                          (isPositive ? const Color(0xFF4CAF50) : Colors.red)
+                              .withOpacity(0.3),
+                          (isPositive ? const Color(0xFF4CAF50) : Colors.red)
+                              .withOpacity(0.0),
                         ],
                       ),
                     ),
@@ -519,8 +479,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           const SizedBox(height: 8),
-
-          // Amount and Change
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -558,7 +516,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildMarketWatch() {
-    // ... (Your existing _buildMarketWatch code)
     return Column(
       children: [
         _buildStockCard(
@@ -623,19 +580,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       IconData iconData,
       Color iconBgColor,
       ) {
-    // ... (Your existing _buildStockCard code)
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2A2A),
+        color: const Color(0xFF2A2A33),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Company Icon/Logo
           Container(
             width: 50,
             height: 50,
@@ -650,153 +604,92 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           const SizedBox(width: 12),
-
-          // Company Info
-          // Expanded(
-          //   child:
-          // ),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-
-              Row(
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            ticker,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.5),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        ticker,
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
-                          fontSize: 11,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-
-                    ],
-                  ),
-                  Text(
-                    price,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
                     ),
-                  )
-                ],
-              ),
-              Row(
-
-                children: [
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Best Bid:',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
-                          fontSize: 10,
-                        ),
+                    Text(
+                      price,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
-                      Text(
-                        bestBid,
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 4),
-
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Best Ask:',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
-                          fontSize: 10,
-                        ),
-                      ),
-                      Text(
-                        bestAsk,
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 2),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Supply:',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
-                          fontSize: 10,
-                        ),
-                      ),
-                      Text(
-                        supply,
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 2),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Demand:',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
-                          fontSize: 10,
-                        ),
-                      ),
-                      Text(
-                        demand,
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  )
-                ],
-              )
-            ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    _buildInfoColumn('Best Bid:', bestBid),
+                    const SizedBox(width: 12),
+                    _buildInfoColumn('Best Ask:', bestAsk),
+                    const SizedBox(width: 12),
+                    _buildInfoColumn('Supply:', supply),
+                    const SizedBox(width: 12),
+                    _buildInfoColumn('Demand:', demand),
+                  ],
+                ),
+              ],
+            ),
           ),
-          // Price
         ],
       ),
     );
   }
 
+  Widget _buildInfoColumn(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.5),
+            fontSize: 9,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.7),
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _buildBottomNavBar() {
-    // ... (Your existing _buildBottomNavBar code)
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF2A2A2A),
@@ -818,23 +711,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildNavItem(Icons.home_outlined, 0),          // Home / Dashboard
-            _buildNavItem(Icons.bar_chart_outlined, 1),    // Charts / Analysis
-            const SizedBox(width: 50),             // Space for FAB (Index 2)
-            _buildNavItem(Icons.attach_money, 3),  // Transactions / Money
-            _buildNavItem(Icons.shopping_bag_outlined, 4), // Portfolio
+            _buildNavItem(Icons.home_outlined, 0),
+            _buildNavItem(Icons.bar_chart_outlined, 1),
+            const SizedBox(width: 50),
+            _buildNavItem(Icons.attach_money, 3),
+            _buildNavItem(Icons.shopping_bag_outlined, 4),
           ],
         ),
       ),
     );
   }
 
-  // 3. UPDATED _buildNavItem to set index instead of pushing a new screen
   Widget _buildNavItem(IconData icon, int index) {
     final isSelected = _selectedIndex == index;
     return GestureDetector(
       onTap: () {
-        // Only change state if the new index is not the FAB placeholder (index 2)
         if (index != 2) {
           setState(() => _selectedIndex = index);
         }
@@ -851,7 +742,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildFloatingActionButton() {
-    // ... (Your existing _buildFloatingActionButton code)
     return Container(
       width: 65,
       height: 65,
@@ -877,7 +767,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         onPressed: () {
-          // Keep this as a separate screen push, as it's a primary action
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const MarketWatchScreen()),
