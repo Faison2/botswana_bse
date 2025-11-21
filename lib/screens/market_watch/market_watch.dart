@@ -10,7 +10,7 @@ class MarketWatchScreen extends StatefulWidget {
 }
 
 class _MarketWatchScreenState extends State<MarketWatchScreen> {
-  final int _selectedIndex = 2; // Center button is selected
+ // final int _selectedIndex = 2; // Center button is selected
   Timer? _timer;
 
   // Market data with live price updates
@@ -279,7 +279,7 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _buildDetailItem('Market Supply', stock['supply']),
-              _buildDetailItem('Market Demand', stock['demand']),
+              _buildDetailItem('Demand', stock['demand']),
             ],
           ),
         ],
@@ -308,87 +308,6 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
     );
   }
 
-  Widget _buildBottomNavBar() {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF2A2A2A),
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 10,
-            offset: const Offset(0, -5),
-          ),
-        ],
-      ),
-      child: BottomAppBar(
-        color: Colors.transparent,
-        elevation: 0,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildNavItem(Icons.home, 0),
-            _buildNavItem(Icons.show_chart, 1),
-            const SizedBox(width: 50), // Space for FAB
-            _buildNavItem(Icons.attach_money, 3),
-            _buildNavItem(Icons.shopping_bag_outlined, 4),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNavItem(IconData icon, int index) {
-    final isSelected = _selectedIndex == index;
-    return GestureDetector(
-      onTap: () {
-        if (index == 0) {
-          Navigator.pop(context); // Go back to dashboard
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        child: Icon(
-          icon,
-          color: isSelected ? Colors.amber : Colors.white54,
-          size: 28,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFloatingActionButton() {
-    return Container(
-      width: 65,
-      height: 65,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFFB300), Color(0xFFFF8F00)],
-        ),
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.amber.withOpacity(0.5),
-            blurRadius: 20,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: FloatingActionButton(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        onPressed: () {
-          // Already on market watch screen
-        },
-        child: const Icon(Icons.trending_up, size: 30, color: Colors.white),
-      ),
-    );
-  }
 }
 
 // Custom painter for mini graph

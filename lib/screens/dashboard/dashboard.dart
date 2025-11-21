@@ -6,6 +6,7 @@ import 'package:fl_chart/fl_chart.dart';
 import '../market_watch/market_watch.dart';
 import '../portifolio/portifolio.dart';
 import '../transactions /transactions.dart';
+import '../drawer/drawer.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -24,6 +25,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double currentX = 0;
 
   late final List<Widget> _widgetOptions;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -79,37 +81,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildDashboardContent() {
-    return Column(
-      children: [
-        _buildHeader(),
-        Expanded(
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 20),
-                _buildPortfolioCard(),
-                const SizedBox(height: 30),
-                _buildSectionHeader('My Portfolio', 'View Details'),
-                const SizedBox(height: 15),
-                _buildMyPortfolio(),
-                const SizedBox(height: 30),
-                _buildSectionHeader('Market Watch', 'Sell All'),
-                const SizedBox(height: 15),
-                _buildMarketWatch(),
-                const SizedBox(height: 100),
-              ],
-            ),
-          ),
-        ),
-      ],
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 20),
+          _buildPortfolioCard(),
+          const SizedBox(height: 30),
+          _buildSectionHeader('My Portfolio', 'View Details'),
+          const SizedBox(height: 15),
+          _buildMyPortfolio(),
+          const SizedBox(height: 30),
+          _buildSectionHeader('Market Watch', 'Sell All'),
+          const SizedBox(height: 15),
+          _buildMarketWatch(),
+          const SizedBox(height: 100),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: Colors.transparent,
+      drawer: AppDrawer(
+        onMenuItemTapped: (int index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
+        onMarketWatchTapped: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const MarketWatchScreen()),
+          );
+        },
+        onBuySellTapped: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const TradingPage()),
+          );
+        },
+      ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -123,9 +138,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
         child: SafeArea(
-          child: IndexedStack(
-            index: _selectedIndex,
-            children: _widgetOptions,
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: IndexedStack(
+                  index: _selectedIndex,
+                  children: _widgetOptions,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -140,54 +162,113 @@ class _DashboardScreenState extends State<DashboardScreen> {
       padding: const EdgeInsets.all(20),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 25,
-            backgroundColor: Colors.amber,
-            child: Image.asset(
-              'assets/avatar.png',
-              errorBuilder: (context, error, stackTrace) {
-                return const Icon(Icons.person, color: Colors.white, size: 30);
-              },
+          GestureDetector(
+            onTap: () => _scaffoldKey.currentState?.openDrawer(),
+            child: const Icon(
+              Icons.menu,
+              color: Colors.white,
+              size: 28,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 20),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: const [
                 Text(
-                  'Hi, Good Morning',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                  ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Victor',
+                  'KABENDA BALETE KAKUZE',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 20,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'INUKA00000530',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
                   ),
                 ),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.notifications_outlined,
-              color: Colors.white,
-              size: 24,
+          Stack(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.notifications_outlined,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+              Positioned(
+                top: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Text(
+                    '8',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: Colors.amber,
+            child: Image.asset(
+              'assets/avatar.png',
+              errorBuilder: (context, error, stackTrace) {
+                return const Icon(Icons.person, color: Colors.white, size: 28);
+              },
             ),
           ),
         ],
       ),
+    );
+  }
+
+
+  Widget _buildDrawerItem({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+    bool isLast = false,
+  }) {
+    return ListTile(
+      leading: Icon(
+        icon,
+        color: Colors.amber,
+        size: 22,
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      trailing: isLast ? null : const Icon(Icons.chevron_right, color: Colors.white38),
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
     );
   }
 
@@ -781,3 +862,4 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 }
+
