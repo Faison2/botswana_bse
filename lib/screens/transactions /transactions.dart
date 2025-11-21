@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../dashboard/dashboard.dart';
+
 class TransactionsScreen extends StatefulWidget {
   const TransactionsScreen({Key? key}) : super(key: key);
 
@@ -194,7 +196,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               style: const TextStyle(color: Colors.white, fontSize: 20),
               decoration: InputDecoration(
                 filled: true,
-                fillColor: const Color.fromRGBO(255, 255, 255, 0.1),
+                fillColor: Colors.transparent,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: Colors.white30),
@@ -221,7 +223,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               style: const TextStyle(color: Colors.white, fontSize: 20),
               decoration: InputDecoration(
                 filled: true,
-                fillColor: const Color.fromRGBO(255, 255, 255, 0.1),
+                fillColor: Colors.transparent,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: Colors.white30),
@@ -242,7 +244,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const DashboardScreen()),
+                      );
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.black45,
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -313,7 +320,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               style: const TextStyle(color: Colors.white, fontSize: 20),
               decoration: InputDecoration(
                 filled: true,
-                fillColor: const Color.fromRGBO(255, 255, 255, 0.1),
+                fillColor: Colors.transparent,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: Colors.white30),
@@ -340,7 +347,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               style: const TextStyle(color: Colors.white, fontSize: 20),
               decoration: InputDecoration(
                 filled: true,
-                fillColor: const Color.fromRGBO(255, 255, 255, 0.1),
+                fillColor: Colors.transparent,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: Colors.white30),
@@ -367,7 +374,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               style: const TextStyle(color: Colors.white, fontSize: 20),
               decoration: InputDecoration(
                 filled: true,
-                fillColor: const Color.fromRGBO(255, 255, 255, 0.1),
+                fillColor: Colors.transparent,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: Colors.white30),

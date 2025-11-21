@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../dashboard/dashboard.dart';
+
 class TradingPage extends StatefulWidget {
   const TradingPage({Key? key}) : super(key: key);
 
@@ -55,7 +57,7 @@ class _TradingPageState extends State<TradingPage> {
                         // BUY/SELL Toggle
                         Container(
                           decoration: BoxDecoration(
-                            color: const Color(0xFF4A4540),
+                            color: const Color(0xFF1A1A1A),
                             borderRadius: BorderRadius.circular(30),
                           ),
                           padding: const EdgeInsets.all(4),
@@ -70,10 +72,20 @@ class _TradingPageState extends State<TradingPage> {
                                   },
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(vertical: 12),
-                                    decoration: BoxDecoration(
-                                      color: isBuy
-                                          ? Colors.green
-                                          : Colors.transparent,
+                                    decoration: isBuy
+                                        ? BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        begin: Alignment.centerLeft,
+                                        end: Alignment.centerRight,
+                                        colors: [
+                                          Colors.green,
+                                          Colors.black12,
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(28),
+                                    )
+                                        : BoxDecoration(
+                                      color: Colors.transparent,
                                       borderRadius: BorderRadius.circular(28),
                                     ),
                                     child: const Center(
@@ -98,10 +110,21 @@ class _TradingPageState extends State<TradingPage> {
                                   },
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(vertical: 12),
-                                    decoration: BoxDecoration(
-                                      color: !isBuy
-                                          ? Colors.red
-                                          : Colors.transparent,
+                                    decoration: !isBuy // Check the condition to apply the gradient
+                                        ? BoxDecoration(
+                                      // --- START GRADIENT DECORATION ---
+                                      gradient: const LinearGradient(
+                                        begin: Alignment.centerLeft,
+                                        end: Alignment.centerRight,
+                                        colors: [
+                                          Colors.red,
+                                          Colors.black26,
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(28),
+                                    )
+                                        : BoxDecoration(
+                                      color: Colors.transparent,
                                       borderRadius: BorderRadius.circular(28),
                                     ),
                                     child: const Center(
@@ -421,7 +444,10 @@ class _TradingPageState extends State<TradingPage> {
                                   ),
                                 ),
                                 onPressed: () {
-                                  Navigator.pop(context);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => const DashboardScreen()),
+                                  );
                                 },
                                 child: const Text(
                                   'CLOSE',

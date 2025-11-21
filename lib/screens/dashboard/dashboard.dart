@@ -176,7 +176,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: const [
                 Text(
-                  'KABENDA BALETE KAKUZE',
+                  'MUTSA TARINGA',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 16,
@@ -185,7 +185,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'INUKA00000530',
+                  'CDS00020530',
                   style: TextStyle(
                     color: Colors.white70,
                     fontSize: 12,
@@ -217,28 +217,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     color: Colors.red,
                     shape: BoxShape.circle,
                   ),
-                  child: const Text(
-                    '8',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  // child: const Text(
+                  //   '8',
+                  //   style: TextStyle(
+                  //     color: Colors.white,
+                  //     fontSize: 10,
+                  //     fontWeight: FontWeight.bold,
+                  //   ),
+                  // ),
                 ),
               ),
             ],
-          ),
-          const SizedBox(width: 12),
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: Colors.amber,
-            child: Image.asset(
-              'assets/avatar.png',
-              errorBuilder: (context, error, stackTrace) {
-                return const Icon(Icons.person, color: Colors.white, size: 28);
-              },
-            ),
           ),
         ],
       ),
