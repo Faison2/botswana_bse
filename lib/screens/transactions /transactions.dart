@@ -14,6 +14,13 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   final TextEditingController _methodController = TextEditingController(text: 'Orange');
 
   @override
+  void initState() {
+    super.initState();
+    // set an initial description based on the default selected tab
+    _descriptionController.text = 'Emergency Funds';
+  }
+
+  @override
   void dispose() {
     _amountController.dispose();
     _descriptionController.dispose();
@@ -39,65 +46,25 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              // Header
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 24,
-                      backgroundColor: Colors.green,
-                      child: Image.asset(
-                        'assets/avatar.png',
-                        errorBuilder: (context, error, stackTrace) {
-                          return const Icon(Icons.person, color: Colors.white);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Hi. Good Morning',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
-                        ),
-                        Text(
-                          'Victor',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.notifications_outlined, color: Colors.white70),
-                      onPressed: () {},
-                    ),
-                  ],
-                ),
-              ),
 
-              // Tab Selector
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 4.0),
                 child: Row(
                   children: [
-                    _buildTab('WITHDRAWALS', 0),
-                    const SizedBox(width: 12),
-                    _buildTab('DEPOSITS', 1),
-                    const SizedBox(width: 12),
-                    _buildTab('TRANSACTIONS', 2),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white70),
-                      onPressed: () => Navigator.pop(context),
+                    // Make the tabs horizontally scrollable to avoid overflow on small screens
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildTab('WITHDRAWALS', 0),
+                            const SizedBox(width: 8),
+                            _buildTab('DEPOSITS', 1),
+                            const SizedBox(width: 8),
+                            _buildTab('TRANSACTIONS', 2),
+                          ],
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -177,10 +144,13 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           _descriptionController.text = 'Emergency Funds';
         } else if (index == 1) {
           _descriptionController.text = 'Salary Deposit';
+        } else {
+          // clear or set a neutral value for transactions tab
+          _descriptionController.text = '';
         }
       }),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFF8B6914) : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
@@ -189,13 +159,18 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             width: 1,
           ),
         ),
-        child: Text(
-          title,
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.white60,
-            fontSize: 13,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-            letterSpacing: 0.5,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 60),
+          child: Text(
+            title,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: isSelected ? Colors.white : Colors.white60,
+              fontSize: 13,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              letterSpacing: 0.5,
+            ),
           ),
         ),
       ),
@@ -219,7 +194,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               style: const TextStyle(color: Colors.white, fontSize: 20),
               decoration: InputDecoration(
                 filled: true,
-                fillColor: Colors.white.withOpacity(0.1),
+                fillColor: const Color.fromRGBO(255, 255, 255, 0.1),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: Colors.white30),
@@ -242,11 +217,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             ),
             const SizedBox(height: 8),
             TextField(
-              controller: _descriptionController..text = 'Emergency Funds',
+              controller: _descriptionController,
               style: const TextStyle(color: Colors.white, fontSize: 20),
               decoration: InputDecoration(
                 filled: true,
-                fillColor: Colors.white.withOpacity(0.1),
+                fillColor: const Color.fromRGBO(255, 255, 255, 0.1),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: Colors.white30),
@@ -338,7 +313,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               style: const TextStyle(color: Colors.white, fontSize: 20),
               decoration: InputDecoration(
                 filled: true,
-                fillColor: Colors.white.withOpacity(0.1),
+                fillColor: const Color.fromRGBO(255, 255, 255, 0.1),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: Colors.white30),
@@ -361,11 +336,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             ),
             const SizedBox(height: 8),
             TextField(
-              controller: _descriptionController..text = 'Salary Deposit',
+              controller: _descriptionController,
               style: const TextStyle(color: Colors.white, fontSize: 20),
               decoration: InputDecoration(
                 filled: true,
-                fillColor: Colors.white.withOpacity(0.1),
+                fillColor: const Color.fromRGBO(255, 255, 255, 0.1),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: Colors.white30),
@@ -392,7 +367,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               style: const TextStyle(color: Colors.white, fontSize: 20),
               decoration: InputDecoration(
                 filled: true,
-                fillColor: Colors.white.withOpacity(0.1),
+                fillColor: const Color.fromRGBO(255, 255, 255, 0.1),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: Colors.white30),

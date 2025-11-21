@@ -112,104 +112,66 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A1A),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header
-            _buildHeader(),
-
-            const SizedBox(height: 10),
-
-            // Title
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Market Watch',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // Market List
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.only(bottom: 100),
-                itemCount: _marketData.length,
-                itemBuilder: (context, index) {
-                  final stock = _marketData[index];
-                  return _buildStockCard(stock);
-                },
-              ),
-            ),
-          ],
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF2C1810),
+              Color(0xFF1A1A1A),
+              Color(0xFF0D0D0D),
+            ],
+          ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Row(
-        children: [
-          // Profile Picture
-          CircleAvatar(
-            radius: 25,
-            backgroundColor: Colors.amber,
-            child: Image.asset(
-              'assets/avatar.png',
-              errorBuilder: (context, error, stackTrace) {
-                return const Icon(Icons.person, color: Colors.white, size: 30);
-              },
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // Greeting
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  'Hi, Good Morning',
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
+        child: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        child: const Icon(
+                          Icons.arrow_back,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Market Watch',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                SizedBox(height: 2),
-                Text(
-                  'Victor',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
+              ),
+              const SizedBox(height: 8),
 
-          // Notification Icon
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.notifications_outlined,
-              color: Colors.white,
-              size: 24,
-            ),
+              // Market List
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 100),
+                  itemCount: _marketData.length,
+                  itemBuilder: (context, index) {
+                    final stock = _marketData[index];
+                    return _buildStockCard(stock);
+                  },
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

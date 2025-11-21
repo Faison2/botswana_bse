@@ -44,51 +44,7 @@ class _TradingPageState extends State<TradingPage> {
         child: SafeArea(
           child: Column(
             children: [
-              // Header with greeting and notification
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 24,
-                          backgroundImage: AssetImage('assets/avatar.png'),
-                        ),
-                        const SizedBox(width: 12),
-                        const Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Hi, Good Morning',
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 12,
-                              ),
-                            ),
-                            Text(
-                              'Victor',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.notifications, color: Colors.grey),
-                      onPressed: () {},
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
 
-              // Expanded scrollable content
               Expanded(
                 child: SingleChildScrollView(
                   child: Padding(
@@ -99,7 +55,7 @@ class _TradingPageState extends State<TradingPage> {
                         // BUY/SELL Toggle
                         Container(
                           decoration: BoxDecoration(
-                            color: const Color(0xFF5A5550),
+                            color: const Color(0xFF4A4540),
                             borderRadius: BorderRadius.circular(30),
                           ),
                           padding: const EdgeInsets.all(4),
@@ -116,7 +72,7 @@ class _TradingPageState extends State<TradingPage> {
                                     padding: const EdgeInsets.symmetric(vertical: 12),
                                     decoration: BoxDecoration(
                                       color: isBuy
-                                          ? const Color(0xFF6B6B00)
+                                          ? Colors.green
                                           : Colors.transparent,
                                       borderRadius: BorderRadius.circular(28),
                                     ),
@@ -144,7 +100,7 @@ class _TradingPageState extends State<TradingPage> {
                                     padding: const EdgeInsets.symmetric(vertical: 12),
                                     decoration: BoxDecoration(
                                       color: !isBuy
-                                          ? const Color(0xFF8B2E2E)
+                                          ? Colors.red
                                           : Colors.transparent,
                                       borderRadius: BorderRadius.circular(28),
                                     ),
@@ -452,7 +408,7 @@ class _TradingPageState extends State<TradingPage> {
                           ),
                         if (isBuy) const SizedBox(height: 24),
 
-                        // Action Buttons
+                        // Action Buttonss
                         Row(
                           children: [
                             Expanded(
@@ -481,7 +437,7 @@ class _TradingPageState extends State<TradingPage> {
                             Expanded(
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFB8956A),
+                                  backgroundColor: Color(0xFF8B6914),
                                   padding: const EdgeInsets.symmetric(vertical: 14),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),

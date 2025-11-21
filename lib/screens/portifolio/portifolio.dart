@@ -56,7 +56,6 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              _buildHeader(),
               _buildTabSelector(),
               const SizedBox(height: 20),
               _buildPortfolioCard(),
@@ -69,81 +68,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
     );
   }
 
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Row(
-        children: [
-          // Profile Picture
-          CircleAvatar(
-            radius: 25,
-            backgroundColor: Colors.amber,
-            child: Image.asset(
-              'assets/avatar.png',
-              errorBuilder: (context, error, stackTrace) {
-                return const Icon(Icons.person, color: Colors.white, size: 30);
-              },
-            ),
-          ),
-          const SizedBox(width: 12),
 
-          // Greeting
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  'Hi, Good Morning',
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Victor',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Notification Icon
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.notifications_outlined,
-              color: Colors.white,
-              size: 24,
-            ),
-          ),
-
-          const SizedBox(width: 12),
-
-          // Close Icon
-          // Since PortfolioScreen is now part of the main navigation,
-          // we should consider if a close button is still needed,
-          // but I'll keep the pop logic for now if it's meant to be a modal/secondary view.
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.close, color: Colors.white, size: 24),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildTabSelector() {
     return Padding(

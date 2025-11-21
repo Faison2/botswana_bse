@@ -32,7 +32,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     );
 
     _animationController.forward();
-    Timer(const Duration(seconds: 3), () {
+    Timer(const Duration(seconds: 8), () {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -155,7 +155,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               ),
             ),
 
-            // Loading indicator at bottom
+            // Dashed line loading indicator at bottom
             Positioned(
               bottom: 80,
               left: 0,
@@ -166,14 +166,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   builder: (context, child) {
                     return FadeTransition(
                       opacity: _fadeAnimation,
-                      child: const SizedBox(
-                        width: 60,
-                        height: 60,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 3,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
-                        ),
-                      ),
+                      child: DashedLineLoader(),
                     );
                   },
                 ),
@@ -183,6 +176,82 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         ),
       ),
     );
+  }
+}
+
+// Beautiful Three Dots Loader Widget
+class DashedLineLoader extends StatefulWidget {
+  const DashedLineLoader({super.key});
+
+  @override
+  State<DashedLineLoader> createState() => _DashedLineLoaderState();
+}
+
+class _DashedLineLoaderState extends State<DashedLineLoader>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(3, (index) {
+            final delay = index * 0.15;
+            final animationValue =
+                (_controller.value + delay) % 1.0;
+            final scale = 0.5 + (sin(animationValue * 3.14159) * 0.5);
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Transform.scale(
+                scale: scale,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: Colors.amber,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.amber.withOpacity(0.4),
+                        blurRadius: 8,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        );
+      },
+    );
+  }
+
+  double sin(double value) {
+    return (value - (value / 6.28318).floor() * 6.28318).sign *
+        (1 - ((value.abs() - 1.5708).abs() / 1.5708)).clamp(0, 1) *
+        2 /
+        3.14159;
   }
 }
 
