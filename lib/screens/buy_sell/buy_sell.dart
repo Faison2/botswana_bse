@@ -166,21 +166,21 @@ class _TradingPageState extends State<TradingPage> {
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(
-                                color: Colors.grey,
+                                color: Color(0xFF8B6914),
                                 width: 1,
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(
-                                color: Colors.grey,
+                                color: Color(0xFF8B6914),
                                 width: 1,
                               ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(
-                                color: Colors.white,
+                                color: Color(0xFF8B6914),
                                 width: 1,
                               ),
                             ),
@@ -209,14 +209,21 @@ class _TradingPageState extends State<TradingPage> {
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(
-                                color: Colors.grey,
+                                color: Color(0xFF8B6914),
                                 width: 1,
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(
-                                color: Colors.grey,
+                                color: Color(0xFF8B6914),
+                                width: 1,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF8B6914),
                                 width: 1,
                               ),
                             ),
@@ -245,14 +252,21 @@ class _TradingPageState extends State<TradingPage> {
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(
-                                color: Colors.grey,
+                                color: Color(0xFF8B6914),
                                 width: 1,
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(
-                                color: Colors.grey,
+                                color: Color(0xFF8B6914),
+                                width: 1,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF8B6914),
                                 width: 1,
                               ),
                             ),
@@ -282,14 +296,21 @@ class _TradingPageState extends State<TradingPage> {
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(
-                                color: Colors.grey,
+                                color: Color(0xFF8B6914),
                                 width: 1,
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(
-                                color: Colors.grey,
+                                color: Color(0xFF8B6914),
+                                width: 1,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF8B6914),
                                 width: 1,
                               ),
                             ),
@@ -318,14 +339,21 @@ class _TradingPageState extends State<TradingPage> {
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(
-                                color: Colors.grey,
+                                color: Color(0xFF8B6914),
                                 width: 1,
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: const BorderSide(
-                                color: Colors.grey,
+                                color: Color(0xFF8B6914),
+                                width: 1,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF8B6914),
                                 width: 1,
                               ),
                             ),
@@ -431,7 +459,7 @@ class _TradingPageState extends State<TradingPage> {
                           ),
                         if (isBuy) const SizedBox(height: 24),
 
-                        // Action Buttonss
+                        // Action Buttons
                         Row(
                           children: [
                             Expanded(
