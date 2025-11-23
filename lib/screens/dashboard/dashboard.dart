@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'dart:async';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../market_watch/market_watch.dart';
 import '../portifolio/portifolio.dart';
 import '../transactions /transactions.dart';
@@ -24,6 +27,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Timer? _timer;
   double currentX = 0;
 
+  // User data from SharedPreferences
+  String _fullName = 'Loading...';
+  String _email = 'Loading...';
+  String _username = '';
+  String _token = '';
+  String _cdsNumber = '';
+  bool _isLoadingProfile = true;
+
   late final List<Widget> _widgetOptions;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -41,6 +52,68 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     _initializeChartData();
     _startLiveDataUpdate();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+
+      setState(() {
+        _fullName = prefs.getString('fullName') ?? 'User';
+        _email = prefs.getString('email') ?? 'No email';
+        _username = prefs.getString('username') ?? '';
+        _token = token;
+      });
+
+      // Fetch profile data if token exists
+      if (token.isNotEmpty) {
+        await _fetchProfileData(token);
+      }
+    } catch (e) {
+      print('Error loading user data: $e');
+      setState(() => _isLoadingProfile = false);
+    }
+  }
+
+  Future<void> _fetchProfileData(String token) async {
+    try {
+      final response = await http.post(
+        Uri.parse('http://192.168.3.201/MainAPI/Authentication/GetProfile'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'Token': token}),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+
+        if (responseData['responseCode'] == 200) {
+          setState(() {
+            _fullName = responseData['fullName'] ?? 'User';
+            _email = responseData['email'] ?? 'No email';
+            _username = responseData['username'] ?? '';
+            _cdsNumber = responseData['cdsNumber'] ?? '';
+            _isLoadingProfile = false;
+          });
+
+          // Update SharedPreferences with the latest profile data
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('fullName', _fullName);
+          await prefs.setString('email', _email);
+          await prefs.setString('cdsNumber', _cdsNumber);
+        } else {
+          print('Profile fetch failed: ${responseData['responseMessage']}');
+          setState(() => _isLoadingProfile = false);
+        }
+      } else {
+        print('Profile fetch error: ${response.statusCode}');
+        setState(() => _isLoadingProfile = false);
+      }
+    } catch (e) {
+      print('Error fetching profile: $e');
+      setState(() => _isLoadingProfile = false);
+    }
   }
 
   void _initializeChartData() {
@@ -174,22 +247,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 Text(
-                  'MUTSA TARINGA',
-                  style: TextStyle(
+                  _fullName.toUpperCase(),
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
-                  'CDS00020530',
-                  style: TextStyle(
+                  _cdsNumber.isNotEmpty ? _cdsNumber : _email,
+                  style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 12,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -217,14 +294,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     color: Colors.red,
                     shape: BoxShape.circle,
                   ),
-                  // child: const Text(
-                  //   '8',
-                  //   style: TextStyle(
-                  //     color: Colors.white,
-                  //     fontSize: 10,
-                  //     fontWeight: FontWeight.bold,
-                  //   ),
-                  // ),
                 ),
               ),
             ],
@@ -233,7 +302,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
-
 
   Widget _buildDrawerItem({
     required IconData icon,
@@ -851,4 +919,3 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 }
-
