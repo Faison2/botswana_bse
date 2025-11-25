@@ -1,5 +1,8 @@
+import 'package:bse/screens/auth/forgot_password/password_reset_api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+// Import the password reset service
+// import 'password_reset_service.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -52,22 +55,36 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   Future<void> _handleEmailSubmit() async {
-    if (_emailController.text.isEmpty) {
-      _showSnackBar('Please enter your email');
+    final email = _emailController.text.trim();
+
+    if (email.isEmpty) {
+      _showSnackBar('Please enter your email', isError: true);
+      return;
+    }
+
+    // Basic email validation
+    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
+      _showSnackBar('Please enter a valid email address', isError: true);
       return;
     }
 
     setState(() => _isLoading = true);
 
-    // TODO: Send OTP to email
-    await Future.delayed(const Duration(seconds: 2)); // Simulate API call
+    try {
+      final result = await PasswordResetService.requestPasswordReset(email);
 
-    setState(() {
-      _isLoading = false;
-      _currentStep = 1;
-    });
+      setState(() => _isLoading = false);
 
-    _showSnackBar('OTP sent to ${_emailController.text}');
+      if (result['success']) {
+        setState(() => _currentStep = 1);
+        _showSnackBar(result['message'], isError: false);
+      } else {
+        _showSnackBar(result['message'], isError: true);
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showSnackBar('An error occurred. Please try again.', isError: true);
+    }
   }
 
   Future<void> _handleOtpSubmit() async {
@@ -79,60 +96,100 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         _otpController6.text;
 
     if (otp.length != 6) {
-      _showSnackBar('Please enter complete OTP');
+      _showSnackBar('Please enter complete OTP', isError: true);
       return;
     }
 
-    setState(() => _isLoading = true);
-
-    // TODO: Verify OTP
-    await Future.delayed(const Duration(seconds: 2)); // Simulate API call
-
-    setState(() {
-      _isLoading = false;
-      _currentStep = 2;
-    });
+    // Move to password step
+    setState(() => _currentStep = 2);
   }
 
   Future<void> _handlePasswordSubmit() async {
-    if (_newPasswordController.text.isEmpty ||
-        _confirmPasswordController.text.isEmpty) {
-      _showSnackBar('Please fill all fields');
+    final newPassword = _newPasswordController.text;
+    final confirmPassword = _confirmPasswordController.text;
+
+    if (newPassword.isEmpty || confirmPassword.isEmpty) {
+      _showSnackBar('Please fill all fields', isError: true);
       return;
     }
 
-    if (_newPasswordController.text != _confirmPasswordController.text) {
-      _showSnackBar('Passwords do not match');
+    if (newPassword != confirmPassword) {
+      _showSnackBar('Passwords do not match', isError: true);
       return;
     }
 
-    if (_newPasswordController.text.length < 6) {
-      _showSnackBar('Password must be at least 6 characters');
+    if (newPassword.length < 6) {
+      _showSnackBar('Password must be at least 6 characters', isError: true);
       return;
     }
 
     setState(() => _isLoading = true);
 
-    // TODO: Update password in backend
-    await Future.delayed(const Duration(seconds: 2)); // Simulate API call
+    try {
+      final otp = _otpController1.text +
+          _otpController2.text +
+          _otpController3.text +
+          _otpController4.text +
+          _otpController5.text +
+          _otpController6.text;
 
-    setState(() {
-      _isLoading = false;
-      _currentStep = 3;
-    });
+      final result = await PasswordResetService.verifyOtpAndResetPassword(
+        email: _emailController.text.trim(),
+        otp: otp,
+        newPassword: newPassword,
+      );
+
+      setState(() => _isLoading = false);
+
+      if (result['success']) {
+        setState(() => _currentStep = 3);
+        _showSnackBar(result['message'], isError: false);
+      } else {
+        _showSnackBar(result['message'], isError: true);
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showSnackBar('An error occurred. Please try again.', isError: true);
+    }
   }
 
-  void _handleResendOtp() {
-    // TODO: Resend OTP logic
-    _showSnackBar('OTP resent successfully');
+  Future<void> _handleResendOtp() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final result = await PasswordResetService.requestPasswordReset(
+        _emailController.text.trim(),
+      );
+
+      setState(() => _isLoading = false);
+
+      if (result['success']) {
+        // Clear OTP fields
+        _otpController1.clear();
+        _otpController2.clear();
+        _otpController3.clear();
+        _otpController4.clear();
+        _otpController5.clear();
+        _otpController6.clear();
+        _otpFocusNode1.requestFocus();
+
+        _showSnackBar('OTP resent successfully', isError: false);
+      } else {
+        _showSnackBar(result['message'], isError: true);
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showSnackBar('Failed to resend OTP', isError: true);
+    }
   }
 
-  void _showSnackBar(String message) {
+  void _showSnackBar(String message, {required bool isError}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: const Color(0xFFD4A855),
+        backgroundColor: isError ? Colors.red[700] : const Color(0xFFD4A855),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -380,11 +437,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 style: TextStyle(color: Color(0xFF6B5D4F), fontSize: 14),
               ),
               GestureDetector(
-                onTap: _handleResendOtp,
-                child: const Text(
+                onTap: _isLoading ? null : _handleResendOtp,
+                child: Text(
                   'Resend',
                   style: TextStyle(
-                    color: Color(0xFFD4A855),
+                    color: _isLoading ? Colors.grey : const Color(0xFFD4A855),
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),
@@ -726,3 +783,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 }
+
+// Note: Make sure to uncomment the import for PasswordResetService at the top
+// Also add http package to pubspec.yaml: http: ^1.1.0
