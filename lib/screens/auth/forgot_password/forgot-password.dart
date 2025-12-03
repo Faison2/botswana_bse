@@ -1,9 +1,88 @@
-import 'package:bse/screens/auth/forgot_password/password_reset_api_service.dart';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-// Import the password reset service
-// import 'password_reset_service.dart';
+import 'package:http/http.dart' as http;
 
+// Password Reset Service
+class PasswordResetService {
+  static const String baseUrl = 'http://192.168.3.201/MainAPI/Authentication';
+
+  // Send OTP to email
+  static Future<Map<String, dynamic>> requestPasswordReset(String email) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/RequestPasswordReset'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'Email': email,
+        }),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['responseCode'] == 200) {
+        return {
+          'success': true,
+          'message': data['responseMessage'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['responseMessage'] ?? 'Failed to send OTP',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+      };
+    }
+  }
+
+  // Reset password with OTP
+  static Future<Map<String, dynamic>> resetPasswordWithOtp({
+    required String email,
+    required String otp,
+    required String newPassword,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/VerifyOTPAndResetPassword'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'Email': email,
+          'OTP': otp,
+          'NewPassword': newPassword,
+        }),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['responseCode'] == 200) {
+        return {
+          'success': true,
+          'message': data['responseMessage'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['responseMessage'] ?? 'Failed to reset password',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+      };
+    }
+  }
+}
+
+// Forgot Password Screen
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
 
@@ -29,7 +108,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _otpFocusNode5 = FocusNode();
   final _otpFocusNode6 = FocusNode();
 
-  int _currentStep = 0; // 0: Email, 1: OTP, 2: New Password, 3: Success
+  int _currentStep = 0; // 0: Email, 1: OTP & Password, 2: Success
   bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoading = false;
@@ -87,7 +166,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     }
   }
 
-  Future<void> _handleOtpSubmit() async {
+  Future<void> _handleResetPassword() async {
+    // Get OTP
     final otp = _otpController1.text +
         _otpController2.text +
         _otpController3.text +
@@ -100,16 +180,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       return;
     }
 
-    // Move to password step
-    setState(() => _currentStep = 2);
-  }
-
-  Future<void> _handlePasswordSubmit() async {
+    // Get passwords
     final newPassword = _newPasswordController.text;
     final confirmPassword = _confirmPasswordController.text;
 
     if (newPassword.isEmpty || confirmPassword.isEmpty) {
-      _showSnackBar('Please fill all fields', isError: true);
+      _showSnackBar('Please fill all password fields', isError: true);
       return;
     }
 
@@ -126,14 +202,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final otp = _otpController1.text +
-          _otpController2.text +
-          _otpController3.text +
-          _otpController4.text +
-          _otpController5.text +
-          _otpController6.text;
-
-      final result = await PasswordResetService.verifyOtpAndResetPassword(
+      final result = await PasswordResetService.resetPasswordWithOtp(
         email: _emailController.text.trim(),
         otp: otp,
         newPassword: newPassword,
@@ -142,10 +211,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       setState(() => _isLoading = false);
 
       if (result['success']) {
-        setState(() => _currentStep = 3);
+        setState(() => _currentStep = 2);
         _showSnackBar(result['message'], isError: false);
       } else {
-        _showSnackBar(result['message'], isError: true);
+        // Check if it's an OTP error
+        if (result['message'].toLowerCase().contains('otp')) {
+          _showSnackBar(result['message'], isError: true);
+        } else {
+          _showSnackBar(result['message'], isError: true);
+        }
       }
     } catch (e) {
       setState(() => _isLoading = false);
@@ -197,7 +271,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: _currentStep < 3
+      appBar: _currentStep < 2
           ? AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -255,9 +329,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
                   // Content based on current step
                   if (_currentStep == 0) _buildEmailStep(),
-                  if (_currentStep == 1) _buildOtpStep(),
-                  if (_currentStep == 2) _buildNewPasswordStep(),
-                  if (_currentStep == 3) _buildSuccessStep(),
+                  if (_currentStep == 1) _buildOtpAndPasswordStep(),
+                  if (_currentStep == 2) _buildSuccessStep(),
                 ],
               ),
             ),
@@ -373,7 +446,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 
-  Widget _buildOtpStep() {
+  Widget _buildOtpAndPasswordStep() {
     return Container(
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
@@ -395,7 +468,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            'Enter OTP',
+            'Reset Password',
             style: TextStyle(
               fontSize: 32,
               fontWeight: FontWeight.bold,
@@ -448,133 +521,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 24),
-
-          // Verify Button
-          ElevatedButton(
-            onPressed: _isLoading ? null : _handleOtpSubmit,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFD4A855),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 0,
-            ),
-            child: _isLoading
-                ? const SizedBox(
-              height: 20,
-              width: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            )
-                : const Text(
-              'Verify',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOtpField(
-      TextEditingController controller,
-      FocusNode currentFocus,
-      FocusNode? nextFocus,
-      ) {
-    return SizedBox(
-      width: 45,
-      height: 55,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: TextField(
-          controller: controller,
-          focusNode: currentFocus,
-          textAlign: TextAlign.center,
-          keyboardType: TextInputType.number,
-          maxLength: 1,
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: InputDecoration(
-            counterText: '',
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            contentPadding: const EdgeInsets.all(0),
-          ),
-          onChanged: (value) {
-            if (value.isNotEmpty && nextFocus != null) {
-              nextFocus.requestFocus();
-            }
-            if (value.isEmpty && currentFocus != _otpFocusNode1) {
-              FocusScope.of(context).previousFocus();
-            }
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNewPasswordStep() {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFFBF0).withOpacity(0.7),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: const Color(0xFFE8D7B8),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            'New Password',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF2C1810),
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Enter your new password',
-            style: TextStyle(
-              fontSize: 14,
-              color: Color(0xFF6B5D4F),
-            ),
-            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 30),
 
@@ -671,7 +617,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
           // Reset Password Button
           ElevatedButton(
-            onPressed: _isLoading ? null : _handlePasswordSubmit,
+            onPressed: _isLoading ? null : _handleResetPassword,
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFD4A855),
               foregroundColor: Colors.white,
@@ -696,6 +642,61 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildOtpField(
+      TextEditingController controller,
+      FocusNode currentFocus,
+      FocusNode? nextFocus,
+      ) {
+    return SizedBox(
+      width: 45,
+      height: 55,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: TextField(
+          controller: controller,
+          focusNode: currentFocus,
+          textAlign: TextAlign.center,
+          keyboardType: TextInputType.number,
+          maxLength: 1,
+          style: const TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: InputDecoration(
+            counterText: '',
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.all(0),
+          ),
+          onChanged: (value) {
+            if (value.isNotEmpty && nextFocus != null) {
+              nextFocus.requestFocus();
+            }
+            if (value.isEmpty && currentFocus != _otpFocusNode1) {
+              FocusScope.of(context).previousFocus();
+            }
+          },
+        ),
       ),
     );
   }
@@ -783,6 +784,3 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 }
-
-// Note: Make sure to uncomment the import for PasswordResetService at the top
-// Also add http package to pubspec.yaml: http: ^1.1.0

@@ -35,6 +35,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _cdsNumber = '';
   bool _isLoadingProfile = true;
 
+  // 🔥 NAVIGATION DEBOUNCING - Prevents multiple rapid taps
+  bool _isNavigating = false;
+  DateTime? _lastNavigationTime;
+  static const _navigationDebounceMs = 500; // 500ms debounce
+
   late final List<Widget> _widgetOptions;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -53,6 +58,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _initializeChartData();
     _startLiveDataUpdate();
     _loadUserData();
+  }
+
+  // 🔥 HELPER METHOD: Prevents multiple navigation calls
+  Future<void> _navigateWithDebounce(Widget destination) async {
+    // Check if already navigating
+    if (_isNavigating) {
+      debugPrint('Navigation blocked: Already navigating');
+      return;
+    }
+
+    // Check debounce time
+    final now = DateTime.now();
+    if (_lastNavigationTime != null) {
+      final difference = now.difference(_lastNavigationTime!).inMilliseconds;
+      if (difference < _navigationDebounceMs) {
+        debugPrint('Navigation blocked: Too soon (${difference}ms)');
+        return;
+      }
+    }
+
+    // Set navigation flag
+    setState(() => _isNavigating = true);
+    _lastNavigationTime = now;
+
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => destination),
+      );
+    } finally {
+      // Reset navigation flag after returning
+      if (mounted) {
+        setState(() => _isNavigating = false);
+      }
+    }
   }
 
   Future<void> _loadUserData() async {
@@ -186,16 +226,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           });
         },
         onMarketWatchTapped: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const MarketWatchScreen()),
-          );
+          // 🔥 FIXED: Using debounced navigation
+          _navigateWithDebounce(const MarketWatchScreen());
         },
         onBuySellTapped: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const TradingPage()),
-          );
+          // 🔥 FIXED: Using debounced navigation
+          _navigateWithDebounce(const TradingPage());
         },
       ),
       body: Container(
@@ -905,10 +941,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const MarketWatchScreen()),
-          );
+          // 🔥 FIXED: Using debounced navigation
+          _navigateWithDebounce(const MarketWatchScreen());
         },
         child: const Icon(
           Icons.trending_up,

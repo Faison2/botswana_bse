@@ -305,11 +305,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           const SizedBox(height: 30),
 
-          _buildActionButton(
-              "Edit Profile", Icons.edit, Colors.amber,
-                  () {
-                _comingSoon("Edit Profile");
-              }),
+          // _buildActionButton(
+          //     "Edit Profile", Icons.edit, Colors.amber,
+          //         () {
+          //       _comingSoon("Edit Profile");
+          //     }),
           const SizedBox(height: 12),
 
           _buildActionButton(
