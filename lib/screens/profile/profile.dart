@@ -76,8 +76,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           setState(() {
             _isLoading = false;
             _errorMessage =
-                responseData['responseMessage'] ??
-                    'Failed to load profile';
+                responseData['responseMessage'] ?? 'Failed to load profile';
           });
         }
       } else {
@@ -97,7 +96,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // FIXED: full screen gradient background
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -112,7 +110,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         child: Column(
           children: [
-            // FIXED: Gradient AppBar
             AppBar(
               backgroundColor: Colors.transparent,
               elevation: 0,
@@ -151,7 +148,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
-
             Expanded(
               child: _isLoading
                   ? const Center(
@@ -170,7 +166,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // --- ERROR UI ---
   Widget _buildErrorUI() {
     return Center(
       child: Padding(
@@ -178,14 +173,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline,
-                color: Colors.red, size: 60),
+            const Icon(Icons.error_outline, color: Colors.red, size: 60),
             const SizedBox(height: 20),
             Text(
               _errorMessage,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                  color: Colors.white, fontSize: 16),
+              style: const TextStyle(color: Colors.white, fontSize: 16),
             ),
             const SizedBox(height: 20),
             ElevatedButton(
@@ -204,7 +197,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // --- MAIN PROFILE UI ---
   Widget _buildProfileUI() {
     return SingleChildScrollView(
       child: Column(
@@ -223,9 +215,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             child: Center(
               child: Text(
-                _fullName.isNotEmpty
-                    ? _fullName[0].toUpperCase()
-                    : 'U',
+                _fullName.isNotEmpty ? _fullName[0].toUpperCase() : 'U',
                 style: const TextStyle(
                     fontSize: 48,
                     fontWeight: FontWeight.bold,
@@ -240,33 +230,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Text(
             _fullName,
             style: const TextStyle(
-                color: Colors.white,
-                fontSize: 26,
-                fontWeight: FontWeight.bold),
+                color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
           ),
 
           const SizedBox(height: 8),
 
           // Status Badge
           Container(
-            padding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             decoration: BoxDecoration(
               color: _status == 'Active'
                   ? Colors.green.withOpacity(0.2)
                   : Colors.red.withOpacity(0.2),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: _status == 'Active'
-                    ? Colors.green
-                    : Colors.red,
+                color: _status == 'Active' ? Colors.green : Colors.red,
               ),
             ),
             child: Text(
               _status,
               style: TextStyle(
-                  color:
-                  _status == 'Active' ? Colors.green : Colors.red),
+                  color: _status == 'Active' ? Colors.green : Colors.red),
             ),
           ),
 
@@ -282,8 +266,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _buildDetailRow("Phone Number",
                 _phoneNumber.isEmpty ? 'Not provided' : _phoneNumber),
             _spacer(),
-            _buildDetailRow(
-                "CDS Number",
+            _buildDetailRow("CDS Number",
                 _cdsNumber.isEmpty ? 'Not provided' : _cdsNumber),
           ]),
 
@@ -305,18 +288,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           const SizedBox(height: 30),
 
-          // _buildActionButton(
-          //     "Edit Profile", Icons.edit, Colors.amber,
-          //         () {
-          //       _comingSoon("Edit Profile");
-          //     }),
-          const SizedBox(height: 12),
-
-          _buildActionButton(
-              "Change Password", Icons.lock, Colors.blue,
-                  () {
-                _comingSoon("Change Password");
-              }),
+          // Change Password Button - NOW FUNCTIONAL
+          _buildActionButton("Change Password", Icons.lock, Colors.blue, () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const ChangePasswordScreen(),
+              ),
+            );
+          }),
           const SizedBox(height: 12),
 
           _buildActionButton("Logout", Icons.logout, Colors.red, () {
@@ -357,9 +337,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             value,
             textAlign: TextAlign.end,
             style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w600),
+                color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
             overflow: TextOverflow.ellipsis,
             maxLines: 2,
           ),
@@ -380,7 +358,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         margin: const EdgeInsets.symmetric(horizontal: 20),
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.15), // Slightly more visible color
+          color: color.withOpacity(0.15),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: color.withOpacity(0.5),
@@ -395,20 +373,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Text(
               label,
               style: TextStyle(
-                  color: color,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600),
+                  color: color, fontSize: 16, fontWeight: FontWeight.w600),
             ),
           ],
         ),
-      ),
-    );
-  }
-  void _comingSoon(String text) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$text - Coming Soon'),
-        backgroundColor: Colors.amber,
       ),
     );
   }
@@ -432,9 +400,419 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     context, '/login', (route) => false);
               }
             },
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ========== CHANGE PASSWORD SCREEN ==========
+
+class ChangePasswordScreen extends StatefulWidget {
+  const ChangePasswordScreen({super.key});
+
+  @override
+  State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
+}
+
+class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
+  final _oldPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
+  bool _obscureOldPassword = true;
+  bool _obscureNewPassword = true;
+  bool _obscureConfirmPassword = true;
+  bool _isLoading = false;
+
+  String _email = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserEmail();
+  }
+
+  Future<void> _loadUserEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _email = prefs.getString('email') ?? '';
+    });
+  }
+
+  @override
+  void dispose() {
+    _oldPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleChangePassword() async {
+    final oldPassword = _oldPasswordController.text;
+    final newPassword = _newPasswordController.text;
+    final confirmPassword = _confirmPasswordController.text;
+
+    if (oldPassword.isEmpty || newPassword.isEmpty || confirmPassword.isEmpty) {
+      _showSnackBar('Please fill all fields', isError: true);
+      return;
+    }
+
+    if (newPassword != confirmPassword) {
+      _showSnackBar('New passwords do not match', isError: true);
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      _showSnackBar('New password must be at least 6 characters',
+          isError: true);
+      return;
+    }
+
+    if (oldPassword == newPassword) {
+      _showSnackBar('New password must be different from old password',
+          isError: true);
+      return;
+    }
+
+    if (_email.isEmpty) {
+      _showSnackBar('Email not found. Please login again.', isError: true);
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final response = await http.post(
+        Uri.parse(
+            'http://192.168.3.201/MainAPI/Authentication/ChangePassword'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'Email': _email,
+          'OldPassword': oldPassword,
+          'NewPassword': newPassword,
+        }),
+      );
+
+      final data = jsonDecode(response.body);
+
+      setState(() => _isLoading = false);
+
+      if (response.statusCode == 200 && data['responseCode'] == 200) {
+        _showSnackBar(
+            data['responseMessage'] ?? 'Password changed successfully',
+            isError: false);
+
+        await Future.delayed(const Duration(seconds: 2));
+        if (mounted) {
+          Navigator.pop(context);
+        }
+      } else {
+        _showSnackBar(
+            data['responseMessage'] ?? 'Failed to change password',
+            isError: true);
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showSnackBar('An error occurred. Please try again.', isError: true);
+    }
+  }
+
+  void _showSnackBar(String message, {required bool isError}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: isError ? Colors.red[700] : Colors.green[700],
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF2C1810),
+              Color(0xFF1A1A1A),
+              Color(0xFF0D0D0D),
+            ],
+          ),
+        ),
+        child: Column(
+          children: [
+            AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              centerTitle: true,
+              title: const Text(
+                "Change Password",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+              flexibleSpace: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Color(0xFF2C1810),
+                      Color(0xFF1A1A1A),
+                      Color(0xFF0D0D0D),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: SafeArea(
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 20),
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFD4A855), Color(0xFFB8860B)],
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.lock_outline,
+                            size: 40,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 40),
+                        Container(
+                          padding: const EdgeInsets.all(32),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1F1F1F),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: const Color(0xFF3A3A3A),
+                              width: 1,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const Text(
+                                'Update Your Password',
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Enter your current password and choose a new one',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFF9E9E9E),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 30),
+                              _buildPasswordField(
+                                controller: _oldPasswordController,
+                                hintText: 'Current Password',
+                                obscureText: _obscureOldPassword,
+                                onToggleVisibility: () {
+                                  setState(() => _obscureOldPassword =
+                                  !_obscureOldPassword);
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              _buildPasswordField(
+                                controller: _newPasswordController,
+                                hintText: 'New Password',
+                                obscureText: _obscureNewPassword,
+                                onToggleVisibility: () {
+                                  setState(() => _obscureNewPassword =
+                                  !_obscureNewPassword);
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              _buildPasswordField(
+                                controller: _confirmPasswordController,
+                                hintText: 'Confirm New Password',
+                                obscureText: _obscureConfirmPassword,
+                                onToggleVisibility: () {
+                                  setState(() => _obscureConfirmPassword =
+                                  !_obscureConfirmPassword);
+                                },
+                              ),
+                              const SizedBox(height: 24),
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.blue.withOpacity(0.3),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.info_outline,
+                                          size: 16,
+                                          color: Colors.blue[300],
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Password Requirements:',
+                                          style: TextStyle(
+                                            color: Colors.blue[300],
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _buildRequirement('At least 6 characters'),
+                                    _buildRequirement(
+                                        'Different from current password'),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              ElevatedButton(
+                                onPressed:
+                                _isLoading ? null : _handleChangePassword,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFD4A855),
+                                  foregroundColor: Colors.white,
+                                  padding:
+                                  const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: _isLoading
+                                    ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor:
+                                    AlwaysStoppedAnimation<Color>(
+                                        Colors.white),
+                                  ),
+                                )
+                                    : const Text(
+                                  'Change Password',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPasswordField({
+    required TextEditingController controller,
+    required String hintText,
+    required bool obscureText,
+    required VoidCallback onToggleVisibility,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2A2A),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF3A3A3A),
+        ),
+      ),
+      child: TextField(
+        controller: controller,
+        obscureText: obscureText,
+        style: const TextStyle(fontSize: 16, color: Colors.white),
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: TextStyle(color: Colors.grey[600]),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 18,
+          ),
+          prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
+          suffixIcon: IconButton(
+            icon: Icon(
+              obscureText
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+              color: Colors.grey[600],
+            ),
+            onPressed: onToggleVisibility,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRequirement(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        children: [
+          Icon(
+            Icons.check_circle_outline,
+            size: 14,
+            color: Colors.blue[200],
+          ),
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: TextStyle(
+              color: Colors.blue[200],
+              fontSize: 12,
+            ),
           ),
         ],
       ),

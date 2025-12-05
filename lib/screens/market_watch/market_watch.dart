@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class MarketWatchScreen extends StatefulWidget {
   const MarketWatchScreen({super.key});
@@ -10,97 +12,329 @@ class MarketWatchScreen extends StatefulWidget {
 }
 
 class _MarketWatchScreenState extends State<MarketWatchScreen> {
- // final int _selectedIndex = 2; // Center button is selected
   Timer? _timer;
+  List<Map<String, dynamic>> _marketData = [];
+  bool _isLoading = true;
+  String? _errorMessage;
 
-  // Market data with live price updates
-  final List<Map<String, dynamic>> _marketData = [
-    {
-      'name': 'Sechaba Brewery Holdings Ltd',
-      'ticker': 'SECHAB',
-      'price': 6.23,
-      'bestBid': 6.30,
-      'bestAsk': 6.30,
-      'supply': '2,000',
-      'demand': '100',
-      'icon': Icons.local_drink,
-      'iconBg': const Color(0xFF3D2F1F),
-      'priceHistory': <double>[],
-    },
-    {
-      'name': 'First National Bank of Botswana Ltd',
-      'ticker': 'FNBB',
-      'price': 11.59,
-      'bestBid': 12.30,
-      'bestAsk': 11.30,
-      'supply': '2,000',
-      'demand': '100',
-      'icon': Icons.account_balance,
-      'iconBg': const Color(0xFF2A3F2F),
-      'priceHistory': <double>[],
-    },
-    {
-      'name': 'BBS Limited',
-      'ticker': 'BBS',
-      'price': 19.69,
-      'bestBid': 19.30,
-      'bestAsk': 19.30,
-      'supply': '600',
-      'demand': '800',
-      'icon': Icons.business,
-      'iconBg': const Color(0xFF2F3A4A),
-      'priceHistory': <double>[],
-    },
-    {
-      'name': 'PrimeTime Property Holdings Ltd',
-      'ticker': 'PRIMET',
-      'price': 29.39,
-      'bestBid': 29.66,
-      'bestAsk': 29.88,
-      'supply': '600',
-      'demand': '900',
-      'icon': Icons.home_work,
-      'iconBg': const Color(0xFF4A2F2F),
-      'priceHistory': <double>[],
-    },
-  ];
+  final String _apiUrl = 'http://192.168.3.201/MainAPI/Home/getMarketData';
+  final String _token = 'm559ZOqGPSX+HupQVA8l+jWzOHfmRpuDSp9TwFmtzzfWWJ07yo+gyNkZYT/UWdEBDC/EdzLxEPo/xjEeGaOXiMBdcjktrlN8aYfhbXSx5897ekZfyqnl0YhfxkJg585IjjdR0VUB+mfJ30XrZ1VaqMKvY+EOFjfJBzKL4o82LTAoP1JZcKymWM01/r42YP7JRygJWZUNZCKvGc6dey+OBMDG8Qv8oo3deeiZrphsGLytP9Z7yvhqhSB3jdd34COzsX28O3y/40MgaPt/y60P+vGzcjeyro9Eo4wgEoCz9fnZJhbzWrOcrS//l8ZD9md97g==';
 
   @override
   void initState() {
     super.initState();
-    _initializePriceHistory();
-    _startLivePriceUpdate();
+    _fetchMarketData();
+    _startAutoRefresh();
   }
 
-  void _initializePriceHistory() {
-    for (var stock in _marketData) {
-      final basePrice = stock['price'] as double;
-      final history = <double>[];
-      for (int i = 0; i < 30; i++) {
-        history.add(basePrice + (math.Random().nextDouble() - 0.5) * 2);
+  Future<void> _fetchMarketData() async {
+    try {
+      final response = await http.post(
+        Uri.parse(_apiUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonData = json.decode(response.body);
+
+        if (jsonData.isNotEmpty && jsonData[0]['MdataItem'] != null) {
+          final List<dynamic> items = jsonData[0]['MdataItem'];
+
+          setState(() {
+            _marketData = items.map((item) {
+              // Ensure item is a Map<String, dynamic> (it may be Map<dynamic, dynamic> from json.decode)
+              final Map<String, dynamic> raw = Map<String, dynamic>.from(item as Map);
+
+              final closePrice = double.tryParse(raw['ClosingPrice']?.toString() ?? '0') ?? 0;
+
+              // Create an enriched, strongly-typed map to satisfy List<Map<String, dynamic>>
+              return {
+                ...raw,
+                'priceHistory': _generatePriceHistory(closePrice),
+                'currentPrice': closePrice,
+                'iconData': _getIconForCompany(raw['Symbol'] ?? ''),
+                'iconBg': _getColorForCompany(raw['Symbol'] ?? ''),
+              };
+            }).toList();
+            _isLoading = false;
+            _errorMessage = null;
+          });
+        }
+      } else {
+        setState(() {
+          _errorMessage = 'Failed to load data: ${response.statusCode}';
+          _isLoading = false;
+        });
       }
-      stock['priceHistory'] = history;
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error: $e';
+        _isLoading = false;
+      });
     }
   }
 
-  void _startLivePriceUpdate() {
-    _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
-      setState(() {
-        for (var stock in _marketData) {
-          final history = stock['priceHistory'] as List<double>;
-          final currentPrice = stock['price'] as double;
-          final newPrice =
-              currentPrice + (math.Random().nextDouble() - 0.5) * 0.5;
+  List<double> _generatePriceHistory(double basePrice) {
+    final history = <double>[];
+    for (int i = 0; i < 30; i++) {
+      history.add(basePrice + (math.Random().nextDouble() - 0.5) * (basePrice * 0.05));
+    }
+    return history;
+  }
 
-          history.add(newPrice);
-          if (history.length > 30) {
-            history.removeAt(0);
-          }
+  IconData _getIconForCompany(String symbol) {
+    if (symbol.contains('BANK') || symbol.contains('CRDB') || symbol.contains('NMB') || symbol.contains('KCB') || symbol.contains('DCB') || symbol.contains('MKCB') || symbol.contains('MUCOBA') || symbol.contains('MCB') || symbol.contains('MBP')) {
+      return Icons.account_balance;
+    } else if (symbol.contains('BREW') || symbol.contains('TBL') || symbol.contains('EABL')) {
+      return Icons.local_drink;
+    } else if (symbol.contains('AIR') || symbol.contains('KA') || symbol.contains('PAL')) {
+      return Icons.flight;
+    } else if (symbol.contains('CEMENT') || symbol.contains('TCCL') || symbol.contains('TPCC')) {
+      return Icons.construction;
+    } else if (symbol.contains('VODA') || symbol.contains('TELECOM')) {
+      return Icons.phone_android;
+    } else if (symbol.contains('MEDIA') || symbol.contains('NMG')) {
+      return Icons.newspaper;
+    } else if (symbol.contains('INSURANCE') || symbol.contains('JHL')) {
+      return Icons.security;
+    } else if (symbol.contains('OIL') || symbol.contains('GAS') || symbol.contains('SWALA') || symbol.contains('TOL')) {
+      return Icons.local_gas_station;
+    }
+    return Icons.business;
+  }
 
-          stock['price'] = newPrice;
-        }
-      });
+  Color _getColorForCompany(String symbol) {
+    final hash = symbol.hashCode;
+    final colors = [
+      const Color(0xFF3D2F1F),
+      const Color(0xFF2A3F2F),
+      const Color(0xFF2F3A4A),
+      const Color(0xFF4A2F2F),
+      const Color(0xFF2F4A3F),
+      const Color(0xFF3F2F4A),
+    ];
+    return colors[hash.abs() % colors.length];
+  }
+
+  void _startAutoRefresh() {
+    _timer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      _fetchMarketData();
     });
+  }
+
+  void _showStockDetails(Map<String, dynamic> stock) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 500),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2A2A2A),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha((0.5 * 255).round()),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: stock['iconBg'],
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 60,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withAlpha((0.2 * 255).round()),
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        child: Icon(
+                          stock['iconData'],
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              stock['Company'] ?? 'N/A',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              stock['Symbol'] ?? 'N/A',
+                              style: TextStyle(
+                                color: Colors.white.withAlpha((0.7 * 255).round()),
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Content
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Price Section
+                        Center(
+                          child: Column(
+                            children: [
+                              Text(
+                                'Current Price',
+                                style: TextStyle(
+                                  color: Colors.white.withAlpha((0.6 * 255).round()),
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'TZS ${stock['ClosingPrice']}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: stock['status'] == 'GAIN'
+                                      ? Colors.green.withAlpha((0.2 * 255).round())
+                                      : stock['status'] == 'LOSE'
+                                      ? Colors.red.withAlpha((0.2 * 255).round())
+                                      : Colors.grey.withAlpha((0.2 * 255).round()),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  stock['status'] ?? 'NO CHANGE',
+                                  style: TextStyle(
+                                    color: stock['status'] == 'GAIN'
+                                        ? Colors.green
+                                        : stock['status'] == 'LOSE'
+                                        ? Colors.red
+                                        : Colors.grey,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 24),
+                        const Divider(color: Color(0xFF3A3A3A)),
+                        const SizedBox(height: 16),
+
+                        // Price Details
+                        _buildDetailRow('Opening Price', 'TZS ${stock['OpeningPrice'] ?? 'N/A'}'),
+                        const SizedBox(height: 12),
+                        _buildDetailRow('Closing Price', 'TZS ${stock['ClosingPrice'] ?? 'N/A'}'),
+                        const SizedBox(height: 12),
+                        _buildDetailRow('Settlement Price', 'TZS ${stock['SettlementPrice'] ?? 'N/A'}'),
+                        const SizedBox(height: 12),
+                        _buildDetailRow('VWAP Price', 'TZS ${stock['VwapPrice'] ?? 'N/A'}'),
+
+                        const SizedBox(height: 16),
+                        const Divider(color: Color(0xFF3A3A3A)),
+                        const SizedBox(height: 16),
+
+                        // Range Details
+                        _buildDetailRow('Maximum Price', 'TZS ${stock['MaxPrice'] ?? 'N/A'}'),
+                        const SizedBox(height: 12),
+                        _buildDetailRow('Minimum Price', 'TZS ${stock['MinPrice'] ?? 'N/A'}'),
+
+                        const SizedBox(height: 16),
+                        const Divider(color: Color(0xFF3A3A3A)),
+                        const SizedBox(height: 16),
+
+                        // Additional Details
+                        _buildDetailRow('ISIN', stock['ISIN'] ?? 'N/A'),
+                        const SizedBox(height: 12),
+                        _buildDetailRow('Code', stock['Code'] ?? 'N/A'),
+                        const SizedBox(height: 12),
+                        _buildDetailRow('Security Type', stock['securitytype'] ?? 'N/A'),
+                        const SizedBox(height: 12),
+                        _buildDetailRow('Open Interest', stock['Openinterest'] ?? 'N/A'),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withAlpha((0.6 * 255).round()),
+            fontSize: 14,
+          ),
+        ),
+        Flexible(
+          child: Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+            textAlign: TextAlign.right,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -153,14 +387,65 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                         ),
                       ),
                     ),
+                    IconButton(
+                      onPressed: _fetchMarketData,
+                      icon: const Icon(
+                        Icons.refresh,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 8),
 
-              // Market List
+              // Content
               Expanded(
-                child: ListView.builder(
+                child: _isLoading
+                    ? const Center(
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                  ),
+                )
+                    : _errorMessage != null
+                    ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        color: Colors.red,
+                        size: 64,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _errorMessage!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _fetchMarketData,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                )
+                    : _marketData.isEmpty
+                    ? const Center(
+                  child: Text(
+                    'No market data available',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                    ),
+                  ),
+                )
+                    : ListView.builder(
                   padding: const EdgeInsets.only(bottom: 100),
                   itemCount: _marketData.length,
                   itemBuilder: (context, index) {
@@ -178,136 +463,162 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
 
   Widget _buildStockCard(Map<String, dynamic> stock) {
     final priceHistory = stock['priceHistory'] as List<double>;
-    final currentPrice = stock['price'] as double;
-    final isPositive =
-        priceHistory.isNotEmpty && priceHistory.last > priceHistory.first;
+    final closePrice = double.tryParse(stock['ClosingPrice']?.toString() ?? '0') ?? 0;
+    final isPositive = closePrice >= closePrice;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF2A2A2A),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              // Company Icon
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  color: stock['iconBg'],
-                  borderRadius: BorderRadius.circular(12),
+    return GestureDetector(
+      onTap: () => _showStockDetails(stock),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2A2A2A),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha((0.2 * 255).round()),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                // Company Icon
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: stock['iconBg'],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(stock['iconData'], color: Colors.white, size: 28),
                 ),
-                child: Icon(stock['icon'], color: Colors.white, size: 28),
-              ),
-              const SizedBox(width: 12),
+                const SizedBox(width: 12),
 
-              // Company Info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                // Company Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        stock['Company'] ?? 'N/A',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        stock['Symbol'] ?? 'N/A',
+                        style: TextStyle(
+                          color: Colors.white.withAlpha((0.5 * 255).round()),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Price & Status
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      stock['name'],
+                      'TZS ${stock['ClosingPrice'] ?? '0'}',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      stock['ticker'],
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.5),
-                        fontSize: 12,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: stock['status'] == 'GAIN'
+                            ? Colors.green.withAlpha((0.2 * 255).round())
+                            : stock['status'] == 'LOSE'
+                            ? Colors.red.withAlpha((0.2 * 255).round())
+                            : Colors.grey.withAlpha((0.2 * 255).round()),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        stock['status'] ?? 'N/A',
+                        style: TextStyle(
+                          color: stock['status'] == 'GAIN'
+                              ? Colors.green
+                              : stock['status'] == 'LOSE'
+                              ? Colors.red
+                              : Colors.grey,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
                 ),
-              ),
-
-              // Price
-              Text(
-                'BWP${currentPrice.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Mini Graph
-          SizedBox(
-            height: 60,
-            child: CustomPaint(
-              painter: MiniGraphPainter(
-                priceHistory: priceHistory,
-                isPositive: isPositive,
-              ),
-              child: Container(),
+              ],
             ),
-          ),
+            const SizedBox(height: 12),
 
-          const SizedBox(height: 12),
+            // Mini Graph
+            SizedBox(
+              height: 60,
+              child: CustomPaint(
+                painter: MiniGraphPainter(
+                  priceHistory: priceHistory,
+                  isPositive: isPositive,
+                ),
+                child: Container(),
+              ),
+            ),
 
-          // Stock Details
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildDetailItem('Best Bid', 'BWP${stock['bestBid']}'),
-              _buildDetailItem('Best Ask', 'BWP${stock['bestAsk']}'),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildDetailItem('Market Supply', stock['supply']),
-              _buildDetailItem('Demand', stock['demand']),
-            ],
-          ),
-        ],
+            const SizedBox(height: 12),
+
+            // Quick Stats
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildQuickStat('Open', 'TZS ${stock['OpeningPrice'] ?? 'N/A'}'),
+                _buildQuickStat('High', 'TZS ${stock['MaxPrice'] ?? 'N/A'}'),
+                _buildQuickStat('Low', 'TZS ${stock['MinPrice'] ?? 'N/A'}'),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildDetailItem(String label, String value) {
+  Widget _buildQuickStat(String label, String value) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 10),
+          style: TextStyle(
+            color: Colors.white.withAlpha((0.5 * 255).round()),
+            fontSize: 10,
+          ),
         ),
         const SizedBox(height: 2),
         Text(
           value,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 12,
+            fontSize: 11,
             fontWeight: FontWeight.w600,
           ),
         ),
       ],
     );
   }
-
 }
 
 // Custom painter for mini graph
@@ -329,13 +640,13 @@ class MiniGraphPainter extends CustomPainter {
 
     final fillPaint = Paint()
       ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          (isPositive ? const Color(0xFF4CAF50) : Colors.red).withOpacity(0.3),
-          (isPositive ? const Color(0xFF4CAF50) : Colors.red).withOpacity(0.0),
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
+         begin: Alignment.topCenter,
+         end: Alignment.bottomCenter,
+         colors: [
+          (isPositive ? const Color(0xFF4CAF50) : Colors.red).withAlpha((0.3 * 255).round()),
+          (isPositive ? const Color(0xFF4CAF50) : Colors.red).withAlpha((0.0 * 255).round()),
+         ],
+       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
       ..style = PaintingStyle.fill;
 
     final minPrice = priceHistory.reduce((a, b) => a < b ? a : b);
