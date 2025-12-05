@@ -366,7 +366,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             color: Colors.black87,
                           ),
                           decoration: InputDecoration(
-                            hintText: 'vmasoke2@gmail.com',
+                            hintText: 'Email',
                             hintStyle: TextStyle(color: Colors.grey[400]),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -403,7 +403,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             color: Colors.black87,
                           ),
                           decoration: InputDecoration(
-                            hintText: '••••••••',
+                            hintText: 'Password',
                             hintStyle: TextStyle(
                               color: Colors.grey[400],
                               fontSize: 16,
