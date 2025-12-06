@@ -2,17 +2,18 @@ import 'package:bse/screens/auth/login/login.dart';
 import 'package:bse/screens/splash_screen/spalsh_screen.dart';
 import 'package:bse/screens/dashboard/dashboard.dart';
 import 'package:bse/screens/profile/profile.dart';
+import 'package:bse/theme_provider.dart'; // Add this import
+import 'package:provider/provider.dart'; // <-- added provider import
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
-
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Set status bar color
+  // Set initial status bar color
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -20,7 +21,13 @@ void main() {
     ),
   );
 
-  runApp(const BSEApp());
+  // Wrap app with ThemeProvider
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => ThemeProvider(),
+      child: const BSEApp(),
+    ),
+  );
 }
 
 class BSEApp extends StatefulWidget {
@@ -79,20 +86,19 @@ class _BSEAppState extends State<BSEApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'BSE - Botswana Stock Exchange',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.amber,
-        scaffoldBackgroundColor: const Color(0xFF1A1A1A),
-        fontFamily: 'Inter',
-        useMaterial3: true,
-      ),
-      home: const SplashScreen(),
-      routes: {
-        '/login': (context) => const LoginScreen(),
-        '/dashboard': (context) => const DashboardScreen(),
-        '/profile': (context) => const ProfileScreen(),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return MaterialApp(
+          title: 'BSE - Botswana Stock Exchange',
+          debugShowCheckedModeBanner: false,
+          theme: themeProvider.currentTheme,
+          home: const SplashScreen(),
+          routes: {
+            '/login': (context) => const LoginScreen(),
+            '/dashboard': (context) => const DashboardScreen(),
+            '/profile': (context) => const ProfileScreen(),
+          },
+        );
       },
     );
   }

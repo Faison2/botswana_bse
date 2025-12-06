@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../../theme_provider.dart';
+import 'package:provider/provider.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -41,16 +43,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (token.isEmpty) {
         setState(() {
           _isLoading = false;
-          _errorMessage =
-          'No authentication token found. Please login again.';
+          _errorMessage = 'No authentication token found. Please login again.';
         });
         return;
       }
 
       final response = await http
           .post(
-        Uri.parse(
-            'http://192.168.3.201/MainAPI/Authentication/GetProfile'),
+        Uri.parse('http://192.168.3.201/MainAPI/Authentication/GetProfile'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'Token': token}),
       )
@@ -95,35 +95,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDark = themeProvider.isDarkMode;
+
+    final bgGradient = isDark
+        ? const LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        Color(0xFF2C1810),
+        Color(0xFF1A1A1A),
+        Color(0xFF0D0D0D),
+      ],
+    )
+        : const LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        Color(0xFFFFF8E7),
+        Color(0xFFF5F5F5),
+        Color(0xFFFFFFFF),
+      ],
+    );
+
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF2C1810),
-              Color(0xFF1A1A1A),
-              Color(0xFF0D0D0D),
-            ],
-          ),
-        ),
+        decoration: BoxDecoration(gradient: bgGradient),
         child: Column(
           children: [
             AppBar(
               backgroundColor: Colors.transparent,
               elevation: 0,
               centerTitle: true,
-              title: const Text(
+              title: Text(
                 "My Profile",
                 style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold),
+                  color: isDark ? Colors.white : Colors.black87,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               leading: GestureDetector(
                 onTap: () => Navigator.pop(context),
-                child: const Icon(Icons.arrow_back, color: Colors.white),
+                child: Icon(
+                  Icons.arrow_back,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
               ),
               actions: [
                 GestureDetector(
@@ -135,30 +152,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ],
               flexibleSpace: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Color(0xFF2C1810),
-                      Color(0xFF1A1A1A),
-                      Color(0xFF0D0D0D),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
+                decoration: BoxDecoration(gradient: bgGradient),
               ),
             ),
             Expanded(
               child: _isLoading
                   ? const Center(
                 child: CircularProgressIndicator(
-                  valueColor:
-                  AlwaysStoppedAnimation<Color>(Colors.amber),
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
                 ),
               )
                   : _errorMessage.isNotEmpty
-                  ? _buildErrorUI()
-                  : _buildProfileUI(),
+                  ? _buildErrorUI(isDark)
+                  : _buildProfileUI(isDark, themeProvider),
             ),
           ],
         ),
@@ -166,7 +172,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildErrorUI() {
+  Widget _buildErrorUI(bool isDark) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -178,7 +184,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Text(
               _errorMessage,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontSize: 16),
+              style: TextStyle(
+                color: isDark ? Colors.white : Colors.black87,
+                fontSize: 16,
+              ),
             ),
             const SizedBox(height: 20),
             ElevatedButton(
@@ -197,7 +206,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildProfileUI() {
+  Widget _buildProfileUI(bool isDark, ThemeProvider themeProvider) {
     return SingleChildScrollView(
       child: Column(
         children: [
@@ -207,9 +216,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Container(
             width: 120,
             height: 120,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               shape: BoxShape.circle,
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 colors: [Color(0xFFD4A855), Color(0xFFB8860B)],
               ),
             ),
@@ -217,9 +226,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Text(
                 _fullName.isNotEmpty ? _fullName[0].toUpperCase() : 'U',
                 style: const TextStyle(
-                    fontSize: 48,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white),
+                  fontSize: 48,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             ),
           ),
@@ -229,8 +239,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           // Name
           Text(
             _fullName,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: isDark ? Colors.white : Colors.black87,
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+            ),
           ),
 
           const SizedBox(height: 8),
@@ -250,58 +263,82 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Text(
               _status,
               style: TextStyle(
-                  color: _status == 'Active' ? Colors.green : Colors.red),
+                color: _status == 'Active' ? Colors.green : Colors.red,
+              ),
             ),
           ),
 
           const SizedBox(height: 30),
 
-          _buildCard([
-            _buildDetailRow("User ID", _userId),
+          _buildCard(isDark, [
+            _buildDetailRow("User ID", _userId, isDark),
             _spacer(),
-            _buildDetailRow("Username", _username),
+            _buildDetailRow("Username", _username, isDark),
             _spacer(),
-            _buildDetailRow("Email", _email),
+            _buildDetailRow("Email", _email, isDark),
             _spacer(),
             _buildDetailRow("Phone Number",
-                _phoneNumber.isEmpty ? 'Not provided' : _phoneNumber),
+                _phoneNumber.isEmpty ? 'Not provided' : _phoneNumber, isDark),
             _spacer(),
             _buildDetailRow("CDS Number",
-                _cdsNumber.isEmpty ? 'Not provided' : _cdsNumber),
+                _cdsNumber.isEmpty ? 'Not provided' : _cdsNumber, isDark),
           ]),
 
           const SizedBox(height: 20),
 
-          _buildCard([
-            const Text(
+          _buildCard(isDark, [
+            Text(
               "Account Information",
               style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold),
+                color: isDark ? Colors.white : Colors.black87,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             _spacer(),
-            _buildDetailRow("Account Created", _dateCreated),
+            _buildDetailRow("Account Created", _dateCreated, isDark),
             _spacer(),
-            _buildDetailRow("Last Login", _lastLoginDate),
+            _buildDetailRow("Last Login", _lastLoginDate, isDark),
           ]),
 
           const SizedBox(height: 30),
 
-          // Change Password Button - NOW FUNCTIONAL
-          _buildActionButton("Change Password", Icons.lock, Colors.blue, () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const ChangePasswordScreen(),
-              ),
-            );
-          }),
+          // Theme Toggle Button
+          _buildActionButton(
+            isDark ? "Switch to Light Mode" : "Switch to Dark Mode",
+            isDark ? Icons.light_mode : Icons.dark_mode,
+            Colors.orange,
+                () => themeProvider.toggleTheme(),
+            isDark,
+          ),
           const SizedBox(height: 12),
 
-          _buildActionButton("Logout", Icons.logout, Colors.red, () {
-            _showLogoutDialog();
-          }),
+          // Change Password Button
+          _buildActionButton(
+            "Change Password",
+            Icons.lock,
+            Colors.blue,
+                () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ChangePasswordScreen(),
+                ),
+              );
+            },
+            isDark,
+          ),
+          const SizedBox(height: 12),
+
+          _buildActionButton(
+            "Logout",
+            Icons.logout,
+            Colors.red,
+                () {
+              _showLogoutDialog(isDark);
+            },
+            isDark,
+          ),
 
           const SizedBox(height: 40),
         ],
@@ -311,33 +348,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _spacer() => const SizedBox(height: 16);
 
-  Widget _buildCard(List<Widget> children) {
+  Widget _buildCard(bool isDark, List<Widget> children) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F1F),
+        color: isDark ? const Color(0xFF1F1F1F) : Colors.white,
         borderRadius: BorderRadius.circular(16),
+        boxShadow: isDark
+            ? []
+            : [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(children: children),
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
+  Widget _buildDetailRow(String label, String value, bool isDark) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           label,
-          style:
-          TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
+          style: TextStyle(
+            color: isDark
+                ? Colors.white.withOpacity(0.6)
+                : Colors.black.withOpacity(0.6),
+            fontSize: 14,
+          ),
         ),
         Expanded(
           child: Text(
             value,
             textAlign: TextAlign.end,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              color: isDark ? Colors.white : Colors.black87,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
             overflow: TextOverflow.ellipsis,
             maxLines: 2,
           ),
@@ -351,6 +404,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       IconData icon,
       Color color,
       VoidCallback onTap,
+      bool isDark,
       ) {
     return GestureDetector(
       onTap: onTap,
@@ -373,7 +427,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Text(
               label,
               style: TextStyle(
-                  color: color, fontSize: 16, fontWeight: FontWeight.w600),
+                color: color,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -381,16 +438,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showLogoutDialog() {
+  void _showLogoutDialog(bool isDark) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
+        backgroundColor: isDark ? const Color(0xFF1F1F1F) : Colors.white,
+        title: Text(
+          'Logout',
+          style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+        ),
+        content: Text(
+          'Are you sure you want to logout?',
+          style: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () async {
               final prefs = await SharedPreferences.getInstance();
@@ -534,51 +599,57 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDark = themeProvider.isDarkMode;
+
+    final bgGradient = isDark
+        ? const LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        Color(0xFF2C1810),
+        Color(0xFF1A1A1A),
+        Color(0xFF0D0D0D),
+      ],
+    )
+        : const LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        Color(0xFFFFF8E7),
+        Color(0xFFF5F5F5),
+        Color(0xFFFFFFFF),
+      ],
+    );
+
     return Scaffold(
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF2C1810),
-              Color(0xFF1A1A1A),
-              Color(0xFF0D0D0D),
-            ],
-          ),
-        ),
+        decoration: BoxDecoration(gradient: bgGradient),
         child: Column(
           children: [
             AppBar(
               backgroundColor: Colors.transparent,
               elevation: 0,
               centerTitle: true,
-              title: const Text(
+              title: Text(
                 "Change Password",
                 style: TextStyle(
-                  color: Colors.white,
+                  color: isDark ? Colors.white : Colors.black87,
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               leading: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                icon: Icon(
+                  Icons.arrow_back,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
                 onPressed: () => Navigator.pop(context),
               ),
               flexibleSpace: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Color(0xFF2C1810),
-                      Color(0xFF1A1A1A),
-                      Color(0xFF0D0D0D),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
+                decoration: BoxDecoration(gradient: bgGradient),
               ),
             ),
             Expanded(
@@ -592,9 +663,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                         Container(
                           width: 80,
                           height: 80,
-                          decoration: BoxDecoration(
+                          decoration: const BoxDecoration(
                             shape: BoxShape.circle,
-                            gradient: const LinearGradient(
+                            gradient: LinearGradient(
                               colors: [Color(0xFFD4A855), Color(0xFFB8860B)],
                             ),
                           ),
@@ -608,31 +679,46 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                         Container(
                           padding: const EdgeInsets.all(32),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1F1F1F),
+                            color: isDark
+                                ? const Color(0xFF1F1F1F)
+                                : Colors.white,
                             borderRadius: BorderRadius.circular(24),
                             border: Border.all(
-                              color: const Color(0xFF3A3A3A),
+                              color: isDark
+                                  ? const Color(0xFF3A3A3A)
+                                  : Colors.grey.shade300,
                               width: 1,
                             ),
+                            boxShadow: isDark
+                                ? []
+                                : [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              const Text(
+                              Text(
                                 'Update Your Password',
                                 style: TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                                  color: isDark ? Colors.white : Colors.black87,
                                 ),
                                 textAlign: TextAlign.center,
                               ),
                               const SizedBox(height: 12),
-                              const Text(
+                              Text(
                                 'Enter your current password and choose a new one',
                                 style: TextStyle(
                                   fontSize: 14,
-                                  color: Color(0xFF9E9E9E),
+                                  color: isDark
+                                      ? const Color(0xFF9E9E9E)
+                                      : Colors.grey.shade600,
                                 ),
                                 textAlign: TextAlign.center,
                               ),
@@ -645,6 +731,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                                   setState(() => _obscureOldPassword =
                                   !_obscureOldPassword);
                                 },
+                                isDark: isDark,
                               ),
                               const SizedBox(height: 16),
                               _buildPasswordField(
@@ -655,6 +742,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                                   setState(() => _obscureNewPassword =
                                   !_obscureNewPassword);
                                 },
+                                isDark: isDark,
                               ),
                               const SizedBox(height: 16),
                               _buildPasswordField(
@@ -665,6 +753,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                                   setState(() => _obscureConfirmPassword =
                                   !_obscureConfirmPassword);
                                 },
+                                isDark: isDark,
                               ),
                               const SizedBox(height: 24),
                               Container(
@@ -757,22 +846,28 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     required String hintText,
     required bool obscureText,
     required VoidCallback onToggleVisibility,
+    required bool isDark,
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2A2A),
+        color: isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFF3A3A3A),
+          color: isDark ? const Color(0xFF3A3A3A) : Colors.grey.shade300,
         ),
       ),
       child: TextField(
         controller: controller,
         obscureText: obscureText,
-        style: const TextStyle(fontSize: 16, color: Colors.white),
+        style: TextStyle(
+          fontSize: 16,
+          color: isDark ? Colors.white : Colors.black87,
+        ),
         decoration: InputDecoration(
           hintText: hintText,
-          hintStyle: TextStyle(color: Colors.grey[600]),
+          hintStyle: TextStyle(
+            color: isDark ? Colors.grey[600] : Colors.grey.shade500,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide.none,
@@ -781,13 +876,16 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
             horizontal: 20,
             vertical: 18,
           ),
-          prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
+          prefixIcon: Icon(
+            Icons.lock_outline,
+            color: isDark ? Colors.grey[600] : Colors.grey.shade500,
+          ),
           suffixIcon: IconButton(
             icon: Icon(
               obscureText
                   ? Icons.visibility_off_outlined
                   : Icons.visibility_outlined,
-              color: Colors.grey[600],
+              color: isDark ? Colors.grey[600] : Colors.grey.shade500,
             ),
             onPressed: onToggleVisibility,
           ),
