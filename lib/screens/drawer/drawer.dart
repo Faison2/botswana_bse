@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+import '../settings /settings.dart';
+
 class AppDrawer extends StatefulWidget {
   final Function(int) onMenuItemTapped;
   final VoidCallback onMarketWatchTapped;
@@ -241,7 +243,13 @@ class _AppDrawerState extends State<AppDrawer> {
               icon: Icons.settings_outlined,
               title: 'Settings',
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(context); // Close drawer first
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SettingsScreen(),
+                  ),
+                );
               },
             ),
             _buildDrawerItem(
