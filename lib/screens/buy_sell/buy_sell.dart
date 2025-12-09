@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../dashboard/dashboard.dart';
 
 class TradingPage extends StatefulWidget {
@@ -13,6 +14,8 @@ class TradingPage extends StatefulWidget {
 class _TradingPageState extends State<TradingPage> {
   bool isBuy = true;
   bool isLoading = false;
+  String? _token;
+  String? _userName;
 
   final companyController = TextEditingController(text: 'LPPJ');
   final timeInForceController = TextEditingController(text: 'Day Order');
@@ -25,16 +28,61 @@ class _TradingPageState extends State<TradingPage> {
   final cdsAcNoController = TextEditingController(text: 'CDS123456');
   final shareholderController = TextEditingController(text: 'SHR7891011');
   final liNumberController = TextEditingController(text: 'LI998877');
-  final clientNameController = TextEditingController(text: 'John M. Doe');
+  final clientNameController = TextEditingController(); // Will be populated from SharedPreferences
   final brokerRefController = TextEditingController(text: 'BRREF${DateTime.now().millisecondsSinceEpoch}');
   final settlementAmountController = TextEditingController(text: '0.00');
   final chargesController = TextEditingController(text: '150.00');
   final brokerageController = TextEditingController(text: '1.20');
   final currencyController = TextEditingController(text: 'BWP');
 
-  // Constants for API
-  static const String apiToken = 'm559ZOqGPSX+HupQVA8l+jWzOHfmRpuDSp9TwFmtzzfWWJ07yo+gyNkZYT/UWdEBDC/EdzLxEPo/xjEeGaOXiMBdcjktrlN8aYfhbXSx5897ekZfyqnl0YhfxkJg585IjjdR0VUB+mfJ30XrZ1VaqMKvY+EOFjfJBzKL4o82LTAoP1JZcKymWM01/r42YP7JRygJWZUNZCKvGc6dey+OBMDG8Qv8oo3deeiZrphsGLytP9Z7yvhqhSB3jdd34COzsX28O3y/40MgaPt/y60P+vGzcjeyro9Eo4wgEoCz9fnZJhbzWrOcrS//l8ZD9md97g==';
   static const String apiUrl = 'http://192.168.3.201/MainAPI/Home/OrderPosting';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+
+    // Update calculations whenever controllers change
+    quantityController.addListener(updateCalculations);
+    priceController.addListener(updateCalculations);
+    chargesController.addListener(updateCalculations);
+  }
+
+  Future<void> _loadUserData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      final fullName = prefs.getString('fullName');
+
+      if (token != null && token.isNotEmpty) {
+        setState(() {
+          _token = token;
+          _userName = fullName ?? 'N/A';
+          clientNameController.text = _userName!;
+        });
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Authentication token not found. Please login again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          // Optionally navigate to login
+          // Navigator.pushReplacementNamed(context, '/login');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading user data: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -83,6 +131,16 @@ class _TradingPageState extends State<TradingPage> {
   }
 
   Future<void> placeOrder() async {
+    if (_token == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No authentication token available'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       isLoading = true;
     });
@@ -117,7 +175,7 @@ class _TradingPageState extends State<TradingPage> {
         Uri.parse(apiUrl),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer $apiToken',
+          'Authorization': 'Bearer $_token',
         },
         body: json.encode(orderData),
       );
@@ -141,6 +199,8 @@ class _TradingPageState extends State<TradingPage> {
             MaterialPageRoute(builder: (context) => const DashboardScreen()),
           );
         }
+      } else if (response.statusCode == 401) {
+        throw Exception('Session expired. Please login again.');
       } else {
         throw Exception('Failed to place order: ${response.statusCode}');
       }
@@ -164,11 +224,6 @@ class _TradingPageState extends State<TradingPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Update calculations whenever controllers change
-    quantityController.addListener(updateCalculations);
-    priceController.addListener(updateCalculations);
-    chargesController.addListener(updateCalculations);
-
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -185,27 +240,6 @@ class _TradingPageState extends State<TradingPage> {
         child: SafeArea(
           child: Column(
             children: [
-              // Header
-              // Padding(
-              //   padding: const EdgeInsets.all(16),
-              //   // child: Row(
-              //   //   children: [
-              //   //     IconButton(
-              //   //       icon: const Icon(Icons.arrow_back, color: Colors.white),
-              //   //       onPressed: () => Navigator.pop(context),
-              //   //     ),
-              //   //     const Text(
-              //   //       'Place Order',
-              //   //       style: TextStyle(
-              //   //         color: Colors.white,
-              //   //         fontSize: 20,
-              //   //         fontWeight: FontWeight.bold,
-              //   //       ),
-              //   //     ),
-              //   //   ],
-              //   // ),
-              // ),
-
               Expanded(
                 child: SingleChildScrollView(
                   child: Padding(
@@ -275,8 +309,8 @@ class _TradingPageState extends State<TradingPage> {
                                         begin: Alignment.centerLeft,
                                         end: Alignment.centerRight,
                                         colors: [
-                                          Colors.red,
                                           Colors.black26,
+                                          Colors.red,
                                         ],
                                       ),
                                       borderRadius: BorderRadius.circular(28),
@@ -314,7 +348,7 @@ class _TradingPageState extends State<TradingPage> {
                         ),
                         const SizedBox(height: 16),
 
-                        _buildTextField('Client Name', clientNameController),
+                        _buildReadOnlyField('Client Name', clientNameController),
                         _buildTextField('CDS Account No', cdsAcNoController),
                         _buildTextField('Shareholder', shareholderController),
                         _buildTextField('LI Number', liNumberController),
@@ -519,6 +553,51 @@ class _TradingPageState extends State<TradingPage> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildReadOnlyField(String label, TextEditingController controller) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: controller,
+          enabled: false,
+          style: const TextStyle(color: Colors.white70),
+          decoration: InputDecoration(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
+            filled: true,
+            fillColor: const Color(0xFF2A2A2A),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(
+                color: Color(0xFF4A4540),
+                width: 1,
+              ),
+            ),
+            disabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(
+                color: Color(0xFF4A4540),
+                width: 1,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
     );
   }
 

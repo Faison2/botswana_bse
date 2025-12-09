@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class MarketWatchScreen extends StatefulWidget {
   const MarketWatchScreen({super.key});
@@ -16,18 +17,61 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
   List<Map<String, dynamic>> _marketData = [];
   bool _isLoading = true;
   String? _errorMessage;
+  String? _token;
 
   final String _apiUrl = 'http://192.168.3.201/MainAPI/Home/getMarketData';
-  final String _token = 'm559ZOqGPSX+HupQVA8l+jWzOHfmRpuDSp9TwFmtzzfWWJ07yo+gyNkZYT/UWdEBDC/EdzLxEPo/xjEeGaOXiMBdcjktrlN8aYfhbXSx5897ekZfyqnl0YhfxkJg585IjjdR0VUB+mfJ30XrZ1VaqMKvY+EOFjfJBzKL4o82LTAoP1JZcKymWM01/r42YP7JRygJWZUNZCKvGc6dey+OBMDG8Qv8oo3deeiZrphsGLytP9Z7yvhqhSB3jdd34COzsX28O3y/40MgaPt/y60P+vGzcjeyro9Eo4wgEoCz9fnZJhbzWrOcrS//l8ZD9md97g==';
 
   @override
   void initState() {
     super.initState();
-    _fetchMarketData();
-    _startAutoRefresh();
+    _initializeAndFetch();
+  }
+
+  Future<void> _initializeAndFetch() async {
+    await _loadToken();
+    if (_token != null) {
+      await _fetchMarketData();
+      _startAutoRefresh();
+    } else {
+      setState(() {
+        _errorMessage = 'No authentication token found. Please login again.';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      if (token != null && token.isNotEmpty) {
+        setState(() {
+          _token = token;
+        });
+      } else {
+        setState(() {
+          _errorMessage = 'Authentication token not found';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error loading token: $e';
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _fetchMarketData() async {
+    if (_token == null) {
+      setState(() {
+        _errorMessage = 'No authentication token available';
+        _isLoading = false;
+      });
+      return;
+    }
+
     try {
       final response = await http.post(
         Uri.parse(_apiUrl),
@@ -45,12 +89,10 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
 
           setState(() {
             _marketData = items.map((item) {
-              // Ensure item is a Map<String, dynamic> (it may be Map<dynamic, dynamic> from json.decode)
               final Map<String, dynamic> raw = Map<String, dynamic>.from(item as Map);
 
               final closePrice = double.tryParse(raw['ClosingPrice']?.toString() ?? '0') ?? 0;
 
-              // Create an enriched, strongly-typed map to satisfy List<Map<String, dynamic>>
               return {
                 ...raw,
                 'priceHistory': _generatePriceHistory(closePrice),
@@ -63,6 +105,14 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
             _errorMessage = null;
           });
         }
+      } else if (response.statusCode == 401) {
+        // Token expired or invalid
+        setState(() {
+          _errorMessage = 'Session expired. Please login again.';
+          _isLoading = false;
+        });
+        // Optionally, navigate to login screen
+        // Navigator.pushReplacementNamed(context, '/login');
       } else {
         setState(() {
           _errorMessage = 'Failed to load data: ${response.statusCode}';
@@ -419,17 +469,20 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                         size: 64,
                       ),
                       const SizedBox(height: 16),
-                      Text(
-                        _errorMessage!,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Text(
+                          _errorMessage!,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                        textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 16),
                       ElevatedButton(
-                        onPressed: _fetchMarketData,
+                        onPressed: _initializeAndFetch,
                         child: const Text('Retry'),
                       ),
                     ],
@@ -640,13 +693,13 @@ class MiniGraphPainter extends CustomPainter {
 
     final fillPaint = Paint()
       ..shader = LinearGradient(
-         begin: Alignment.topCenter,
-         end: Alignment.bottomCenter,
-         colors: [
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
           (isPositive ? const Color(0xFF4CAF50) : Colors.red).withAlpha((0.3 * 255).round()),
           (isPositive ? const Color(0xFF4CAF50) : Colors.red).withAlpha((0.0 * 255).round()),
-         ],
-       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
       ..style = PaintingStyle.fill;
 
     final minPrice = priceHistory.reduce((a, b) => a < b ? a : b);
