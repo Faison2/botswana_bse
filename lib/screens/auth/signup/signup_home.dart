@@ -13,88 +13,86 @@ class SignUpScreen extends StatefulWidget {
 class _SignUpScreenState extends State<SignUpScreen> {
   int _currentStep = 0;
   bool _agreeToTerms = false;
-  bool _obscurePassword = true;
 
-  // Form controllers - CLEARED hardcoded data, only placeholders remain
+  // Step 1 controllers
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _idNumberController = TextEditingController();
   final _addressController = TextEditingController();
   final _phoneController = TextEditingController();
-  //final _passwordController = TextEditingController();
 
-  // Step 2 & 3 controllers - CLEARED hardcoded data
+  // Step 2 controllers (Personal Details)
   final _dobController = TextEditingController();
   final _birthPlaceController = TextEditingController();
   final _tinController = TextEditingController();
-  final _regionController = TextEditingController();
-  final _districtController = TextEditingController();
-  final _landmarkController = TextEditingController();
   final _occupationController = TextEditingController();
   final _designationController = TextEditingController();
+
+  // Step 3 controllers (Location Details)
+  final _regionController = TextEditingController();
+  final _districtController = TextEditingController();
+  final _add4Controller = TextEditingController();
+  final _add5Controller = TextEditingController();
+  final _landmarkController = TextEditingController();
+
+  // Step 4 controllers (Employment & Income)
   final _employerNameController = TextEditingController();
   final _employerAddressController = TextEditingController();
   final _monthlyIncomeController = TextEditingController();
+
+  // Step 5 controllers (Bank Details)
   final _ibanController = TextEditingController();
   final _bankDivisionController = TextEditingController();
   final _bankBranchController = TextEditingController();
   final _swiftCodeController = TextEditingController();
   final _jointNameController = TextEditingController();
   final _payee2Controller = TextEditingController();
-  final _add4Controller = TextEditingController();
-  final _add5Controller = TextEditingController();
+
+  // Step 6 controllers (Additional & Final)
   final _idExpiryDateController = TextEditingController();
   final _agreementDateController = TextEditingController();
 
   // Dropdown values
-  String _selectedCountryCode = '+255';
+  String _selectedCountryCode = '+267'; // Botswana
   String _selectedTitle = 'Mr.';
   String _selectedGender = 'Male';
   String _selectedIdType = 'National Id';
   String _selectedMaritalStatus = 'Single';
   String _selectedSourceOfIncome = 'Employment';
   String _selectedEmploymentStatus = 'Full-time';
-  String _selectedNationality = 'Tswana';
+  String _selectedNationality = 'Botswana';
   String _selectedCountry = 'Botswana';
   String _selectedAccountClass = 'Local Bank';
-  String _selectedAccountType = 'I';
+  String _selectedAccountType = 'Individual';
   String _selectedInvestorType = 'Local';
   String _selectedPrincipalOfficer = 'Sarah Johnson';
 
-  // Hardcoded values that don't need user input
+  // Hardcoded values
   final String _branchCode = "HRE001";
   final String _cdsNumber = "";
   final String _brokerLink = "0";
   final String _preFunding = "1";
 
   @override
-  void initState() {
-    super.initState();
-    _initializeFormData();
-  }
-
-  void _initializeFormData() {
-    // All hardcoded data has been removed
-  }
-
-  @override
   void dispose() {
+    // Dispose all controllers
     _firstNameController.dispose();
     _lastNameController.dispose();
     _emailController.dispose();
     _idNumberController.dispose();
     _addressController.dispose();
     _phoneController.dispose();
-   // _passwordController.dispose();
     _dobController.dispose();
     _birthPlaceController.dispose();
     _tinController.dispose();
-    _regionController.dispose();
-    _districtController.dispose();
-    _landmarkController.dispose();
     _occupationController.dispose();
     _designationController.dispose();
+    _regionController.dispose();
+    _districtController.dispose();
+    _add4Controller.dispose();
+    _add5Controller.dispose();
+    _landmarkController.dispose();
     _employerNameController.dispose();
     _employerAddressController.dispose();
     _monthlyIncomeController.dispose();
@@ -104,8 +102,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _swiftCodeController.dispose();
     _jointNameController.dispose();
     _payee2Controller.dispose();
-    _add4Controller.dispose();
-    _add5Controller.dispose();
     _idExpiryDateController.dispose();
     _agreementDateController.dispose();
     super.dispose();
@@ -114,9 +110,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
   void _handleNext() {
     if (_currentStep == 0 && !_validateStep1()) return;
     if (_currentStep == 1 && !_validateStep2()) return;
-    if (_currentStep == 2 && !_validateStep3()) return;
+    if (_currentStep == 5 && !_validateStep6()) return;
 
-    if (_currentStep < 2) {
+    if (_currentStep < 5) {
       setState(() => _currentStep++);
     } else {
       _submitForm();
@@ -137,9 +133,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         _emailController.text.isEmpty ||
         _idNumberController.text.isEmpty ||
         _addressController.text.isEmpty ||
-        _phoneController.text.isEmpty
-        //_passwordController.text.isEmpty
-    ) {
+        _phoneController.text.isEmpty) {
       _showSnackBar('Please fill all required fields');
       return false;
     }
@@ -154,7 +148,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return true;
   }
 
-  bool _validateStep3() {
+  bool _validateStep6() {
     if (!_agreeToTerms) {
       _showSnackBar('Please agree to the Terms & Conditions');
       return false;
@@ -164,7 +158,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   Future<void> _submitForm() async {
     try {
-      // Complete payload with ALL fields from the API body
       final payload = {
         "Othernames": _firstNameController.text,
         "Surname": _lastNameController.text,
@@ -214,7 +207,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       print("Submitting payload: ${json.encode(payload)}");
 
-      // Show loading dialog
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -223,7 +215,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
             children: [
               CircularProgressIndicator(color: Color(0xFFD4A855)),
               SizedBox(width: 20),
-              Text('Submitting to API...'),
+              Text('Submitting...'),
             ],
           ),
         ),
@@ -231,14 +223,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       final response = await http.post(
         Uri.parse('http://192.168.3.201/MainAPI/Home/AccountOpening'),
-        headers: {
-          'Content-Type': 'application/json',
-          // Authorization header removed as requested
-        },
+        headers: {'Content-Type': 'application/json'},
         body: json.encode(payload),
       ).timeout(const Duration(seconds: 30));
 
-      // Hide loading dialog
       Navigator.of(context).pop();
 
       print("Response status: ${response.statusCode}");
@@ -247,7 +235,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body);
 
-        // Handle both array and object responses
         if (responseData is List) {
           if (responseData.isNotEmpty && responseData[0]['responseCode'] == 0) {
             _showSuccessDialog(responseData[0]['responseMessage'] ?? 'Account Submitted Successfully');
@@ -349,66 +336,85 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Widget _buildStepIndicator() {
+    List<String> stepNames = ['Basic Info', 'Personal', 'Location', 'Work', 'Bank', 'Final'];
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _buildStepCircle(0, 'Personal'),
-          _buildStepLine(),
-          _buildStepCircle(1, 'Details'),
-          _buildStepLine(),
-          _buildStepCircle(2, 'Finish'),
-        ],
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(6, (index) {
+            return Row(
+              children: [
+                _buildStepCircle(index, stepNames[index]),
+                if (index < 5) _buildStepLine(),
+              ],
+            );
+          }),
+        ),
       ),
     );
   }
+
 
   Widget _buildStepCircle(int stepNumber, String label) {
     bool isActive = _currentStep == stepNumber;
     bool isCompleted = _currentStep > stepNumber;
 
-    return Column(
-      children: [
-        Container(
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(
-            color: isActive || isCompleted
-                ? const Color(0xFFD4A855)
-                : Colors.grey[300],
-            shape: BoxShape.circle,
-          ),
-          child: Center(
-            child: isCompleted
-                ? const Icon(Icons.check, size: 16, color: Colors.white)
-                : Text(
-              (stepNumber + 1).toString(),
-              style: TextStyle(
-                color: isActive ? Colors.white : Colors.grey[600],
-                fontWeight: FontWeight.bold,
+    return GestureDetector(
+      onTap: () {
+        setState(() => _currentStep = stepNumber);
+      },
+      child: Column(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: isActive || isCompleted
+                  ? const Color(0xFFD4A855)
+                  : Colors.grey[300],
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: isCompleted
+                  ? const Icon(Icons.check, size: 16, color: Colors.white)
+                  : Text(
+                (stepNumber + 1).toString(),
+                style: TextStyle(
+                  color: isActive ? Colors.white : Colors.grey[600],
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
               ),
             ),
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            color: isActive ? const Color(0xFFD4A855) : Colors.grey[600],
-            fontSize: 12,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+          const SizedBox(height: 4),
+          SizedBox(
+            width: 50, // Fixed width for label
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: isActive ? const Color(0xFFD4A855) : Colors.grey[600],
+                fontSize: 9, // Smaller font size
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
+
   Widget _buildStepLine() {
     return Container(
-      width: 40,
+      width: 20, // Reduced from 30
       height: 2,
-      margin: const EdgeInsets.symmetric(horizontal: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 2),
       color: Colors.grey[300],
     );
   }
@@ -433,29 +439,29 @@ class _SignUpScreenState extends State<SignUpScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              const SizedBox(height: 20),
+              const SizedBox(height: 15),
               Container(
-                width: 60,
-                height: 60,
+                width: 50,
+                height: 50,
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  shape: BoxShape.circle,
+                  borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 15,
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 20,
                       spreadRadius: 2,
                     ),
                   ],
                 ),
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(8),
                 child: Image.asset('assets/logo.png', fit: BoxFit.contain),
               ),
-              const SizedBox(height: 15),
+              const SizedBox(height: 10),
               const Text(
                 'Account Creation',
                 style: TextStyle(
-                  fontSize: 30,
+                  fontSize: 24,
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF2C1810),
                 ),
@@ -463,10 +469,22 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
               const SizedBox(height: 10),
               _buildStepIndicator(),
-              const SizedBox(height: 10),
+              const SizedBox(height: 15),
               Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 30),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
                   child: _buildCurrentStep(),
                 ),
               ),
@@ -488,7 +506,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           ),
                         ),
                         child: Text(
-                          _currentStep == 0 ? 'Back' : 'Previous',
+                          _currentStep == 0 ? 'Cancel' : 'Previous',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -511,7 +529,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           elevation: 0,
                         ),
                         child: Text(
-                          _currentStep == 2 ? 'Submit' : 'Next',
+                          _currentStep == 5 ? 'Submit' : 'Next',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -537,419 +555,521 @@ class _SignUpScreenState extends State<SignUpScreen> {
         return _buildStep2();
       case 2:
         return _buildStep3();
+      case 3:
+        return _buildStep4();
+      case 4:
+        return _buildStep5();
+      case 5:
+        return _buildStep6();
       default:
         return _buildStep1();
     }
   }
 
   Widget _buildStep1() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Title',
-          style: TextStyle(
-            color: Color(0xFF6B5D4F),
-            fontSize: 13,
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: _buildLabelWithField('Title', _buildDropdownField(
+                  'Title',
+                  _selectedTitle,
+                  ['Mr.', 'Mrs.', 'Ms.', 'Dr.'],
+                      (val) {
+                    setState(() => _selectedTitle = val!);
+                  },
+                )),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildLabelWithField('Gender', _buildDropdownField(
+                  'Gender',
+                  _selectedGender,
+                  ['Male', 'Female'],
+                      (val) {
+                    setState(() => _selectedGender = val!);
+                  },
+                )),
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _buildDropdownField(
-                'Title',
-                _selectedTitle,
-                ['Mr.', 'Mrs.', 'Ms.', 'Dr.'],
-                    (val) {
-                  setState(() => _selectedTitle = val!);
-                },
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildDropdownField(
-                'Gender',
-                _selectedGender,
-                ['Male', 'Female'],
-                    (val) {
-                  setState(() => _selectedGender = val!);
-                },
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 15),
-        _buildLabel('First Name *'),
-        _buildTextField('Enter your first name', _firstNameController),
-        const SizedBox(height: 15),
-        _buildLabel('Last Name *'),
-        _buildTextField('Enter your last name', _lastNameController),
-        const SizedBox(height: 15),
-        _buildLabel('Email *'),
-        _buildTextField(
-          'Enter your email address',
-          _emailController,
-          keyboardType: TextInputType.emailAddress,
-        ),
-        const SizedBox(height: 15),
-        _buildLabel('ID Number *'),
-        _buildTextField('Enter your ID number', _idNumberController),
-        const SizedBox(height: 15),
-        _buildLabel('Address *'),
-        _buildTextField('Enter your address', _addressController),
-        const SizedBox(height: 15),
-        _buildLabel('Phone Number *'),
-        _buildPhoneField(),
-        const SizedBox(height: 20),
-      ],
+          const SizedBox(height: 15),
+          _buildLabelWithField('First Name *', _buildTextField('Enter first name', _firstNameController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField('Last Name *', _buildTextField('Enter last name', _lastNameController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField('Email *', _buildTextField('Enter email address', _emailController, keyboardType: TextInputType.emailAddress)),
+          const SizedBox(height: 15),
+          _buildLabelWithField('ID Number *', _buildTextField('Enter ID number', _idNumberController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField('Address *', _buildTextField('Enter address', _addressController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField('Phone Number *', _buildPhoneField()),
+        ],
+      ),
     );
   }
 
   Widget _buildStep2() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildLabel('Date of Birth *'),
-        _buildTextField(
-          'YYYY-MM-DD',
-          _dobController,
-          onTap: () async {
-            final date = await showDatePicker(
-              context: context,
-              initialDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
-              firstDate: DateTime(1900),
-              lastDate: DateTime.now(),
-            );
-            if (date != null) {
-              final formattedDate = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-              _dobController.text = formattedDate;
-            }
-          },
-        ),
-        const SizedBox(height: 15),
-        _buildLabel('Birth Place'),
-        _buildTextField('Enter your birth place', _birthPlaceController),
-        const SizedBox(height: 15),
-        _buildLabel('TIN Number'),
-        _buildTextField('Enter your TIN number', _tinController),
-        const SizedBox(height: 15),
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildLabel('ID Type'),
-                  _buildDropdownField(
-                    'ID Type',
-                    _selectedIdType,
-                    ['National Id', 'Passport', 'Drivers License'],
-                        (val) {
-                      setState(() => _selectedIdType = val!);
-                    },
-                  ),
-                ],
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 10),
+          const Center(
+            child: Text(
+              'Personal Details',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2C1810),
               ),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildLabel('Marital Status'),
-                  _buildDropdownField(
-                    'Marital Status',
-                    _selectedMaritalStatus,
-                    ['Single', 'Married', 'Divorced', 'Widowed'],
-                        (val) {
-                      setState(() => _selectedMaritalStatus = val!);
-                    },
-                  ),
-                ],
+          ),
+          const SizedBox(height: 20),
+          _buildLabelWithField('Date of Birth *', _buildTextField(
+            'YYYY-MM-DD',
+            _dobController,
+            onTap: () async {
+              final date = await showDatePicker(
+                context: context,
+                initialDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
+                firstDate: DateTime(1900),
+                lastDate: DateTime.now(),
+              );
+              if (date != null) {
+                final formattedDate = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+                _dobController.text = formattedDate;
+              }
+            },
+          )),
+          const SizedBox(height: 15),
+          _buildLabelWithField('Birth Place', _buildTextField('Enter birth place', _birthPlaceController)),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              Expanded(
+                child: _buildLabelWithField('ID Type', _buildDropdownField(
+                  'ID Type',
+                  _selectedIdType,
+                  ['National Id', 'Passport', 'Drivers License'],
+                      (val) {
+                    setState(() => _selectedIdType = val!);
+                  },
+                )),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 15),
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildLabel('Nationality'),
-                  _buildDropdownField(
-                    'Nationality',
-                    _selectedNationality,
-                    ['Tswana', 'Other'],
-                        (val) {
-                      setState(() => _selectedNationality = val!);
-                    },
-                  ),
-                ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildLabelWithField('Marital Status', _buildDropdownField(
+                  'Marital Status',
+                  _selectedMaritalStatus,
+                  ['Single', 'Married', 'Divorced', 'Widowed'],
+                      (val) {
+                    setState(() => _selectedMaritalStatus = val!);
+                  },
+                )),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildLabel('Country'),
-                  _buildDropdownField(
-                    'Country',
-                    _selectedCountry,
-                    ['Botswana', 'Other'],
-                        (val) {
-                      setState(() => _selectedCountry = val!);
-                    },
-                  ),
-                ],
+            ],
+          ),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              Expanded(
+                child: _buildLabelWithField('Nationality', _buildDropdownField(
+                  'Nationality',
+                  _selectedNationality,
+                  ['Botswana', 'Other'],
+                      (val) {
+                    setState(() => _selectedNationality = val!);
+                  },
+                )),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 15),
-        _buildLabel('Region'),
-        _buildTextField('Enter your region', _regionController),
-        const SizedBox(height: 15),
-        _buildLabel('District'),
-        _buildTextField('Enter your district', _districtController),
-        const SizedBox(height: 15),
-        _buildLabel('Add4 (Area)'),
-        _buildTextField('Enter your area', _add4Controller),
-        const SizedBox(height: 15),
-        _buildLabel('Add5 (City)'),
-        _buildTextField('Enter your city', _add5Controller),
-        const SizedBox(height: 15),
-        _buildLabel('Landmark'),
-        _buildTextField('Enter nearby landmark', _landmarkController),
-        const SizedBox(height: 15),
-        _buildLabel('Occupation'),
-        _buildTextField('Enter your occupation', _occupationController),
-        const SizedBox(height: 15),
-        _buildLabel('Designation'),
-        _buildTextField('Enter your designation', _designationController),
-        const SizedBox(height: 15),
-        _buildLabel('Monthly Income'),
-        _buildTextField('Enter monthly income', _monthlyIncomeController, keyboardType: TextInputType.number),
-        const SizedBox(height: 15),
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildLabel('Source of Income'),
-                  _buildDropdownField(
-                    'Source of Income',
-                    _selectedSourceOfIncome,
-                    ['Employment', 'Business', 'Investments', 'Other'],
-                        (val) {
-                      setState(() => _selectedSourceOfIncome = val!);
-                    },
-                  ),
-                ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildLabelWithField('Country', _buildDropdownField(
+                  'Country',
+                  _selectedCountry,
+                  ['Botswana', 'Other'],
+                      (val) {
+                    setState(() => _selectedCountry = val!);
+                  },
+                )),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildLabel('Employment Status'),
-                  _buildDropdownField(
-                    'Employment Status',
-                    _selectedEmploymentStatus,
-                    ['Full-time', 'Part-time', 'Self-employed', 'Unemployed'],
-                        (val) {
-                      setState(() => _selectedEmploymentStatus = val!);
-                    },
-                  ),
-                ],
+            ],
+          ),
+          const SizedBox(height: 15),
+          _buildLabelWithField('TIN Number', _buildTextField('Enter TIN number', _tinController)),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              Expanded(
+                child: _buildLabelWithField('Occupation', _buildTextField('Enter occupation', _occupationController)),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 15),
-        _buildLabel('Employer Name'),
-        _buildTextField('Enter employer name', _employerNameController),
-        const SizedBox(height: 15),
-        _buildLabel('Employer Address'),
-        _buildTextField('Enter employer address', _employerAddressController),
-        const SizedBox(height: 20),
-      ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildLabelWithField('Designation', _buildTextField('Enter designation', _designationController)),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildStep3() {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 10),
+          const Center(
+            child: Text(
+              'Location Details',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2C1810),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: _buildLabelWithField('Region', _buildTextField('Enter region', _regionController)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildLabelWithField('District', _buildTextField('Enter district', _districtController)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              Expanded(
+                child: _buildLabelWithField('Area (Add4)', _buildTextField('Enter area', _add4Controller)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildLabelWithField('City (Add5)', _buildTextField('Enter city', _add5Controller)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          _buildLabelWithField('Landmark', _buildTextField('Enter nearby landmark', _landmarkController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField('Investor Type', _buildDropdownField(
+            'Investor Type',
+            _selectedInvestorType,
+            ['Local', 'International'],
+                (val) {
+              setState(() => _selectedInvestorType = val!);
+            },
+          )),
+          const SizedBox(height: 15),
+          _buildLabelWithField('Principal Officer', _buildDropdownField(
+            'Principal Officer',
+            _selectedPrincipalOfficer,
+            ['Sarah Johnson', 'John Doe', 'Jane Smith'],
+                (val) {
+              setState(() => _selectedPrincipalOfficer = val!);
+            },
+          )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStep4() {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 10),
+          const Center(
+            child: Text(
+              'Employment & Income',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2C1810),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: _buildLabelWithField('Source of Income', _buildDropdownField(
+                  'Source of Income',
+                  _selectedSourceOfIncome,
+                  ['Employment', 'Business', 'Investments', 'Other'],
+                      (val) {
+                    setState(() => _selectedSourceOfIncome = val!);
+                  },
+                )),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildLabelWithField('Employment Status', _buildDropdownField(
+                  'Employment Status',
+                  _selectedEmploymentStatus,
+                  ['Full-time', 'Part-time', 'Self-employed', 'Unemployed'],
+                      (val) {
+                    setState(() => _selectedEmploymentStatus = val!);
+                  },
+                )),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          _buildLabelWithField('Employer Name', _buildTextField('Enter employer name', _employerNameController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField('Employer Address', _buildTextField('Enter employer address', _employerAddressController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField('Monthly Income', _buildTextField('Enter monthly income', _monthlyIncomeController, keyboardType: TextInputType.number)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStep5() {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 10),
+          const Center(
+            child: Text(
+              'Bank Details',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2C1810),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: _buildLabelWithField('Account Class', _buildDropdownField(
+                  'Account Class',
+                  _selectedAccountClass,
+                  ['Local Bank', 'International Bank'],
+                      (val) {
+                    setState(() => _selectedAccountClass = val!);
+                  },
+                )),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildLabelWithField('Account Type', _buildDropdownField(
+                  'Account Type',
+                  _selectedAccountType,
+                  ['Individual', 'Corporate'],
+                      (val) {
+                    setState(() => _selectedAccountType = val!);
+                  },
+                )),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          _buildLabelWithField('IBAN Number', _buildTextField('Enter IBAN number', _ibanController)),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              Expanded(
+                child: _buildLabelWithField('Bank Division', _buildTextField('Enter bank division', _bankDivisionController)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildLabelWithField('Bank Branch', _buildTextField('Enter bank branch', _bankBranchController)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          _buildLabelWithField('Swift Code', _buildTextField('Enter swift code', _swiftCodeController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField('Joint Account Name', _buildTextField('Enter joint account name', _jointNameController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField('Payee 2', _buildTextField('Enter payee 2 name', _payee2Controller)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStep6() {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 10),
+          const Center(
+            child: Text(
+              'Final Step',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2C1810),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: _buildLabelWithField('ID Expiry Date', _buildTextField(
+                  'YYYY-MM-DD',
+                  _idExpiryDateController,
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.now().add(const Duration(days: 365)),
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime(2050),
+                    );
+                    if (date != null) {
+                      final formattedDate = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+                      _idExpiryDateController.text = formattedDate;
+                    }
+                  },
+                )),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildLabelWithField('Agreement Date', _buildTextField(
+                  'YYYY-MM-DD',
+                  _agreementDateController,
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.now(),
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now(),
+                    );
+                    if (date != null) {
+                      final formattedDate = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+                      _agreementDateController.text = formattedDate;
+                    }
+                  },
+                )),
+              ),
+            ],
+          ),
+          const SizedBox(height: 25),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: Checkbox(
+                  value: _agreeToTerms,
+                  onChanged: (value) {
+                    setState(() => _agreeToTerms = value ?? false);
+                  },
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  side: BorderSide(
+                    color: Colors.grey[400]!,
+                    width: 1.5,
+                  ),
+                  fillColor: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.selected)) {
+                      return const Color(0xFFD4A855);
+                    }
+                    return Colors.transparent;
+                  }),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: RichText(
+                  text: const TextSpan(
+                    children: [
+                      TextSpan(
+                        text: 'I agree to the ',
+                        style: TextStyle(
+                          color: Color(0xFF6B5D4F),
+                          fontSize: 13,
+                        ),
+                      ),
+                      TextSpan(
+                        text: 'Terms & Conditions',
+                        style: TextStyle(
+                          color: Color(0xFFD4A855),
+                          fontSize: 13,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' and confirm that all information provided is accurate.',
+                        style: TextStyle(
+                          color: Color(0xFF6B5D4F),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF8E1),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFFFE082)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.info_outline, color: Color(0xFFD4A855), size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Please review all information before submitting. Ensure all required fields are filled.',
+                    style: TextStyle(
+                      color: Color(0xFF6B5D4F),
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLabelWithField(String label, Widget field) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildLabel('Account Class'),
-                  _buildDropdownField(
-                    'Account Class',
-                    _selectedAccountClass,
-                    ['Local Bank', 'International Bank'],
-                        (val) {
-                      setState(() => _selectedAccountClass = val!);
-                    },
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildLabel('Account Type'),
-                  _buildDropdownField(
-                    'Account Type',
-                    _selectedAccountType,
-                    ['Individual', 'Corporate'],
-                        (val) {
-                      setState(() => _selectedAccountType = val!);
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 15),
-        _buildLabel('IBAN Number'),
-        _buildTextField('Enter IBAN number', _ibanController),
-        const SizedBox(height: 15),
-        _buildLabel('Bank Division'),
-        _buildTextField('Enter bank division', _bankDivisionController),
-        const SizedBox(height: 15),
-        _buildLabel('Bank Branch'),
-        _buildTextField('Enter bank branch', _bankBranchController),
-        const SizedBox(height: 15),
-        _buildLabel('Swift Code'),
-        _buildTextField('Enter swift code', _swiftCodeController),
-        const SizedBox(height: 15),
-        _buildLabel('Joint Account Name'),
-        _buildTextField('Enter joint account name', _jointNameController),
-        const SizedBox(height: 15),
-        _buildLabel('Payee 2'),
-        _buildTextField('Enter payee 2 name', _payee2Controller),
-        const SizedBox(height: 15),
-        _buildLabel('ID Expiry Date'),
-        _buildTextField(
-          'YYYY-MM-DD',
-          _idExpiryDateController,
-          onTap: () async {
-            final date = await showDatePicker(
-              context: context,
-              initialDate: DateTime.now().add(const Duration(days: 365)),
-              firstDate: DateTime.now(),
-              lastDate: DateTime(2050),
-            );
-            if (date != null) {
-              final formattedDate = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-              _idExpiryDateController.text = formattedDate;
-            }
-          },
-        ),
-        const SizedBox(height: 15),
-        _buildLabel('Agreement Date'),
-        _buildTextField(
-          'YYYY-MM-DD',
-          _agreementDateController,
-          onTap: () async {
-            final date = await showDatePicker(
-              context: context,
-              initialDate: DateTime.now(),
-              firstDate: DateTime(2020),
-              lastDate: DateTime.now(),
-            );
-            if (date != null) {
-              final formattedDate = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-              _agreementDateController.text = formattedDate;
-            }
-          },
-        ),
-        const SizedBox(height: 20),
-        Row(
-          children: [
-            SizedBox(
-              width: 20,
-              height: 20,
-              child: Checkbox(
-                value: _agreeToTerms,
-                onChanged: (value) {
-                  setState(() => _agreeToTerms = value ?? false);
-                },
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                side: BorderSide(
-                  color: Colors.grey[400]!,
-                  width: 1.5,
-                ),
-                fillColor: WidgetStateProperty.resolveWith((states) {
-                  if (states.contains(WidgetState.selected)) {
-                    return const Color(0xFFD4A855);
-                  }
-                  return Colors.transparent;
-                }),
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Text(
-              'I agree to the ',
-              style: TextStyle(
-                color: Color(0xFF6B5D4F),
-                fontSize: 13,
-              ),
-            ),
-            GestureDetector(
-              onTap: () {
-                // TODO: Show terms and conditions
-              },
-              child: const Text(
-                'Terms & Conditions',
-                style: TextStyle(
-                  color: Color(0xFFD4A855),
-                  fontSize: 13,
-                  decoration: TextDecoration.underline,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        const Text(
-          'Please fill all required fields before submitting.',
-          style: TextStyle(
-            color: Color(0xFFD4A855),
-            fontSize: 12,
-            fontStyle: FontStyle.italic,
-          ),
-        ),
-        const SizedBox(height: 20),
+        _buildLabel(label),
+        const SizedBox(height: 4),
+        field,
       ],
     );
   }
 
   Widget _buildLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        text,
-        style: const TextStyle(
-          color: Color(0xFF6B5D4F),
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-        ),
+    return Text(
+      text,
+      style: const TextStyle(
+        color: Color(0xFF6B5D4F),
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
       ),
     );
   }
@@ -961,14 +1081,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
         VoidCallback? onTap,
       }) {
     return Container(
+      height: 50, // Increased from 45 for better spacing
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFE8D7B8)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 5,
             offset: const Offset(0, 2),
           ),
         ],
@@ -978,14 +1099,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
         keyboardType: keyboardType,
         onTap: onTap,
         readOnly: onTap != null,
-        style: const TextStyle(color: Colors.black87, fontSize: 15),
+        style: const TextStyle(color: Colors.black87, fontSize: 14),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(color: Colors.grey[400], fontSize: 15),
+          hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
+            horizontal: 12,
+            vertical: 12,
           ),
         ),
       ),
@@ -999,15 +1120,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
       Function(String?) onChanged,
       ) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      height: 50, // Increased from 45 for better spacing
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFE8D7B8)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 5,
             offset: const Offset(0, 2),
           ),
         ],
@@ -1017,8 +1139,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
           value: value,
           isExpanded: true,
           dropdownColor: Colors.white,
-          style: const TextStyle(color: Colors.black87, fontSize: 15),
-          icon: Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
+          style: const TextStyle(color: Colors.black87, fontSize: 14),
+          icon: Icon(Icons.arrow_drop_down, color: Colors.grey[600], size: 20),
           items: items.map((String item) {
             return DropdownMenuItem<String>(value: item, child: Text(item));
           }).toList(),
@@ -1030,92 +1152,106 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   Widget _buildPhoneField() {
     return Container(
+      height: 50, // Increased from 45 for better spacing
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFE8D7B8)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 5,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _selectedCountryCode,
-                dropdownColor: Colors.white,
-                style: const TextStyle(color: Colors.black87, fontSize: 15),
-                icon: Icon(
-                  Icons.arrow_drop_down,
-                  color: Colors.grey[600],
-                  size: 20,
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F5F5),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(10),
+                  bottomLeft: Radius.circular(10),
                 ),
-                items: ['+255', '+267', '+27', '+260', '+263'].map((String code) {
-                  return DropdownMenuItem<String>(
-                    value: code,
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 24,
-                          height: 16,
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade700,
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                          child: Center(
-                            child: Container(
-                              width: 20,
-                              height: 12,
-                              decoration: const BoxDecoration(
-                                color: Colors.white,
-                              ),
-                              child: Center(
-                                child: Container(
-                                  width: 16,
-                                  height: 8,
-                                  color: Colors.black,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Botswana Flag
+                  Container(
+                    width: 24,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade900,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 20,
+                        height: 12,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                        ),
+                        child: Center(
+                          child: Container(
+                            width: 16,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Colors.black,
+                            ),
+                            child: Center(
+                              child: Container(
+                                width: 12,
+                                height: 4,
+                                decoration: const BoxDecoration(
+                                  color: Colors.white,
                                 ),
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        Text(code),
-                      ],
+                      ),
                     ),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() => _selectedCountryCode = value!);
-                },
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _selectedCountryCode,
+                    style: const TextStyle(
+                      color: Colors.black87,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          Expanded(
-            child: TextField(
-              controller: _phoneController,
-              keyboardType: TextInputType.phone,
-              style: const TextStyle(color: Colors.black87, fontSize: 15),
-              decoration: InputDecoration(
-                hintText: 'Enter phone number',
-                hintStyle: TextStyle(color: Colors.grey[400], fontSize: 15),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 14,
+            const VerticalDivider(
+              color: Color(0xFFE8D7B8),
+              width: 1,
+              thickness: 1,
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: TextField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  style: const TextStyle(color: Colors.black87, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Enter phone number',
+                    hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
-
 }
