@@ -55,8 +55,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
   String _selectedMaritalStatus = 'Single';
   String _selectedSourceOfIncome = 'Employment';
   String _selectedEmploymentStatus = 'Full-time';
-  String _selectedNationality = 'Zimbabwean';
-  String _selectedCountry = 'Zimbabwe';
+  String _selectedNationality = 'Tswana';
+  String _selectedCountry = 'Botswana';
   String _selectedAccountClass = 'Local Bank';
   String _selectedAccountType = 'I';
   String _selectedInvestorType = 'Local';
@@ -682,7 +682,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   _buildDropdownField(
                     'Nationality',
                     _selectedNationality,
-                    ['Zimbabwean', 'Other'],
+                    ['Tswana', 'Other'],
                         (val) {
                       setState(() => _selectedNationality = val!);
                     },
@@ -699,7 +699,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   _buildDropdownField(
                     'Country',
                     _selectedCountry,
-                    ['Zimbabwe', 'Other'],
+                    ['Botswana', 'Other'],
                         (val) {
                       setState(() => _selectedCountry = val!);
                     },
@@ -813,7 +813,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   _buildDropdownField(
                     'Account Type',
                     _selectedAccountType,
-                    ['I', 'C'],
+                    ['Individual', 'Corporate'],
                         (val) {
                       setState(() => _selectedAccountType = val!);
                     },
