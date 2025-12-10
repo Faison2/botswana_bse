@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import '../../buy_sell/buy_sell.dart';
 
 class MarketWatchWidget extends StatefulWidget {
@@ -427,6 +426,3 @@ class _MarketWatchWidgetState extends State<MarketWatchWidget> {
   }
 }
 
-// Make sure to import this in your trading_page.dart file
-// You'll need to add this import at the top of market_watch_widget.dart:
-// import 'package:your_app_name/pages/trading/trading_page.dart';

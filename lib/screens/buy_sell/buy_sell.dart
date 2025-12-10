@@ -210,9 +210,9 @@ class _TradingPageState extends State<TradingPage> {
     String maxPrice = item['MaxPrice']?.toString() ?? '0';
     String minPrice = item['MinPrice']?.toString() ?? '0';
 
-    String price = 'TZS $closingPrice';
-    String bestBid = 'TZS $openingPrice';
-    String bestAsk = 'TZS $maxPrice';
+    String price = 'BWP $closingPrice';
+    String bestBid = 'BWP $openingPrice';
+    String bestAsk = 'BWP $maxPrice';
 
     String openInterest = item['Openinterest']?.toString() ?? '0';
     String supply = _formatVolume(openInterest);
@@ -870,18 +870,40 @@ class _TradingPageState extends State<TradingPage> {
               items: _allStocks.map((stock) {
                 final companyName = stock['name'] ?? 'Unknown Company';
                 final ticker = stock['ticker'] ?? companyName;
+
+                // Get the current price
+                final priceValue = stock['closingPriceValue'] ?? 0.0;
+                final priceString = priceValue is double
+                    ? priceValue.toStringAsFixed(2)
+                    : priceValue.toString();
+
                 return DropdownMenuItem<String>(
                   value: ticker,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: Text(
-                      companyName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            companyName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          '(BWP $priceString)',
+                          style: const TextStyle(
+                            color: Color(0xFF8B6914), // Gold color for price
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 );
