@@ -21,6 +21,7 @@ class TradingPage extends StatefulWidget {
 class _TradingPageState extends State<TradingPage> {
   bool isBuy = true;
   bool isLoading = false;
+  bool isFetchingStocks = false;
   String? _token;
   String? _userName;
 
@@ -41,12 +42,14 @@ class _TradingPageState extends State<TradingPage> {
   final List<String> brokerOptions = ['INVESTOR IQ', 'Other'];
 
   static const String apiUrl = 'http://192.168.3.201/MainAPI/Home/OrderPosting';
+  static const String marketDataUrl = 'http://192.168.3.201/MainAPI/Home/getMarketData';
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
     _initializeWithPrefilledData();
+    _fetchStocksIfNeeded();
 
     quantityController.addListener(updateCalculations);
     priceController.addListener(updateCalculations);
@@ -85,6 +88,234 @@ class _TradingPageState extends State<TradingPage> {
     } catch (e) {
       print('Error loading user data: $e');
     }
+  }
+
+  Future<void> _fetchStocksIfNeeded() async {
+    // If stocks were passed from previous screen, don't fetch again
+    if (widget.allStocks != null && widget.allStocks!.isNotEmpty) {
+      return;
+    }
+
+    // Wait for token to load
+    if (_token == null) {
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
+    if (_token == null) {
+      print('No token available for fetching stocks');
+      return;
+    }
+
+    // Fetch stocks from API
+    await _fetchStocksFromApi();
+  }
+
+  Future<void> _fetchStocksFromApi() async {
+    setState(() {
+      isFetchingStocks = true;
+    });
+
+    try {
+      final response = await http.post(
+        Uri.parse(marketDataUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+      );
+
+      print('Stocks API Response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonData = json.decode(response.body);
+
+        List<Map<String, dynamic>> stocks = [];
+
+        if (jsonData.isNotEmpty && jsonData[0]['MdataItem'] != null) {
+          final List<dynamic> items = jsonData[0]['MdataItem'];
+
+          for (var item in items) {
+            stocks.add(_mapApiDataToStock(item));
+          }
+        }
+
+        print('Parsed ${stocks.length} stocks in TradingPage');
+
+        setState(() {
+          _allStocks = stocks;
+
+          // If we have prefilled data but it's not in our fetched list,
+          // add it to ensure we can select it
+          if (widget.prefilledStockData != null && stocks.isNotEmpty) {
+            final prefilledTicker = widget.prefilledStockData!['ticker'];
+            final prefilledName = widget.prefilledStockData!['name'];
+
+            // Check if prefilled stock exists in fetched list
+            bool exists = stocks.any((stock) =>
+            stock['ticker'] == prefilledTicker || stock['name'] == prefilledName);
+
+            if (!exists) {
+              // Add the prefilled stock to the list
+              _allStocks.add(widget.prefilledStockData!);
+            }
+
+            // Set selected company from prefilled data
+            selectedCompany = prefilledTicker ?? prefilledName;
+
+            // Update price from prefilled data
+            priceController.text = widget.prefilledStockData!['closingPriceValue']?.toString() ?? '0.00';
+          } else if (selectedCompany == null && _allStocks.isNotEmpty) {
+            // If no company is selected yet, select the first one
+            selectedCompany = _allStocks[0]['ticker'] ?? _allStocks[0]['name'];
+            // Also update price for the selected company
+            priceController.text = _allStocks[0]['closingPriceValue']?.toString() ?? '0.00';
+          }
+
+          updateCalculations();
+        });
+      } else {
+        print('Failed to fetch stocks in TradingPage: ${response.statusCode}');
+        // If we have prefilled data, use it as the only option
+        if (widget.prefilledStockData != null) {
+          setState(() {
+            _allStocks = [widget.prefilledStockData!];
+            selectedCompany = widget.prefilledStockData!['ticker'] ?? widget.prefilledStockData!['name'];
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching stocks in TradingPage: $e');
+      // If we have prefilled data, use it as the only option
+      if (widget.prefilledStockData != null) {
+        setState(() {
+          _allStocks = [widget.prefilledStockData!];
+          selectedCompany = widget.prefilledStockData!['ticker'] ?? widget.prefilledStockData!['name'];
+        });
+      }
+    } finally {
+      setState(() {
+        isFetchingStocks = false;
+      });
+    }
+  }
+
+  // Same mapping function as in MarketWatchWidget
+  Map<String, dynamic> _mapApiDataToStock(dynamic item) {
+    String name = item['Company']?.toString() ?? 'Unknown';
+    String ticker = item['Symbol']?.toString() ?? 'N/A';
+    String code = item['Code']?.toString() ?? '';
+
+    String closingPrice = item['ClosingPrice']?.toString() ?? '0';
+    String openingPrice = item['OpeningPrice']?.toString() ?? '0';
+    String maxPrice = item['MaxPrice']?.toString() ?? '0';
+    String minPrice = item['MinPrice']?.toString() ?? '0';
+
+    String price = 'TZS $closingPrice';
+    String bestBid = 'TZS $openingPrice';
+    String bestAsk = 'TZS $maxPrice';
+
+    String openInterest = item['Openinterest']?.toString() ?? '0';
+    String supply = _formatVolume(openInterest);
+    String demand = '-';
+
+    String status = item['status']?.toString() ?? '';
+
+    // Get icon and color (optional, you can remove if not needed)
+    IconData icon = _getIconForStock(ticker);
+    Color color = _getColorForStock(ticker);
+
+    return {
+      'name': name,
+      'ticker': ticker,
+      'price': price,
+      'bestBid': bestBid,
+      'bestAsk': bestAsk,
+      'supply': supply,
+      'demand': demand,
+      'icon': icon,
+      'color': color,
+      'status': status,
+      'code': code,
+      // Add raw numeric values for trading page
+      'closingPriceValue': double.tryParse(closingPrice) ?? 0.0,
+      'openingPriceValue': double.tryParse(openingPrice) ?? 0.0,
+      'maxPriceValue': double.tryParse(maxPrice) ?? 0.0,
+      'minPriceValue': double.tryParse(minPrice) ?? 0.0,
+      'volumeValue': double.tryParse(openInterest) ?? 0.0,
+    };
+  }
+
+  String _formatVolume(String volume) {
+    try {
+      final num = double.parse(volume);
+      if (num >= 1000000000) {
+        return '${(num / 1000000000).toStringAsFixed(2)}B';
+      } else if (num >= 1000000) {
+        return '${(num / 1000000).toStringAsFixed(2)}M';
+      } else if (num >= 1000) {
+        return '${(num / 1000).toStringAsFixed(2)}K';
+      }
+      return num.toStringAsFixed(0);
+    } catch (e) {
+      return '0';
+    }
+  }
+
+  IconData _getIconForStock(String symbol) {
+    final upperSymbol = symbol.toUpperCase();
+
+    if (upperSymbol.contains('BANK') ||
+        upperSymbol.contains('CRDB') ||
+        upperSymbol.contains('NMB') ||
+        upperSymbol.contains('KCB') ||
+        upperSymbol.contains('DCB') ||
+        upperSymbol.contains('MKCB') ||
+        upperSymbol.contains('MUCOBA') ||
+        upperSymbol.contains('MCB') ||
+        upperSymbol.contains('MBP')) {
+      return Icons.account_balance;
+    } else if (upperSymbol.contains('BREW') ||
+        upperSymbol.contains('TBL') ||
+        upperSymbol.contains('EABL')) {
+      return Icons.local_drink;
+    } else if (upperSymbol.contains('AIR') ||
+        upperSymbol.contains('KA') ||
+        upperSymbol.contains('PAL')) {
+      return Icons.flight;
+    } else if (upperSymbol.contains('CEMENT') ||
+        upperSymbol.contains('TCCL') ||
+        upperSymbol.contains('TPCC')) {
+      return Icons.construction;
+    } else if (upperSymbol.contains('VODA') ||
+        upperSymbol.contains('TELECOM')) {
+      return Icons.phone_android;
+    } else if (upperSymbol.contains('MEDIA') ||
+        upperSymbol.contains('NMG')) {
+      return Icons.newspaper;
+    } else if (upperSymbol.contains('INSURANCE') ||
+        upperSymbol.contains('JHL')) {
+      return Icons.security;
+    } else if (upperSymbol.contains('OIL') ||
+        upperSymbol.contains('GAS') ||
+        upperSymbol.contains('SWALA') ||
+        upperSymbol.contains('TOL')) {
+      return Icons.local_gas_station;
+    }
+    return Icons.business;
+  }
+
+  Color _getColorForStock(String symbol) {
+    final colors = [
+      const Color(0xFF3D2F1F),
+      const Color(0xFF2A3F2F),
+      const Color(0xFF2F3A4A),
+      const Color(0xFF4A2F2F),
+      const Color(0xFF2F4A3F),
+      const Color(0xFF3F2F4A),
+    ];
+
+    final index = symbol.hashCode.abs() % colors.length;
+    return colors[index];
   }
 
   @override
@@ -254,7 +485,6 @@ class _TradingPageState extends State<TradingPage> {
         child: SafeArea(
           child: Column(
             children: [
-
               Expanded(
                 child: SingleChildScrollView(
                   child: Padding(
@@ -351,8 +581,40 @@ class _TradingPageState extends State<TradingPage> {
                         ),
                         const SizedBox(height: 24),
 
-                        // Company Dropdown
-                        _buildCompanyDropdown(),
+                        // Company Dropdown with loading state
+                        if (isFetchingStocks)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Company',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: const Color(0xFF8B6914),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                    color: Color(0xFF8B6914),
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        else
+                          _buildCompanyDropdown(),
                         const SizedBox(height: 16),
 
                         // Time In Force Dropdown
@@ -529,7 +791,7 @@ class _TradingPageState extends State<TradingPage> {
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                 ),
-                                onPressed: isLoading ? null : placeOrder,
+                                onPressed: (isLoading || isFetchingStocks || _allStocks.isEmpty) ? null : placeOrder,
                                 child: isLoading
                                     ? const SizedBox(
                                   height: 20,
@@ -606,12 +868,14 @@ class _TradingPageState extends State<TradingPage> {
                 fontSize: 14,
               ),
               items: _allStocks.map((stock) {
+                final companyName = stock['name'] ?? 'Unknown Company';
+                final ticker = stock['ticker'] ?? companyName;
                 return DropdownMenuItem<String>(
-                  value: stock['ticker'] ?? stock['name'],
+                  value: ticker,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     child: Text(
-                      stock['name'] ?? 'Unknown Company',
+                      companyName,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 14,
@@ -622,10 +886,21 @@ class _TradingPageState extends State<TradingPage> {
                   ),
                 );
               }).toList(),
-              onChanged: _onCompanyChanged,
+              onChanged: _allStocks.isEmpty ? null : _onCompanyChanged,
             ),
           ),
         ),
+        if (_allStocks.isEmpty && !isFetchingStocks)
+          const Padding(
+            padding: EdgeInsets.only(top: 8.0),
+            child: Text(
+              'No companies available. Please check your connection or contact support.',
+              style: TextStyle(
+                color: Colors.red,
+                fontSize: 12,
+              ),
+            ),
+          ),
       ],
     );
   }
