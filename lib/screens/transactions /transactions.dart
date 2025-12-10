@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-
-import '../dashboard/dashboard.dart';
+import 'withdrawals_tab.dart';
+import 'deposits_tab.dart';
+import 'transactions_tab.dart';
 
 class TransactionsScreen extends StatefulWidget {
   const TransactionsScreen({Key? key}) : super(key: key);
@@ -11,24 +12,6 @@ class TransactionsScreen extends StatefulWidget {
 
 class _TransactionsScreenState extends State<TransactionsScreen> {
   int _selectedTab = 0;
-  final TextEditingController _amountController = TextEditingController(text: '\$200');
-  final TextEditingController _descriptionController = TextEditingController();
-  final TextEditingController _methodController = TextEditingController(text: 'Orange');
-
-  @override
-  void initState() {
-    super.initState();
-    // set an initial description based on the default selected tab
-    _descriptionController.text = 'Emergency Funds';
-  }
-
-  @override
-  void dispose() {
-    _amountController.dispose();
-    _descriptionController.dispose();
-    _methodController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,12 +31,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         child: SafeArea(
           child: Column(
             children: [
-
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 4.0),
                 child: Row(
                   children: [
-                    // Make the tabs horizontally scrollable to avoid overflow on small screens
                     Expanded(
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
@@ -125,10 +106,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               // Content based on selected tab
               Expanded(
                 child: _selectedTab == 0
-                    ? _buildWithdrawalsContent()
+                    ? const WithdrawalsTab()
                     : _selectedTab == 1
-                    ? _buildDepositsContent()
-                    : _buildTransactionsContent(),
+                    ? const DepositsTab()
+                    : const TransactionsTab(),
               ),
             ],
           ),
@@ -142,14 +123,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     return GestureDetector(
       onTap: () => setState(() {
         _selectedTab = index;
-        if (index == 0) {
-          _descriptionController.text = 'Emergency Funds';
-        } else if (index == 1) {
-          _descriptionController.text = 'Salary Deposit';
-        } else {
-          // clear or set a neutral value for transactions tab
-          _descriptionController.text = '';
-        }
       }),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -176,407 +149,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildWithdrawalsContent() {
-    return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Enter Amount',
-              style: TextStyle(color: Colors.white, fontSize: 16),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _amountController,
-              style: const TextStyle(color: Colors.white, fontSize: 20),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: Colors.transparent,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white30),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white30),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF8B6914)),
-                ),
-                contentPadding: const EdgeInsets.all(16),
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Description',
-              style: TextStyle(color: Colors.white, fontSize: 16),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _descriptionController,
-              style: const TextStyle(color: Colors.white, fontSize: 20),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: Colors.transparent,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white30),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white30),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF8B6914)),
-                ),
-                contentPadding: const EdgeInsets.all(16),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const DashboardScreen()),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black45,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'CLOSE',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF8B6914),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'WITHDRAW',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            _buildTransactionTable([
-              {'date': '2023-01-15', 'description': 'Withdrawal', 'amount': 'BWP 1,500.00'},
-              {'date': '2023-02-20', 'description': 'Emergency funds', 'amount': 'BWP 375.00'},
-              {'date': '2023-03-10', 'description': 'Withdrawal', 'amount': 'BWP 360.00'},
-              {'date': '2023-04-05', 'description': 'Withdrawal', 'amount': 'BWP 1,650.00'},
-            ]),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDepositsContent() {
-    return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Select Method',
-              style: TextStyle(color: Colors.white, fontSize: 16),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _methodController,
-              style: const TextStyle(color: Colors.white, fontSize: 20),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: Colors.transparent,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white30),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white30),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF8B6914)),
-                ),
-                contentPadding: const EdgeInsets.all(16),
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Description',
-              style: TextStyle(color: Colors.white, fontSize: 16),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _descriptionController,
-              style: const TextStyle(color: Colors.white, fontSize: 20),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: Colors.transparent,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white30),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white30),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF8B6914)),
-                ),
-                contentPadding: const EdgeInsets.all(16),
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Enter Amount',
-              style: TextStyle(color: Colors.white, fontSize: 16),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _amountController,
-              style: const TextStyle(color: Colors.white, fontSize: 20),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: Colors.transparent,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white30),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white30),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF8B6914)),
-                ),
-                contentPadding: const EdgeInsets.all(16),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black45,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'CLOSE',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF8B6914),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'DEPOSIT',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            _buildTransactionTable([
-              {'date': '2023-01-15', 'description': 'Initial funding', 'amount': 'BWP 1,500.00'},
-              {'date': '2023-02-20', 'description': 'Bonus Received', 'amount': 'BWP 375.00'},
-              {'date': '2023-03-10', 'description': 'Freelance income', 'amount': 'BWP 360.00'},
-              {'date': '2023-04-05', 'description': 'Deposit', 'amount': 'BWP 1,650.00'},
-            ]),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTransactionsContent() {
-    return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            const SizedBox(height: 16),
-            Table(
-              columnWidths: const {
-                0: FlexColumnWidth(1.2),
-                1: FlexColumnWidth(2),
-                2: FlexColumnWidth(1),
-                3: FlexColumnWidth(1.5),
-              },
-              children: [
-                TableRow(
-                  children: [
-                    _buildTableHeader('Date'),
-                    _buildTableHeader('Description'),
-                    _buildTableHeader('Type'),
-                    _buildTableHeader('Amount'),
-                  ],
-                ),
-                _buildTableRow('2023-01-15', 'Initial funding', 'Credit', 'BWP 1,500.00'),
-                _buildTableRow('2023-02-20', 'Bonus Received', 'Credit', 'BWP 375.00'),
-                _buildTableRow('2023-03-10', 'Freelance income', 'Credit', 'BWP 360.00'),
-                _buildTableRow('2023-04-05', 'Deposit', 'Credit', 'BWP 1,650.00'),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTransactionTable(List<Map<String, String>> transactions) {
-    return Table(
-      columnWidths: const {
-        0: FlexColumnWidth(1.2),
-        1: FlexColumnWidth(2),
-        2: FlexColumnWidth(1.5),
-      },
-      children: [
-        TableRow(
-          children: [
-            _buildTableHeader('Date'),
-            _buildTableHeader('Description'),
-            _buildTableHeader('Amount'),
-          ],
-        ),
-        for (var transaction in transactions)
-          TableRow(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  transaction['date']!,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  transaction['description']!,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  transaction['amount']!,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                  textAlign: TextAlign.right,
-                ),
-              ),
-            ],
-          ),
-      ],
-    );
-  }
-
-  Widget _buildTableHeader(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Text(
-        text,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-
-  TableRow _buildTableRow(String date, String description, String type, String amount) {
-    return TableRow(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Text(
-            date,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Text(
-            description,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Text(
-            type,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Text(
-            amount,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
-            textAlign: TextAlign.right,
-          ),
-        ),
-      ],
     );
   }
 }
