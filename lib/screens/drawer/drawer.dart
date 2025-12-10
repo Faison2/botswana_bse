@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-
 import '../settings /settings.dart';
 
 class AppDrawer extends StatefulWidget {
@@ -250,14 +249,6 @@ class _AppDrawerState extends State<AppDrawer> {
                     builder: (context) => const SettingsScreen(),
                   ),
                 );
-              },
-            ),
-            _buildDrawerItem(
-              context: context,
-              icon: Icons.help_outline,
-              title: 'Help & Support',
-              onTap: () {
-                Navigator.pop(context);
               },
             ),
             _buildDrawerItem(

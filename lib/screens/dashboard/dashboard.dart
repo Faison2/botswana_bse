@@ -10,6 +10,8 @@ import '../market_watch/market_watch.dart';
 import '../portifolio/portifolio.dart';
 import '../transactions /transactions.dart';
 import '../drawer/drawer.dart';
+import 'package:provider/provider.dart';
+import '../../theme_provider.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -27,7 +29,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Timer? _timer;
   double currentX = 0;
 
-  // User data from SharedPreferences
   String _fullName = 'Loading...';
   String _email = 'Loading...';
   String _username = '';
@@ -35,10 +36,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _cdsNumber = '';
   bool _isLoadingProfile = true;
 
-  // 🔥 NAVIGATION DEBOUNCING - Prevents multiple rapid taps
   bool _isNavigating = false;
   DateTime? _lastNavigationTime;
-  static const _navigationDebounceMs = 500; // 500ms debounce
+  static const _navigationDebounceMs = 500;
 
   late final List<Widget> _widgetOptions;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -60,15 +60,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _loadUserData();
   }
 
-  // 🔥 HELPER METHOD: Prevents multiple navigation calls
   Future<void> _navigateWithDebounce(Widget destination) async {
-    // Check if already navigating
     if (_isNavigating) {
       debugPrint('Navigation blocked: Already navigating');
       return;
     }
 
-    // Check debounce time
     final now = DateTime.now();
     if (_lastNavigationTime != null) {
       final difference = now.difference(_lastNavigationTime!).inMilliseconds;
@@ -78,7 +75,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     }
 
-    // Set navigation flag
     setState(() => _isNavigating = true);
     _lastNavigationTime = now;
 
@@ -88,7 +84,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         MaterialPageRoute(builder: (context) => destination),
       );
     } finally {
-      // Reset navigation flag after returning
       if (mounted) {
         setState(() => _isNavigating = false);
       }
@@ -107,7 +102,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _token = token;
       });
 
-      // Fetch profile data if token exists
       if (token.isNotEmpty) {
         await _fetchProfileData(token);
       }
@@ -137,7 +131,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _isLoadingProfile = false;
           });
 
-          // Update SharedPreferences with the latest profile data
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('fullName', _fullName);
           await prefs.setString('email', _email);
@@ -194,88 +187,108 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildDashboardContent() {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 20),
-          _buildPortfolioCard(),
-          const SizedBox(height: 30),
-          _buildSectionHeader('My Portfolio', 'View Details'),
-          const SizedBox(height: 15),
-          _buildMyPortfolio(),
-          const SizedBox(height: 30),
-          _buildSectionHeader('Market Watch', 'Sell All'),
-          const SizedBox(height: 15),
-          _buildMarketWatch(),
-          const SizedBox(height: 100),
-        ],
-      ),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        final isDark = themeProvider.isDarkMode;
+
+        return SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 20),
+              _buildPortfolioCard(isDark),
+              const SizedBox(height: 30),
+              _buildSectionHeader('My Portfolio', 'View Details', isDark),
+              const SizedBox(height: 15),
+              _buildMyPortfolio(),
+              const SizedBox(height: 30),
+              _buildSectionHeader('Market Watch', 'Sell All', isDark),
+              const SizedBox(height: 15),
+              _buildMarketWatch(isDark),
+              const SizedBox(height: 100),
+            ],
+          ),
+        );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: Colors.transparent,
-      drawer: AppDrawer(
-        onMenuItemTapped: (int index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        onMarketWatchTapped: () {
-          // 🔥 FIXED: Using debounced navigation
-          _navigateWithDebounce(const MarketWatchScreen());
-        },
-        onBuySellTapped: () {
-          // 🔥 FIXED: Using debounced navigation
-          _navigateWithDebounce(const TradingPage());
-        },
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF2C1810),
-              Color(0xFF1A1A1A),
-              Color(0xFF0D0D0D),
-            ],
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        final isDark = themeProvider.isDarkMode;
+
+        final bgGradient = isDark
+            ? const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF2C1810),
+            Color(0xFF1A1A1A),
+            Color(0xFF0D0D0D),
+          ],
+        )
+            : const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFFFF8E7),
+            Color(0xFFF5F5F5),
+            Color(0xFFFFFFFF),
+          ],
+        );
+
+        return Scaffold(
+          key: _scaffoldKey,
+          backgroundColor: Colors.transparent,
+          drawer: AppDrawer(
+            onMenuItemTapped: (int index) {
+              setState(() {
+                _selectedIndex = index;
+              });
+            },
+            onMarketWatchTapped: () {
+              _navigateWithDebounce(const MarketWatchScreen());
+            },
+            onBuySellTapped: () {
+              _navigateWithDebounce(const TradingPage());
+            },
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildHeader(),
-              Expanded(
-                child: IndexedStack(
-                  index: _selectedIndex,
-                  children: _widgetOptions,
-                ),
+          body: Container(
+            decoration: BoxDecoration(gradient: bgGradient),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  _buildHeader(isDark),
+                  Expanded(
+                    child: IndexedStack(
+                      index: _selectedIndex,
+                      children: _widgetOptions,
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
-      bottomNavigationBar: _buildBottomNavBar(),
-      floatingActionButton: _buildFloatingActionButton(),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+          bottomNavigationBar: _buildBottomNavBar(isDark),
+          floatingActionButton: _buildFloatingActionButton(),
+          floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+        );
+      },
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(bool isDark) {
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Row(
         children: [
           GestureDetector(
             onTap: () => _scaffoldKey.currentState?.openDrawer(),
-            child: const Icon(
+            child: Icon(
               Icons.menu,
-              color: Colors.white,
+              color: isDark ? Colors.white : Colors.black87,
               size: 28,
             ),
           ),
@@ -286,8 +299,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Text(
                   _fullName.toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: isDark ? Colors.white : Colors.black87,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
@@ -297,8 +310,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 4),
                 Text(
                   _cdsNumber.isNotEmpty ? _cdsNumber : _email,
-                  style: const TextStyle(
-                    color: Colors.white70,
+                  style: TextStyle(
+                    color: isDark ? Colors.white70 : Colors.black54,
                     fontSize: 12,
                   ),
                   maxLines: 1,
@@ -312,12 +325,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
+                  color: isDark
+                      ? Colors.white.withOpacity(0.1)
+                      : Colors.black.withOpacity(0.05),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.notifications_outlined,
-                  color: Colors.white,
+                  color: isDark ? Colors.white : Colors.black87,
                   size: 24,
                 ),
               ),
@@ -339,33 +354,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildDrawerItem({
-    required IconData icon,
-    required String title,
-    required VoidCallback onTap,
-    bool isLast = false,
-  }) {
-    return ListTile(
-      leading: Icon(
-        icon,
-        color: Colors.amber,
-        size: 22,
-      ),
-      title: Text(
-        title,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      trailing: isLast ? null : const Icon(Icons.chevron_right, color: Colors.white38),
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-    );
-  }
-
-  Widget _buildPortfolioCard() {
+  Widget _buildPortfolioCard(bool isDark) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.all(20),
@@ -373,9 +362,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
+          colors: isDark
+              ? [
             const Color(0xFF8B6914),
             const Color(0xFF6B5010),
+          ]
+              : [
+            const Color(0xFFFFD700),
+            const Color(0xFFDAA520),
           ],
         ),
         borderRadius: BorderRadius.circular(20),
@@ -487,7 +481,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title, String action) {
+  Widget _buildSectionHeader(String title, String action, bool isDark) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
@@ -495,16 +489,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: isDark ? Colors.white : Colors.black87,
               fontSize: 20,
               fontWeight: FontWeight.bold,
             ),
           ),
           Text(
             action,
-            style: const TextStyle(
-              color: Colors.amber,
+            style: TextStyle(
+              color: isDark ? Colors.amber : const Color(0xFFB8860B),
               fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
@@ -689,7 +683,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildMarketWatch() {
+  Widget _buildMarketWatch(bool isDark) {
     return Column(
       children: [
         _buildStockCard(
@@ -702,6 +696,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           '100',
           Icons.local_drink,
           const Color(0xFF3D2F1F),
+          isDark,
         ),
         const SizedBox(height: 10),
         _buildStockCard(
@@ -714,6 +709,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           '100',
           Icons.account_balance,
           const Color(0xFF2A3F2F),
+          isDark,
         ),
         const SizedBox(height: 10),
         _buildStockCard(
@@ -726,6 +722,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           '800',
           Icons.business,
           const Color(0xFF2F3A4A),
+          isDark,
         ),
         const SizedBox(height: 10),
         _buildStockCard(
@@ -738,6 +735,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           '900',
           Icons.home_work,
           const Color(0xFF4A2F2F),
+          isDark,
         ),
       ],
     );
@@ -753,13 +751,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
       String demand,
       IconData iconData,
       Color iconBgColor,
+      bool isDark,
       ) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2A33),
+        color: isDark ? const Color(0xFF2A2A33) : Colors.white,
         borderRadius: BorderRadius.circular(12),
+        boxShadow: isDark
+            ? []
+            : [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -791,8 +799,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         children: [
                           Text(
                             name,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: isDark ? Colors.white : Colors.black87,
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
                             ),
@@ -803,7 +811,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Text(
                             ticker,
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.5),
+                              color: isDark
+                                  ? Colors.white.withOpacity(0.5)
+                                  : Colors.black.withOpacity(0.5),
                               fontSize: 11,
                             ),
                           ),
@@ -812,8 +822,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     Text(
                       price,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black87,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -823,13 +833,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    _buildInfoColumn('Best Bid:', bestBid),
+                    _buildInfoColumn('Best Bid:', bestBid, isDark),
                     const SizedBox(width: 12),
-                    _buildInfoColumn('Best Ask:', bestAsk),
+                    _buildInfoColumn('Best Ask:', bestAsk, isDark),
                     const SizedBox(width: 12),
-                    _buildInfoColumn('Supply:', supply),
+                    _buildInfoColumn('Supply:', supply, isDark),
                     const SizedBox(width: 12),
-                    _buildInfoColumn('Demand:', demand),
+                    _buildInfoColumn('Demand:', demand, isDark),
                   ],
                 ),
               ],
@@ -840,21 +850,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildInfoColumn(String label, String value) {
+  Widget _buildInfoColumn(String label, String value, bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
           style: TextStyle(
-            color: Colors.white.withOpacity(0.5),
+            color: isDark
+                ? Colors.white.withOpacity(0.5)
+                : Colors.black.withOpacity(0.5),
             fontSize: 9,
           ),
         ),
         Text(
           value,
           style: TextStyle(
-            color: Colors.white.withOpacity(0.7),
+            color: isDark
+                ? Colors.white.withOpacity(0.7)
+                : Colors.black.withOpacity(0.7),
             fontSize: 10,
             fontWeight: FontWeight.w500,
           ),
@@ -863,10 +877,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildBottomNavBar() {
+  Widget _buildBottomNavBar(bool isDark) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2A2A),
+        color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(20),
           topRight: Radius.circular(20),
@@ -885,18 +899,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildNavItem(Icons.home_outlined, 0),
-            _buildNavItem(Icons.bar_chart_outlined, 1),
+            _buildNavItem(Icons.home_outlined, 0, isDark),
+            _buildNavItem(Icons.bar_chart_outlined, 1, isDark),
             const SizedBox(width: 50),
-            _buildNavItem(Icons.attach_money, 3),
-            _buildNavItem(Icons.shopping_bag_outlined, 4),
+            _buildNavItem(Icons.attach_money, 3, isDark),
+            _buildNavItem(Icons.shopping_bag_outlined, 4, isDark),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildNavItem(IconData icon, int index) {
+  Widget _buildNavItem(IconData icon, int index, bool isDark) {
     final isSelected = _selectedIndex == index;
     return GestureDetector(
       onTap: () {
@@ -908,7 +922,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         padding: const EdgeInsets.all(12),
         child: Icon(
           icon,
-          color: isSelected ? Colors.amber : Colors.white54,
+          color: isSelected
+              ? Colors.amber
+              : (isDark ? Colors.white54 : Colors.black45),
           size: 28,
         ),
       ),
@@ -941,7 +957,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         onPressed: () {
-          // 🔥 FIXED: Using debounced navigation
           _navigateWithDebounce(const MarketWatchScreen());
         },
         child: const Icon(
