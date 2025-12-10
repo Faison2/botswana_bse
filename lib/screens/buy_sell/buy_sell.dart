@@ -26,29 +26,19 @@ class _TradingPageState extends State<TradingPage> {
 
   // Controllers
   String? selectedCompany;
-  final timeInForceController = TextEditingController(text: 'Day Order');
-  final brokerController = TextEditingController(text: 'B20/C');
-  final quantityController = TextEditingController(text: '1000');
-  final priceController = TextEditingController(text: '12.50');
+  String? selectedTimeInForce = 'Day Order';
+  String? selectedBroker = 'INVESTOR IQ';
+  final quantityController = TextEditingController(text: '200');
+  final priceController = TextEditingController(text: '6.20');
 
-  // Read-only fields
-  final referenceNumberController = TextEditingController();
-  final cdsAcNoController = TextEditingController(text: 'CDS123456');
-  final shareholderController = TextEditingController(text: 'SHR7891011');
-  final liNumberController = TextEditingController(text: 'LI998877');
-  final clientNameController = TextEditingController();
-  final brokerRefController = TextEditingController();
-  final settlementAmountController = TextEditingController(text: '0.00');
-  final chargesController = TextEditingController(text: '150.00');
-  final brokerageController = TextEditingController(text: '1.20');
-  final currencyController = TextEditingController(text: 'BWP');
-
-  // Market data fields (read-only)
-  final openingPriceController = TextEditingController();
-  final highPriceController = TextEditingController();
-  final volumeController = TextEditingController();
+  // For calculations
+  final chargesController = TextEditingController(text: '0.00');
 
   List<Map<String, dynamic>> _allStocks = [];
+
+  // Dropdown options
+  final List<String> timeInForceOptions = ['Day Order', 'Good Till Cancelled'];
+  final List<String> brokerOptions = ['INVESTOR IQ', 'Other'];
 
   static const String apiUrl = 'http://192.168.3.201/MainAPI/Home/OrderPosting';
 
@@ -60,15 +50,9 @@ class _TradingPageState extends State<TradingPage> {
 
     quantityController.addListener(updateCalculations);
     priceController.addListener(updateCalculations);
-    chargesController.addListener(updateCalculations);
   }
 
   void _initializeWithPrefilledData() {
-    // Generate unique reference numbers
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    referenceNumberController.text = 'ORD$timestamp';
-    brokerRefController.text = 'BRREF$timestamp';
-
     if (widget.allStocks != null) {
       _allStocks = widget.allStocks!;
     }
@@ -79,11 +63,8 @@ class _TradingPageState extends State<TradingPage> {
       // Set selected company
       selectedCompany = stockData['ticker'] ?? stockData['name'];
 
-      // Pre-fill read-only market data
+      // Pre-fill price
       priceController.text = stockData['closingPriceValue']?.toString() ?? '0.00';
-      openingPriceController.text = stockData['openingPriceValue']?.toString() ?? '0.00';
-      highPriceController.text = stockData['maxPriceValue']?.toString() ?? '0.00';
-      volumeController.text = stockData['volumeValue']?.toString() ?? '0';
 
       updateCalculations();
     }
@@ -99,49 +80,18 @@ class _TradingPageState extends State<TradingPage> {
         setState(() {
           _token = token;
           _userName = fullName ?? 'N/A';
-          clientNameController.text = _userName!;
         });
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Authentication token not found. Please login again.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading user data: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      print('Error loading user data: $e');
     }
   }
 
   @override
   void dispose() {
-    timeInForceController.dispose();
-    brokerController.dispose();
     quantityController.dispose();
     priceController.dispose();
-    referenceNumberController.dispose();
-    cdsAcNoController.dispose();
-    shareholderController.dispose();
-    liNumberController.dispose();
-    clientNameController.dispose();
-    brokerRefController.dispose();
-    settlementAmountController.dispose();
     chargesController.dispose();
-    brokerageController.dispose();
-    currencyController.dispose();
-    openingPriceController.dispose();
-    highPriceController.dispose();
-    volumeController.dispose();
     super.dispose();
   }
 
@@ -164,9 +114,7 @@ class _TradingPageState extends State<TradingPage> {
   }
 
   void updateCalculations() {
-    setState(() {
-      settlementAmountController.text = netTotal.toStringAsFixed(2);
-    });
+    setState(() {});
   }
 
   void _onCompanyChanged(String? newCompany) {
@@ -182,12 +130,8 @@ class _TradingPageState extends State<TradingPage> {
       );
 
       if (stockData.isNotEmpty) {
-        // Update market data fields
+        // Update price
         priceController.text = stockData['closingPriceValue']?.toString() ?? '0.00';
-        openingPriceController.text = stockData['openingPriceValue']?.toString() ?? '0.00';
-        highPriceController.text = stockData['maxPriceValue']?.toString() ?? '0.00';
-        volumeController.text = stockData['volumeValue']?.toString() ?? '0';
-
         updateCalculations();
       }
     });
@@ -195,22 +139,12 @@ class _TradingPageState extends State<TradingPage> {
 
   Future<void> placeOrder() async {
     if (_token == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No authentication token available'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showError('No authentication token available');
       return;
     }
 
     if (selectedCompany == null || selectedCompany!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a company'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showError('Please select a company');
       return;
     }
 
@@ -224,23 +158,23 @@ class _TradingPageState extends State<TradingPage> {
 
       final orderData = {
         "OrderType": isBuy ? "BUY" : "SELL",
-        "ReferenceNumber": referenceNumberController.text,
+        "ReferenceNumber": "ORD${DateTime.now().millisecondsSinceEpoch}",
         "Company": selectedCompany,
         "Quantity": double.tryParse(quantityController.text) ?? 0,
         "BasePrice": double.tryParse(priceController.text) ?? 0,
-        "TimeInForce": timeInForceController.text,
-        "BrokerCode": brokerController.text,
-        "CdsAcNo": cdsAcNoController.text,
-        "Shareholder": shareholderController.text,
-        "LiNumber": liNumberController.text,
-        "ClientName": clientNameController.text,
-        "BrokerRef": brokerRefController.text,
+        "TimeInForce": selectedTimeInForce,
+        "BrokerCode": selectedBroker,
+        "CdsAcNo": "CDS123456",
+        "Shareholder": "SHR7891011",
+        "LiNumber": "LI998877",
+        "ClientName": _userName ?? 'N/A',
+        "BrokerRef": "BRREF${DateTime.now().millisecondsSinceEpoch}",
         "SettlementDate": settlementDate.toIso8601String(),
         "SettlementAmount": netTotal,
         "Charges": charges,
-        "Brokerage": double.tryParse(brokerageController.text) ?? 0,
+        "Brokerage": 0.0,
         "MaturityDate": maturityDate.toIso8601String().split('T')[0],
-        "Currency": currencyController.text,
+        "Currency": "BWP",
       };
 
       final response = await http.post(
@@ -293,6 +227,15 @@ class _TradingPageState extends State<TradingPage> {
     }
   }
 
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -311,15 +254,13 @@ class _TradingPageState extends State<TradingPage> {
         child: SafeArea(
           child: Column(
             children: [
+
               Expanded(
                 child: SingleChildScrollView(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SizedBox(height: 20),
-
                         // BUY/SELL Toggle
                         Container(
                           decoration: BoxDecoration(
@@ -410,75 +351,50 @@ class _TradingPageState extends State<TradingPage> {
                         ),
                         const SizedBox(height: 24),
 
-                        // Market Data Section (Read-Only)
-                        const Text(
-                          'MARKET DATA',
-                          style: TextStyle(
-                            color: Color(0xFF8B6914),
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        _buildReadOnlyField('Opening Price', openingPriceController),
-                        _buildReadOnlyField('High Price', highPriceController),
-                        _buildReadOnlyField('Volume', volumeController),
-
-                        const SizedBox(height: 24),
-
-                        // Client Information Section
-                        const Text(
-                          'CLIENT INFORMATION',
-                          style: TextStyle(
-                            color: Color(0xFF8B6914),
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        _buildReadOnlyField('Client Name', clientNameController),
-                        _buildReadOnlyField('Reference Number', referenceNumberController),
-                        _buildReadOnlyField('Broker Reference', brokerRefController),
-                        _buildTextField('CDS Account No', cdsAcNoController),
-                        _buildTextField('Shareholder', shareholderController),
-                        _buildTextField('LI Number', liNumberController),
-
-                        const SizedBox(height: 24),
-                        const Text(
-                          'ORDER DETAILS',
-                          style: TextStyle(
-                            color: Color(0xFF8B6914),
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
                         // Company Dropdown
                         _buildCompanyDropdown(),
+                        const SizedBox(height: 16),
 
-                        _buildTextField('Quantity', quantityController, keyboardType: TextInputType.number),
-                        _buildTextField('Base Price', priceController, keyboardType: TextInputType.numberWithOptions(decimal: true)),
-                        _buildTextField('Time In Force', timeInForceController),
-                        _buildTextField('Broker Code', brokerController),
-                        _buildTextField('Currency', currencyController),
-
-                        const SizedBox(height: 24),
-                        const Text(
-                          'CHARGES & FEES',
-                          style: TextStyle(
-                            color: Color(0xFF8B6914),
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        // Time In Force Dropdown
+                        _buildDropdownField(
+                          'Time In Force',
+                          selectedTimeInForce,
+                          timeInForceOptions,
+                              (value) {
+                            setState(() {
+                              selectedTimeInForce = value;
+                            });
+                          },
                         ),
                         const SizedBox(height: 16),
 
-                        _buildTextField('Charges', chargesController, keyboardType: TextInputType.numberWithOptions(decimal: true)),
-                        _buildTextField('Brokerage (%)', brokerageController, keyboardType: TextInputType.numberWithOptions(decimal: true)),
+                        // Broker Dropdown
+                        _buildDropdownField(
+                          'Broker',
+                          selectedBroker,
+                          brokerOptions,
+                              (value) {
+                            setState(() {
+                              selectedBroker = value;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 16),
 
+                        // Quantity Field
+                        _buildTextField(
+                          'Quantity',
+                          quantityController,
+                          keyboardType: TextInputType.number,
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Price Field
+                        _buildTextField(
+                          'Price',
+                          priceController,
+                          keyboardType: TextInputType.numberWithOptions(decimal: true),
+                        ),
                         const SizedBox(height: 24),
 
                         // Order Summary
@@ -501,7 +417,7 @@ class _TradingPageState extends State<TradingPage> {
                                     ),
                                   ),
                                   Text(
-                                    '${currencyController.text} ${grossTotal.toStringAsFixed(2)}',
+                                    'BWP ${grossTotal.toStringAsFixed(2)}',
                                     style: const TextStyle(
                                       color: Colors.grey,
                                       fontSize: 14,
@@ -521,7 +437,7 @@ class _TradingPageState extends State<TradingPage> {
                                     ),
                                   ),
                                   Text(
-                                    '${currencyController.text} ${custodialFee.toStringAsFixed(2)}',
+                                    'BWP ${custodialFee.toStringAsFixed(2)}',
                                     style: const TextStyle(
                                       color: Colors.grey,
                                       fontSize: 14,
@@ -541,7 +457,7 @@ class _TradingPageState extends State<TradingPage> {
                                     ),
                                   ),
                                   Text(
-                                    '${currencyController.text} ${charges.toStringAsFixed(2)}',
+                                    'BWP ${charges.toStringAsFixed(2)}',
                                     style: const TextStyle(
                                       color: Colors.grey,
                                       fontSize: 14,
@@ -564,7 +480,7 @@ class _TradingPageState extends State<TradingPage> {
                                     ),
                                   ),
                                   Text(
-                                    '${currencyController.text} ${netTotal.toStringAsFixed(2)}',
+                                    'BWP ${netTotal.toStringAsFixed(2)}',
                                     style: const TextStyle(
                                       color: Color(0xFF8B6914),
                                       fontSize: 16,
@@ -576,7 +492,7 @@ class _TradingPageState extends State<TradingPage> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 32),
 
                         // Action Buttons
                         Row(
@@ -585,7 +501,7 @@ class _TradingPageState extends State<TradingPage> {
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF4A4540),
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -594,7 +510,7 @@ class _TradingPageState extends State<TradingPage> {
                                   Navigator.pop(context);
                                 },
                                 child: const Text(
-                                  'CANCEL',
+                                  'CLOSE',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
@@ -603,12 +519,12 @@ class _TradingPageState extends State<TradingPage> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 16),
                             Expanded(
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF8B6914),
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -695,7 +611,7 @@ class _TradingPageState extends State<TradingPage> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     child: Text(
-                      stock['name'] ?? 'Unknown Company', // Show only company name
+                      stock['name'] ?? 'Unknown Company',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 14,
@@ -710,12 +626,16 @@ class _TradingPageState extends State<TradingPage> {
             ),
           ),
         ),
-        const SizedBox(height: 16),
       ],
     );
   }
 
-  Widget _buildReadOnlyField(String label, TextEditingController controller) {
+  Widget _buildDropdownField(
+      String label,
+      String? value,
+      List<String> options,
+      ValueChanged<String?> onChanged,
+      ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -728,34 +648,47 @@ class _TradingPageState extends State<TradingPage> {
           ),
         ),
         const SizedBox(height: 8),
-        TextField(
-          controller: controller,
-          enabled: false,
-          style: const TextStyle(color: Colors.white70),
-          decoration: InputDecoration(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 14,
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFF8B6914),
+              width: 1,
             ),
-            filled: true,
-            fillColor: const Color(0xFF2A2A2A),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(
-                color: Color(0xFF4A4540),
-                width: 1,
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
+              isExpanded: true,
+              dropdownColor: const Color(0xFF2A2A2A),
+              icon: const Padding(
+                padding: EdgeInsets.only(right: 16),
+                child: Icon(Icons.arrow_drop_down, color: Color(0xFF8B6914)),
               ),
-            ),
-            disabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(
-                color: Color(0xFF4A4540),
-                width: 1,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
               ),
+              items: options.map((option) {
+                return DropdownMenuItem<String>(
+                  value: option,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Text(
+                      option,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+              onChanged: onChanged,
             ),
           ),
         ),
-        const SizedBox(height: 16),
       ],
     );
   }
@@ -809,7 +742,6 @@ class _TradingPageState extends State<TradingPage> {
             ),
           ),
         ),
-        const SizedBox(height: 16),
       ],
     );
   }
