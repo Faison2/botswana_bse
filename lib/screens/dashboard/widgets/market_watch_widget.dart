@@ -3,6 +3,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../buy_sell/buy_sell.dart';
+
 class MarketWatchWidget extends StatefulWidget {
   final bool isDark;
   final bool showLimited;
@@ -35,7 +37,6 @@ class _MarketWatchWidgetState extends State<MarketWatchWidget> {
     });
 
     try {
-      // Get token from SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
 
@@ -47,7 +48,6 @@ class _MarketWatchWidgetState extends State<MarketWatchWidget> {
         return;
       }
 
-      // Make API call
       final response = await http.post(
         Uri.parse('http://192.168.3.201/MainAPI/Home/getMarketData'),
         headers: {
@@ -63,7 +63,6 @@ class _MarketWatchWidgetState extends State<MarketWatchWidget> {
 
         List<Map<String, dynamic>> stocks = [];
 
-        // Parse the API response structure
         if (jsonData.isNotEmpty && jsonData[0]['MdataItem'] != null) {
           final List<dynamic> items = jsonData[0]['MdataItem'];
 
@@ -94,28 +93,23 @@ class _MarketWatchWidgetState extends State<MarketWatchWidget> {
   }
 
   Map<String, dynamic> _mapApiDataToStock(dynamic item) {
-    // Extract data from API response
     String name = item['Company']?.toString() ?? 'Unknown';
     String ticker = item['Symbol']?.toString() ?? 'N/A';
     String code = item['Code']?.toString() ?? '';
 
-    // Prices
     String closingPrice = item['ClosingPrice']?.toString() ?? '0';
     String openingPrice = item['OpeningPrice']?.toString() ?? '0';
     String maxPrice = item['MaxPrice']?.toString() ?? '0';
     String minPrice = item['MinPrice']?.toString() ?? '0';
 
-    // Format for display
     String price = 'TZS $closingPrice';
     String bestBid = 'TZS $openingPrice';
     String bestAsk = 'TZS $maxPrice';
 
-    // For supply/demand, use formatted volume or placeholder
     String openInterest = item['Openinterest']?.toString() ?? '0';
     String supply = _formatVolume(openInterest);
     String demand = '-';
 
-    // Status
     String status = item['status']?.toString() ?? '';
 
     return {
@@ -130,10 +124,15 @@ class _MarketWatchWidgetState extends State<MarketWatchWidget> {
       'color': _getColorForStock(ticker),
       'status': status,
       'code': code,
+      // Add raw numeric values for trading page
+      'closingPriceValue': double.tryParse(closingPrice) ?? 0.0,
+      'openingPriceValue': double.tryParse(openingPrice) ?? 0.0,
+      'maxPriceValue': double.tryParse(maxPrice) ?? 0.0,
+      'minPriceValue': double.tryParse(minPrice) ?? 0.0,
+      'volumeValue': double.tryParse(openInterest) ?? 0.0,
     };
   }
 
-  // Helper method to format large volume numbers
   String _formatVolume(String volume) {
     try {
       final num = double.parse(volume);
@@ -270,7 +269,6 @@ class _MarketWatchWidgetState extends State<MarketWatchWidget> {
       );
     }
 
-    // Display only first 4 stocks if showLimited is true
     final displayStocks = widget.showLimited
         ? _stocks.take(4).toList()
         : _stocks;
@@ -279,15 +277,7 @@ class _MarketWatchWidgetState extends State<MarketWatchWidget> {
       children: [
         for (int i = 0; i < displayStocks.length; i++) ...[
           _buildStockCard(
-            displayStocks[i]['name']!,
-            displayStocks[i]['ticker']!,
-            displayStocks[i]['price']!,
-            displayStocks[i]['bestBid']!,
-            displayStocks[i]['bestAsk']!,
-            displayStocks[i]['supply']!,
-            displayStocks[i]['demand']!,
-            displayStocks[i]['icon'] as IconData,
-            displayStocks[i]['color'] as Color,
+            displayStocks[i],
             widget.isDark,
           ),
           if (i < displayStocks.length - 1) const SizedBox(height: 10),
@@ -297,108 +287,114 @@ class _MarketWatchWidgetState extends State<MarketWatchWidget> {
   }
 
   Widget _buildStockCard(
-      String name,
-      String ticker,
-      String price,
-      String bestBid,
-      String bestAsk,
-      String supply,
-      String demand,
-      IconData iconData,
-      Color iconBgColor,
+      Map<String, dynamic> stockData,
       bool isDark,
       ) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2A2A33) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: isDark
-            ? []
-            : [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: iconBgColor,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              iconData,
-              color: Colors.white,
-              size: 28,
+    return GestureDetector(
+      onTap: () {
+        // Navigate to trading page with stock data
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TradingPage(
+              prefilledStockData: stockData,
+              allStocks: _stocks,
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            name,
-                            style: TextStyle(
-                              color: isDark ? Colors.white : Colors.black87,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF2A2A33) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: isDark
+              ? []
+              : [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: stockData['color'] as Color,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                stockData['icon'] as IconData,
+                color: Colors.white,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              stockData['name']!,
+                              style: TextStyle(
+                                color: isDark ? Colors.white : Colors.black87,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            ticker,
-                            style: TextStyle(
-                              color: isDark
-                                  ? Colors.white.withOpacity(0.5)
-                                  : Colors.black.withOpacity(0.5),
-                              fontSize: 11,
+                            const SizedBox(height: 4),
+                            Text(
+                              stockData['ticker']!,
+                              style: TextStyle(
+                                color: isDark
+                                    ? Colors.white.withOpacity(0.5)
+                                    : Colors.black.withOpacity(0.5),
+                                fontSize: 11,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    Text(
-                      price,
-                      style: TextStyle(
-                        color: isDark ? Colors.white : Colors.black87,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                      Text(
+                        stockData['price']!,
+                        style: TextStyle(
+                          color: isDark ? Colors.white : Colors.black87,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _buildInfoColumn('Open:', bestBid, isDark),
-                    const SizedBox(width: 12),
-                    _buildInfoColumn('High:', bestAsk, isDark),
-                    const SizedBox(width: 12),
-                    _buildInfoColumn('Volume:', supply, isDark),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      _buildInfoColumn('Open:', stockData['bestBid']!, isDark),
+                      const SizedBox(width: 12),
+                      _buildInfoColumn('High:', stockData['bestAsk']!, isDark),
+                      const SizedBox(width: 12),
+                      _buildInfoColumn('Volume:', stockData['supply']!, isDark),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -430,3 +426,7 @@ class _MarketWatchWidgetState extends State<MarketWatchWidget> {
     );
   }
 }
+
+// Make sure to import this in your trading_page.dart file
+// You'll need to add this import at the top of market_watch_widget.dart:
+// import 'package:your_app_name/pages/trading/trading_page.dart';

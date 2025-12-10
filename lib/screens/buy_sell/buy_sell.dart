@@ -5,7 +5,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../dashboard/dashboard.dart';
 
 class TradingPage extends StatefulWidget {
-  const TradingPage({Key? key}) : super(key: key);
+  final Map<String, dynamic>? prefilledStockData;
+  final List<Map<String, dynamic>>? allStocks;
+
+  const TradingPage({
+    Key? key,
+    this.prefilledStockData,
+    this.allStocks,
+  }) : super(key: key);
 
   @override
   State<TradingPage> createState() => _TradingPageState();
@@ -17,23 +24,31 @@ class _TradingPageState extends State<TradingPage> {
   String? _token;
   String? _userName;
 
-  final companyController = TextEditingController(text: 'LPPJ');
+  // Controllers
+  String? selectedCompany;
   final timeInForceController = TextEditingController(text: 'Day Order');
   final brokerController = TextEditingController(text: 'B20/C');
   final quantityController = TextEditingController(text: '1000');
   final priceController = TextEditingController(text: '12.50');
 
-  // Additional fields
-  final referenceNumberController = TextEditingController(text: 'ORD${DateTime.now().millisecondsSinceEpoch}');
+  // Read-only fields
+  final referenceNumberController = TextEditingController();
   final cdsAcNoController = TextEditingController(text: 'CDS123456');
   final shareholderController = TextEditingController(text: 'SHR7891011');
   final liNumberController = TextEditingController(text: 'LI998877');
-  final clientNameController = TextEditingController(); // Will be populated from SharedPreferences
-  final brokerRefController = TextEditingController(text: 'BRREF${DateTime.now().millisecondsSinceEpoch}');
+  final clientNameController = TextEditingController();
+  final brokerRefController = TextEditingController();
   final settlementAmountController = TextEditingController(text: '0.00');
   final chargesController = TextEditingController(text: '150.00');
   final brokerageController = TextEditingController(text: '1.20');
   final currencyController = TextEditingController(text: 'BWP');
+
+  // Market data fields (read-only)
+  final openingPriceController = TextEditingController();
+  final highPriceController = TextEditingController();
+  final volumeController = TextEditingController();
+
+  List<Map<String, dynamic>> _allStocks = [];
 
   static const String apiUrl = 'http://192.168.3.201/MainAPI/Home/OrderPosting';
 
@@ -41,11 +56,37 @@ class _TradingPageState extends State<TradingPage> {
   void initState() {
     super.initState();
     _loadUserData();
+    _initializeWithPrefilledData();
 
-    // Update calculations whenever controllers change
     quantityController.addListener(updateCalculations);
     priceController.addListener(updateCalculations);
     chargesController.addListener(updateCalculations);
+  }
+
+  void _initializeWithPrefilledData() {
+    // Generate unique reference numbers
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    referenceNumberController.text = 'ORD$timestamp';
+    brokerRefController.text = 'BRREF$timestamp';
+
+    if (widget.allStocks != null) {
+      _allStocks = widget.allStocks!;
+    }
+
+    if (widget.prefilledStockData != null) {
+      final stockData = widget.prefilledStockData!;
+
+      // Set selected company
+      selectedCompany = stockData['ticker'] ?? stockData['name'];
+
+      // Pre-fill read-only market data
+      priceController.text = stockData['closingPriceValue']?.toString() ?? '0.00';
+      openingPriceController.text = stockData['openingPriceValue']?.toString() ?? '0.00';
+      highPriceController.text = stockData['maxPriceValue']?.toString() ?? '0.00';
+      volumeController.text = stockData['volumeValue']?.toString() ?? '0';
+
+      updateCalculations();
+    }
   }
 
   Future<void> _loadUserData() async {
@@ -68,8 +109,6 @@ class _TradingPageState extends State<TradingPage> {
               backgroundColor: Colors.red,
             ),
           );
-          // Optionally navigate to login
-          // Navigator.pushReplacementNamed(context, '/login');
         }
       }
     } catch (e) {
@@ -86,7 +125,6 @@ class _TradingPageState extends State<TradingPage> {
 
   @override
   void dispose() {
-    companyController.dispose();
     timeInForceController.dispose();
     brokerController.dispose();
     quantityController.dispose();
@@ -101,10 +139,12 @@ class _TradingPageState extends State<TradingPage> {
     chargesController.dispose();
     brokerageController.dispose();
     currencyController.dispose();
+    openingPriceController.dispose();
+    highPriceController.dispose();
+    volumeController.dispose();
     super.dispose();
   }
 
-  // Calculate totals
   double get grossTotal {
     final quantity = double.tryParse(quantityController.text) ?? 0;
     final price = double.tryParse(priceController.text) ?? 0;
@@ -123,10 +163,33 @@ class _TradingPageState extends State<TradingPage> {
     return grossTotal + custodialFee + charges;
   }
 
-  // Update settlement amount when values change
   void updateCalculations() {
     setState(() {
       settlementAmountController.text = netTotal.toStringAsFixed(2);
+    });
+  }
+
+  void _onCompanyChanged(String? newCompany) {
+    if (newCompany == null) return;
+
+    setState(() {
+      selectedCompany = newCompany;
+
+      // Find the stock data for the selected company
+      final stockData = _allStocks.firstWhere(
+            (stock) => stock['ticker'] == newCompany || stock['name'] == newCompany,
+        orElse: () => {},
+      );
+
+      if (stockData.isNotEmpty) {
+        // Update market data fields
+        priceController.text = stockData['closingPriceValue']?.toString() ?? '0.00';
+        openingPriceController.text = stockData['openingPriceValue']?.toString() ?? '0.00';
+        highPriceController.text = stockData['maxPriceValue']?.toString() ?? '0.00';
+        volumeController.text = stockData['volumeValue']?.toString() ?? '0';
+
+        updateCalculations();
+      }
     });
   }
 
@@ -141,19 +204,28 @@ class _TradingPageState extends State<TradingPage> {
       return;
     }
 
+    if (selectedCompany == null || selectedCompany!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a company'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       isLoading = true;
     });
 
     try {
-      // Calculate settlement date (e.g., 2 days from now)
       final settlementDate = DateTime.now().add(const Duration(days: 2));
       final maturityDate = DateTime.now().add(const Duration(days: 365));
 
       final orderData = {
         "OrderType": isBuy ? "BUY" : "SELL",
         "ReferenceNumber": referenceNumberController.text,
-        "Company": companyController.text,
+        "Company": selectedCompany,
         "Quantity": double.tryParse(quantityController.text) ?? 0,
         "BasePrice": double.tryParse(priceController.text) ?? 0,
         "TimeInForce": timeInForceController.text,
@@ -193,7 +265,6 @@ class _TradingPageState extends State<TradingPage> {
             ),
           );
 
-          // Navigate back to dashboard
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const DashboardScreen()),
@@ -247,6 +318,8 @@ class _TradingPageState extends State<TradingPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        const SizedBox(height: 20),
+
                         // BUY/SELL Toggle
                         Container(
                           decoration: BoxDecoration(
@@ -337,6 +410,23 @@ class _TradingPageState extends State<TradingPage> {
                         ),
                         const SizedBox(height: 24),
 
+                        // Market Data Section (Read-Only)
+                        const Text(
+                          'MARKET DATA',
+                          style: TextStyle(
+                            color: Color(0xFF8B6914),
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        _buildReadOnlyField('Opening Price', openingPriceController),
+                        _buildReadOnlyField('High Price', highPriceController),
+                        _buildReadOnlyField('Volume', volumeController),
+
+                        const SizedBox(height: 24),
+
                         // Client Information Section
                         const Text(
                           'CLIENT INFORMATION',
@@ -349,6 +439,8 @@ class _TradingPageState extends State<TradingPage> {
                         const SizedBox(height: 16),
 
                         _buildReadOnlyField('Client Name', clientNameController),
+                        _buildReadOnlyField('Reference Number', referenceNumberController),
+                        _buildReadOnlyField('Broker Reference', brokerRefController),
                         _buildTextField('CDS Account No', cdsAcNoController),
                         _buildTextField('Shareholder', shareholderController),
                         _buildTextField('LI Number', liNumberController),
@@ -364,13 +456,13 @@ class _TradingPageState extends State<TradingPage> {
                         ),
                         const SizedBox(height: 16),
 
-                        _buildTextField('Reference Number', referenceNumberController),
-                        _buildTextField('Company', companyController),
+                        // Company Dropdown
+                        _buildCompanyDropdown(),
+
                         _buildTextField('Quantity', quantityController, keyboardType: TextInputType.number),
                         _buildTextField('Base Price', priceController, keyboardType: TextInputType.numberWithOptions(decimal: true)),
                         _buildTextField('Time In Force', timeInForceController),
                         _buildTextField('Broker Code', brokerController),
-                        _buildTextField('Broker Reference', brokerRefController),
                         _buildTextField('Currency', currencyController),
 
                         const SizedBox(height: 24),
@@ -409,7 +501,7 @@ class _TradingPageState extends State<TradingPage> {
                                     ),
                                   ),
                                   Text(
-                                    '${currencyController.text}${grossTotal.toStringAsFixed(2)}',
+                                    '${currencyController.text} ${grossTotal.toStringAsFixed(2)}',
                                     style: const TextStyle(
                                       color: Colors.grey,
                                       fontSize: 14,
@@ -429,7 +521,7 @@ class _TradingPageState extends State<TradingPage> {
                                     ),
                                   ),
                                   Text(
-                                    '${currencyController.text}${custodialFee.toStringAsFixed(2)}',
+                                    '${currencyController.text} ${custodialFee.toStringAsFixed(2)}',
                                     style: const TextStyle(
                                       color: Colors.grey,
                                       fontSize: 14,
@@ -449,7 +541,7 @@ class _TradingPageState extends State<TradingPage> {
                                     ),
                                   ),
                                   Text(
-                                    '${currencyController.text}${charges.toStringAsFixed(2)}',
+                                    '${currencyController.text} ${charges.toStringAsFixed(2)}',
                                     style: const TextStyle(
                                       color: Colors.grey,
                                       fontSize: 14,
@@ -472,7 +564,7 @@ class _TradingPageState extends State<TradingPage> {
                                     ),
                                   ),
                                   Text(
-                                    '${currencyController.text}${netTotal.toStringAsFixed(2)}',
+                                    '${currencyController.text} ${netTotal.toStringAsFixed(2)}',
                                     style: const TextStyle(
                                       color: Color(0xFF8B6914),
                                       fontSize: 16,
@@ -553,6 +645,73 @@ class _TradingPageState extends State<TradingPage> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildCompanyDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Company',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFF8B6914),
+              width: 1,
+            ),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: selectedCompany,
+              hint: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'Select Company',
+                  style: TextStyle(color: Colors.white54),
+                ),
+              ),
+              isExpanded: true,
+              dropdownColor: const Color(0xFF2A2A2A),
+              icon: const Padding(
+                padding: EdgeInsets.only(right: 16),
+                child: Icon(Icons.arrow_drop_down, color: Color(0xFF8B6914)),
+              ),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+              ),
+              items: _allStocks.map((stock) {
+                return DropdownMenuItem<String>(
+                  value: stock['ticker'] ?? stock['name'],
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Text(
+                      stock['name'] ?? 'Unknown Company', // Show only company name
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                );
+              }).toList(),
+              onChanged: _onCompanyChanged,
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
     );
   }
 
