@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 
@@ -16,9 +15,8 @@ class SignUpScreen extends StatefulWidget {
 class _SignUpScreenState extends State<SignUpScreen> {
   int _currentStep = 0;
   bool _agreeToTerms = false;
-  bool _isNewClient = true; // true = New Client, false = Existing Client
+  bool _isNewClient = true;
 
-  // Step 1 controllers
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -305,7 +303,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return false;
     }
 
-    // Validate documents for new clients
     if (_isNewClient) {
       if (_idDocument == null) {
         _showSnackBar('Please upload ID document');
@@ -326,10 +323,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   Future<void> _submitForm() async {
     try {
-      // Prepare documents
       final documents = await _prepareDocuments();
-
-      // Prepare main payload
       final payload = {
         "Othernames": _firstNameController.text,
         "Surname": _lastNameController.text,
@@ -365,9 +359,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
         "Occupation": _occupationController.text,
         "Designation": _designationController.text,
         "branchcode": _branchCode,
-        "cdsnumber": _isNewClient ? "" : _cdsNumberController.text, // Only for existing clients
-        "broker_code": _selectedBrokerCode, // Send broker_code not brokerlink
-        "brokerlink": "0", // Keep as 0 as per original
+        "cdsnumber": _isNewClient ? "" : _cdsNumberController.text,
+        "BrokerCode": _selectedBrokerCode,
+        "brokerlink": "0",
         "PreFunding": _preFunding,
         "TIN": _tinController.text,
         "MonthlyIncome": _monthlyIncomeController.text,
@@ -377,8 +371,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
         "IDExpiryDate": _idExpiryDateController.text,
         "AgreementDate": _agreementDateController.text,
         "clientType": _isNewClient ? "new" : "existing",
-        "CreatedBy": "Mobile", // Hardcoded as requested
-        "Documents": documents // Include documents array
+        "CreatedBy": "Mobile",
+        "Documents": documents
       };
 
       print("Submitting payload: ${json.encode(payload)}");
