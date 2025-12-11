@@ -13,6 +13,7 @@ class SignUpScreen extends StatefulWidget {
 class _SignUpScreenState extends State<SignUpScreen> {
   int _currentStep = 0;
   bool _agreeToTerms = false;
+  bool _isNewClient = true; // true = New Client, false = Existing Client
 
   // Step 1 controllers
   final _firstNameController = TextEditingController();
@@ -158,6 +159,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   Future<void> _submitForm() async {
     try {
+      // SAME payload for both new and existing clients
       final payload = {
         "Othernames": _firstNameController.text,
         "Surname": _lastNameController.text,
@@ -202,7 +204,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
         "EmployerAddress": _employerAddressController.text,
         "EmploymentStatus": _selectedEmploymentStatus,
         "IDExpiryDate": _idExpiryDateController.text,
-        "AgreementDate": _agreementDateController.text
+        "AgreementDate": _agreementDateController.text,
+        "clientType": _isNewClient ? "new" : "existing" // Add client type to payload
       };
 
       print("Submitting payload: ${json.encode(payload)}");
@@ -221,6 +224,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ),
       );
 
+      // Use same endpoint for both
       final response = await http.post(
         Uri.parse('http://192.168.3.201/MainAPI/Home/AccountOpening'),
         headers: {'Content-Type': 'application/json'},
@@ -356,7 +360,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-
   Widget _buildStepCircle(int stepNumber, String label) {
     bool isActive = _currentStep == stepNumber;
     bool isCompleted = _currentStep > stepNumber;
@@ -409,13 +412,121 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-
   Widget _buildStepLine() {
     return Container(
       width: 20, // Reduced from 30
       height: 2,
       margin: const EdgeInsets.symmetric(horizontal: 2),
       color: Colors.grey[300],
+    );
+  }
+
+  // SMALL toggle widget for Step 1 only
+  Widget _buildClientTypeToggle() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Client Type',
+          style: TextStyle(
+            color: Color(0xFF6B5D4F),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          height: 36, // Smaller height
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE8D7B8)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 3,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isNewClient = true;
+                    });
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: _isNewClient ? const Color(0xFFD4A855) : Colors.transparent,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(20),
+                        bottomLeft: Radius.circular(20),
+                      ),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Center(
+                      child: Text(
+                        'New Client',
+                        style: TextStyle(
+                          fontSize: 12, // Smaller font
+                          fontWeight: FontWeight.w600,
+                          color: _isNewClient ? Colors.white : const Color(0xFF6B5D4F),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isNewClient = false;
+                    });
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: !_isNewClient ? const Color(0xFFD4A855) : Colors.transparent,
+                      borderRadius: const BorderRadius.only(
+                        topRight: Radius.circular(20),
+                        bottomRight: Radius.circular(20),
+                      ),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Center(
+                      child: Text(
+                        'Existing',
+                        style: TextStyle(
+                          fontSize: 12, // Smaller font
+                          fontWeight: FontWeight.w600,
+                          color: !_isNewClient ? Colors.white : const Color(0xFF6B5D4F),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: Text(
+            _isNewClient
+                ? 'Creating new account'
+                : 'Updating existing account',
+            style: const TextStyle(
+              color: Color(0xFFD4A855),
+              fontSize: 10,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -571,6 +682,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 10),
+          // SMALL TOGGLE ADDED HERE
+          _buildClientTypeToggle(),
           const SizedBox(height: 20),
           Row(
             children: [
@@ -619,18 +733,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 10),
-          const Center(
-            child: Text(
-              'Personal Details',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2C1810),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
           _buildLabelWithField('Date of Birth *', _buildTextField(
             'YYYY-MM-DD',
             _dobController,
@@ -725,18 +827,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 10),
-          const Center(
-            child: Text(
-              'Location Details',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2C1810),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
@@ -790,18 +880,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 10),
-          const Center(
-            child: Text(
-              'Employment & Income',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2C1810),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
+
           Row(
             children: [
               Expanded(
@@ -843,18 +922,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 10),
-          const Center(
-            child: Text(
-              'Bank Details',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2C1810),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
@@ -910,18 +977,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 10),
-          const Center(
-            child: Text(
-              'Final Step',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2C1810),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
@@ -1031,14 +1086,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: const Color(0xFFFFE082)),
             ),
-            child: const Row(
+            child: Row(
               children: [
-                Icon(Icons.info_outline, color: Color(0xFFD4A855), size: 18),
-                SizedBox(width: 8),
+                Icon(
+                  Icons.info_outline,
+                  color: const Color(0xFFD4A855),
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Please review all information before submitting. Ensure all required fields are filled.',
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: Color(0xFF6B5D4F),
                       fontSize: 12,
                     ),
