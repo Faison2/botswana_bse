@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:typed_data';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -53,6 +56,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   // Step 6 controllers (Additional & Final)
   final _idExpiryDateController = TextEditingController();
   final _agreementDateController = TextEditingController();
+  final _cdsNumberController = TextEditingController(); // Only for existing clients
 
   // Dropdown values
   String _selectedCountryCode = '+267'; // Botswana
@@ -69,11 +73,28 @@ class _SignUpScreenState extends State<SignUpScreen> {
   String _selectedInvestorType = 'Local';
   String _selectedPrincipalOfficer = 'Sarah Johnson';
 
+  // Broker variables
+  String? _selectedBrokerCode; // For API submission
+  String? _selectedBrokerName; // For display
+  List<Map<String, dynamic>> _brokersList = [];
+  bool _isLoadingBrokers = false;
+
+  // Document upload variables
+  File? _idDocument;
+  File? _proofOfAddressDocument;
+  File? _proofOfEmploymentDocument;
+  final ImagePicker _picker = ImagePicker();
+
   // Hardcoded values
   final String _branchCode = "HRE001";
-  final String _cdsNumber = "";
   final String _brokerLink = "0";
   final String _preFunding = "1";
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchBrokers(); // Fetch brokers when the screen loads
+  }
 
   @override
   void dispose() {
@@ -105,7 +126,123 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _payee2Controller.dispose();
     _idExpiryDateController.dispose();
     _agreementDateController.dispose();
+    _cdsNumberController.dispose();
     super.dispose();
+  }
+
+  Future<void> _fetchBrokers() async {
+    setState(() {
+      _isLoadingBrokers = true;
+    });
+
+    try {
+      final response = await http.get(
+        Uri.parse('https://zamagm.escrowagm.com/MainAPI/Home/getAllBrokers'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+
+        if (responseData is List) {
+          setState(() {
+            _brokersList = List<Map<String, dynamic>>.from(responseData);
+            if (_brokersList.isNotEmpty) {
+              _selectedBrokerCode = _brokersList[0]['broker_code']?.toString();
+              _selectedBrokerName = _brokersList[0]['fnam']?.toString();
+            }
+          });
+        } else if (responseData is Map && responseData.containsKey('brokers')) {
+          setState(() {
+            _brokersList = List<Map<String, dynamic>>.from(responseData['brokers']);
+            if (_brokersList.isNotEmpty) {
+              _selectedBrokerCode = _brokersList[0]['broker_code']?.toString();
+              _selectedBrokerName = _brokersList[0]['fnam']?.toString();
+            }
+          });
+        }
+      } else {
+        _showSnackBar('Failed to load brokers');
+      }
+    } catch (e) {
+      _showSnackBar('Error loading brokers: $e');
+    } finally {
+      setState(() {
+        _isLoadingBrokers = false;
+      });
+    }
+  }
+
+  Future<void> _pickDocument(String documentType) async {
+    try {
+      final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
+        final file = File(pickedFile.path);
+
+        setState(() {
+          switch (documentType) {
+            case 'ID':
+              _idDocument = file;
+              break;
+            case 'ProofOfAddress':
+              _proofOfAddressDocument = file;
+              break;
+            case 'ProofOfEmployment':
+              _proofOfEmploymentDocument = file;
+              break;
+          }
+        });
+
+        _showSnackBar('$documentType document selected');
+      }
+    } catch (e) {
+      _showSnackBar('Error picking document: $e');
+    }
+  }
+
+  Future<String?> _convertFileToBase64(File? file) async {
+    if (file == null || !file.existsSync()) return null;
+
+    try {
+      final bytes = await file.readAsBytes();
+      return base64Encode(bytes);
+    } catch (e) {
+      print('Error converting file to base64: $e');
+      return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _prepareDocuments() async {
+    List<Map<String, dynamic>> documents = [];
+
+    final idBase64 = await _convertFileToBase64(_idDocument);
+    if (idBase64 != null) {
+      documents.add({
+        "Name": "ID",
+        "ContentType": "application/pdf",
+        "Data": idBase64
+      });
+    }
+
+    final addressBase64 = await _convertFileToBase64(_proofOfAddressDocument);
+    if (addressBase64 != null) {
+      documents.add({
+        "Name": "Proof of Address",
+        "ContentType": "application/pdf",
+        "Data": addressBase64
+      });
+    }
+
+    final employmentBase64 = await _convertFileToBase64(_proofOfEmploymentDocument);
+    if (employmentBase64 != null) {
+      documents.add({
+        "Name": "Proof of Employment",
+        "ContentType": "application/pdf",
+        "Data": employmentBase64
+      });
+    }
+
+    return documents;
   }
 
   void _handleNext() {
@@ -138,6 +275,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _showSnackBar('Please fill all required fields');
       return false;
     }
+
+    // For existing clients, validate CDS number
+    if (!_isNewClient && _cdsNumberController.text.isEmpty) {
+      _showSnackBar('Please enter CDS number for existing client');
+      return false;
+    }
+
+    // Validate broker selection
+    if (_selectedBrokerCode == null || _selectedBrokerCode!.isEmpty) {
+      _showSnackBar('Please select a broker');
+      return false;
+    }
+
     return true;
   }
 
@@ -154,12 +304,32 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _showSnackBar('Please agree to the Terms & Conditions');
       return false;
     }
+
+    // Validate documents for new clients
+    if (_isNewClient) {
+      if (_idDocument == null) {
+        _showSnackBar('Please upload ID document');
+        return false;
+      }
+      if (_proofOfAddressDocument == null) {
+        _showSnackBar('Please upload Proof of Address document');
+        return false;
+      }
+      if (_proofOfEmploymentDocument == null) {
+        _showSnackBar('Please upload Proof of Employment document');
+        return false;
+      }
+    }
+
     return true;
   }
 
   Future<void> _submitForm() async {
     try {
-      // SAME payload for both new and existing clients
+      // Prepare documents
+      final documents = await _prepareDocuments();
+
+      // Prepare main payload
       final payload = {
         "Othernames": _firstNameController.text,
         "Surname": _lastNameController.text,
@@ -195,8 +365,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
         "Occupation": _occupationController.text,
         "Designation": _designationController.text,
         "branchcode": _branchCode,
-        "cdsnumber": _cdsNumber,
-        "brokerlink": _brokerLink,
+        "cdsnumber": _isNewClient ? "" : _cdsNumberController.text, // Only for existing clients
+        "broker_code": _selectedBrokerCode, // Send broker_code not brokerlink
+        "brokerlink": "0", // Keep as 0 as per original
         "PreFunding": _preFunding,
         "TIN": _tinController.text,
         "MonthlyIncome": _monthlyIncomeController.text,
@@ -205,7 +376,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
         "EmploymentStatus": _selectedEmploymentStatus,
         "IDExpiryDate": _idExpiryDateController.text,
         "AgreementDate": _agreementDateController.text,
-        "clientType": _isNewClient ? "new" : "existing" // Add client type to payload
+        "clientType": _isNewClient ? "new" : "existing",
+        "CreatedBy": "Mobile", // Hardcoded as requested
+        "Documents": documents // Include documents array
       };
 
       print("Submitting payload: ${json.encode(payload)}");
@@ -439,7 +612,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
           height: 36, // Smaller height
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: const Color(0xFFE8D7B8)),
             boxShadow: [
               BoxShadow(
@@ -462,8 +635,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     decoration: BoxDecoration(
                       color: _isNewClient ? const Color(0xFFD4A855) : Colors.transparent,
                       borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(20),
-                        bottomLeft: Radius.circular(20),
+                        topLeft: Radius.circular(8),
+                        bottomLeft: Radius.circular(8),
                       ),
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -491,8 +664,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     decoration: BoxDecoration(
                       color: !_isNewClient ? const Color(0xFFD4A855) : Colors.transparent,
                       borderRadius: const BorderRadius.only(
-                        topRight: Radius.circular(20),
-                        bottomRight: Radius.circular(20),
+                        topRight: Radius.circular(8),
+                        bottomRight: Radius.circular(8),
                       ),
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -686,6 +859,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
           // SMALL TOGGLE ADDED HERE
           _buildClientTypeToggle(),
           const SizedBox(height: 20),
+
+          // CDS Number field only for existing clients
+          if (!_isNewClient) ...[
+            _buildLabelWithField('CDS Number *', _buildTextField('Enter CDS number', _cdsNumberController)),
+            const SizedBox(height: 15),
+          ],
+
+          // Broker dropdown
+          _buildLabelWithField('Broker *', _buildBrokerDropdown()),
+          const SizedBox(height: 15),
+
           Row(
             children: [
               Expanded(
@@ -733,6 +917,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 10),
+          const Center(
+            child: Text(
+              'Personal Details',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2C1810),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
           _buildLabelWithField('Date of Birth *', _buildTextField(
             'YYYY-MM-DD',
             _dobController,
@@ -827,6 +1023,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 10),
+          const Center(
+            child: Text(
+              'Location Details',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2C1810),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
@@ -880,7 +1088,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-
+          const SizedBox(height: 10),
+          const Center(
+            child: Text(
+              'Employment & Income',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2C1810),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
@@ -922,6 +1141,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 10),
+          const Center(
+            child: Text(
+              'Bank Details',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2C1810),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
@@ -977,6 +1208,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 10),
+          const Center(
+            child: Text(
+              'Final Step',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2C1810),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
@@ -1018,6 +1261,26 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
             ],
           ),
+
+          // Document upload section for new clients
+          if (_isNewClient) ...[
+            const SizedBox(height: 25),
+            const Text(
+              'Document Upload *',
+              style: TextStyle(
+                color: Color(0xFF6B5D4F),
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _buildDocumentUploadField('ID Document', _idDocument, 'ID'),
+            const SizedBox(height: 15),
+            _buildDocumentUploadField('Proof of Address', _proofOfAddressDocument, 'ProofOfAddress'),
+            const SizedBox(height: 15),
+            _buildDocumentUploadField('Proof of Employment', _proofOfEmploymentDocument, 'ProofOfEmployment'),
+          ],
+
           const SizedBox(height: 25),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1108,6 +1371,127 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildBrokerDropdown() {
+    return Container(
+      height: 50,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE8D7B8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedBrokerName,
+          isExpanded: true,
+          dropdownColor: Colors.white,
+          style: const TextStyle(color: Colors.black87, fontSize: 14),
+          icon: Icon(Icons.arrow_drop_down, color: Colors.grey[600], size: 20),
+          hint: _isLoadingBrokers
+              ? const Row(
+            children: [
+              SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+              SizedBox(width: 8),
+              Text('Loading brokers...', style: TextStyle(fontSize: 14)),
+            ],
+          )
+              : const Text('Select broker', style: TextStyle(fontSize: 14)),
+          items: _brokersList.map((broker) {
+            final brokerName = broker['fnam']?.toString() ?? 'Unknown';
+            final brokerCode = broker['broker_code']?.toString() ?? '';
+            return DropdownMenuItem<String>(
+              value: brokerName,
+              child: Text(brokerName),
+              onTap: () {
+                setState(() {
+                  _selectedBrokerCode = brokerCode;
+                  _selectedBrokerName = brokerName;
+                });
+              },
+            );
+          }).toList(),
+          onChanged: (String? newValue) {
+            // The actual value is set in onTap above
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDocumentUploadField(String label, File? file, String documentType) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF6B5D4F),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 4),
+        GestureDetector(
+          onTap: () => _pickDocument(documentType),
+          child: Container(
+            height: 50,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: file != null ? const Color(0xFFD4A855) : const Color(0xFFE8D7B8),
+                width: file != null ? 2 : 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 5,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.attach_file,
+                    color: file != null ? const Color(0xFFD4A855) : Colors.grey[400],
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      file != null ? file.path.split('/').last : 'Tap to upload document',
+                      style: TextStyle(
+                        color: file != null ? const Color(0xFFD4A855) : Colors.grey[400],
+                        fontSize: 14,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  if (file != null)
+                    Icon(
+                      Icons.check_circle,
+                      color: const Color(0xFFD4A855),
+                      size: 18,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
