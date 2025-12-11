@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'dart:io';
+import 'package:permission_handler/permission_handler.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -81,17 +82,45 @@ class _SignUpScreenState extends State<SignUpScreen> {
   File? _idDocument;
   File? _proofOfAddressDocument;
   File? _proofOfEmploymentDocument;
-  final ImagePicker _picker = ImagePicker();
+ // final ImagePicker _picker = ImagePicker();
 
   // Hardcoded values
   final String _branchCode = "HRE001";
-  final String _brokerLink = "0";
-  final String _preFunding = "1";
+   final String _preFunding = "1";
 
   @override
   void initState() {
     super.initState();
-    _fetchBrokers(); // Fetch brokers when the screen loads
+    _fetchBrokers();
+    _requestStoragePermission();
+  }
+
+  // Request storage/photos permission depending on platform.
+  Future<void> _requestStoragePermission() async {
+    try {
+      if (Platform.isAndroid) {
+        // On Android request storage permission (handles legacy and scoped storage where applicable)
+        final status = await Permission.storage.request();
+        if (status.isPermanentlyDenied) {
+          _showSnackBar('Storage permission permanently denied. Please enable it from settings.');
+        } else if (!status.isGranted) {
+          _showSnackBar('Storage permission is required to pick files.');
+        }
+      } else if (Platform.isIOS || Platform.isMacOS) {
+        // On iOS/macOS request photo library access
+        final status = await Permission.photos.request();
+        if (status.isPermanentlyDenied) {
+          _showSnackBar('Photos permission permanently denied. Please enable it from settings.');
+        } else if (!status.isGranted) {
+          _showSnackBar('Photos permission is required to pick images.');
+        }
+      } else {
+        // Other platforms (web/linux/windows) generally don't need explicit permissions
+      }
+    } catch (e) {
+      // ignore and continue
+      print('Permission request error: $e');
+    }
   }
 
   @override
@@ -171,11 +200,27 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
   }
 
+  // Replace the _pickDocument method with this updated version:
+
   Future<void> _pickDocument(String documentType) async {
     try {
-      final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-      if (pickedFile != null) {
-        final file = File(pickedFile.path);
+      // Use file_picker package instead of image_picker for PDF support
+      // Allow PDF and common image formats (screenshots are usually PNG/JPG)
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg'],
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final file = File(result.files.single.path!);
+
+        // Verify file size (optional - limit to 5MB)
+        final fileSize = await file.length();
+        if (fileSize > 5 * 1024 * 1024) {
+          _showSnackBar('File size must be less than 5MB');
+          return;
+        }
 
         setState(() {
           switch (documentType) {
@@ -191,11 +236,105 @@ class _SignUpScreenState extends State<SignUpScreen> {
           }
         });
 
-        _showSnackBar('$documentType document selected');
+        _showSnackBar('$documentType PDF selected successfully');
       }
     } catch (e) {
       _showSnackBar('Error picking document: $e');
     }
+  }
+
+  // Infer content type from file extension
+  String _contentTypeForFile(File file) {
+    final name = file.path.toLowerCase();
+    if (name.endsWith('.pdf')) return 'application/pdf';
+    if (name.endsWith('.png')) return 'image/png';
+    if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg';
+    return 'application/octet-stream';
+  }
+
+  // Update the _buildDocumentUploadField widget to show PDF icon:
+
+  Widget _buildDocumentUploadField(String label, File? file, String documentType) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF6B5D4F),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 4),
+        GestureDetector(
+          onTap: () => _pickDocument(documentType),
+          child: Container(
+            height: 50,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: file != null ? const Color(0xFFD4A855) : const Color(0xFFE8D7B8),
+                width: file != null ? 2 : 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 5,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    file != null
+                        ? (file.path.toLowerCase().endsWith('.pdf') ? Icons.picture_as_pdf : Icons.image)
+                        : Icons.upload_file,
+                    color: file != null ? (file.path.toLowerCase().endsWith('.pdf') ? Colors.red[700] : const Color(0xFFD4A855)) : Colors.grey[400],
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          file != null ? file.path.split('/').last : 'Tap to upload document',
+                          style: TextStyle(
+                            color: file != null ? const Color(0xFFD4A855) : Colors.grey[400],
+                            fontSize: 14,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (file == null)
+                          Text(
+                            'PDF or image (PNG/JPG), max 5MB',
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 10,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (file != null)
+                    Icon(
+                      Icons.check_circle,
+                      color: const Color(0xFFD4A855),
+                      size: 18,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Future<String?> _convertFileToBase64(File? file) async {
@@ -217,7 +356,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (idBase64 != null) {
       documents.add({
         "Name": "ID",
-        "ContentType": "application/pdf",
+        "ContentType": _contentTypeForFile(_idDocument!),
         "Data": idBase64
       });
     }
@@ -226,7 +365,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (addressBase64 != null) {
       documents.add({
         "Name": "Proof of Address",
-        "ContentType": "application/pdf",
+        "ContentType": _contentTypeForFile(_proofOfAddressDocument!),
         "Data": addressBase64
       });
     }
@@ -235,7 +374,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (employmentBase64 != null) {
       documents.add({
         "Name": "Proof of Employment",
-        "ContentType": "application/pdf",
+        "ContentType": _contentTypeForFile(_proofOfEmploymentDocument!),
         "Data": employmentBase64
       });
     }
@@ -361,7 +500,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
         "branchcode": _branchCode,
         "cdsnumber": _isNewClient ? "" : _cdsNumberController.text,
         "BrokerCode": _selectedBrokerCode,
-        "brokerlink": "0",
         "PreFunding": _preFunding,
         "TIN": _tinController.text,
         "MonthlyIncome": _monthlyIncomeController.text,
@@ -1422,72 +1560,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  Widget _buildDocumentUploadField(String label, File? file, String documentType) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: Color(0xFF6B5D4F),
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 4),
-        GestureDetector(
-          onTap: () => _pickDocument(documentType),
-          child: Container(
-            height: 50,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: file != null ? const Color(0xFFD4A855) : const Color(0xFFE8D7B8),
-                width: file != null ? 2 : 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 5,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.attach_file,
-                    color: file != null ? const Color(0xFFD4A855) : Colors.grey[400],
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      file != null ? file.path.split('/').last : 'Tap to upload document',
-                      style: TextStyle(
-                        color: file != null ? const Color(0xFFD4A855) : Colors.grey[400],
-                        fontSize: 14,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                  if (file != null)
-                    Icon(
-                      Icons.check_circle,
-                      color: const Color(0xFFD4A855),
-                      size: 18,
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+
 
   Widget _buildLabelWithField(String label, Widget field) {
     return Column(
@@ -1692,3 +1765,4 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 }
+
