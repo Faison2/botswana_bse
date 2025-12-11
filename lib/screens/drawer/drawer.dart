@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:provider/provider.dart';
+import '../../theme_provider.dart';
 import '../settings /settings.dart';
 
 class AppDrawer extends StatefulWidget {
@@ -44,16 +46,31 @@ class _AppDrawerState extends State<AppDrawer> {
     }
   }
 
-  Future<void> _handleLogout() async {
+  Future<void> _handleLogout(bool isDark) async {
+    final dialogBgColor = isDark ? const Color(0xFF2A2A2A) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
+        backgroundColor: dialogBgColor,
+        title: Text(
+          'Logout',
+          style: TextStyle(color: textColor),
+        ),
+        content: Text(
+          'Are you sure you want to logout?',
+          style: TextStyle(color: textColor),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855),
+              ),
+            ),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -63,7 +80,10 @@ class _AppDrawerState extends State<AppDrawer> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
             ),
-            child: const Text('Logout'),
+            child: const Text(
+              'Logout',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -113,22 +133,43 @@ class _AppDrawerState extends State<AppDrawer> {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDark = themeProvider.isDarkMode;
+
+    final drawerBgColor = isDark ? const Color(0xFF1A1A1A) : const Color(0xFFFAFAFA);
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subtextColor = isDark ? Colors.white70 : Colors.black54;
+    final iconColor = isDark ? Colors.amber : const Color(0xFFD4A855);
+    final dividerColor = isDark ? Colors.white24 : Colors.grey.shade300;
+    final trailingIconColor = isDark ? Colors.white38 : Colors.grey.shade400;
+
+    final headerGradient = isDark
+        ? const LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        Color(0xFF8B6914),
+        Color(0xFF6B5010),
+      ],
+    )
+        : const LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        Color(0xFFD4A855),
+        Color(0xFFB8860B),
+      ],
+    );
+
     return Drawer(
       child: Container(
-        color: const Color(0xFF1A1A1A),
+        color: drawerBgColor,
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
             DrawerHeader(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF8B6914),
-                    Color(0xFF6B5010),
-                  ],
-                ),
+              decoration: BoxDecoration(
+                gradient: headerGradient,
               ),
               child: GestureDetector(
                 onTap: _navigateToProfile,
@@ -138,7 +179,7 @@ class _AppDrawerState extends State<AppDrawer> {
                   children: [
                     CircleAvatar(
                       radius: 30,
-                      backgroundColor: Colors.amber,
+                      backgroundColor: Colors.white.withOpacity(0.3),
                       child: Text(
                         _avatar,
                         style: const TextStyle(
@@ -181,6 +222,9 @@ class _AppDrawerState extends State<AppDrawer> {
                 widget.onMenuItemTapped(0);
                 Navigator.pop(context);
               },
+              textColor: textColor,
+              iconColor: iconColor,
+              trailingIconColor: trailingIconColor,
             ),
             _buildDrawerItem(
               context: context,
@@ -190,6 +234,9 @@ class _AppDrawerState extends State<AppDrawer> {
                 widget.onMenuItemTapped(1);
                 Navigator.pop(context);
               },
+              textColor: textColor,
+              iconColor: iconColor,
+              trailingIconColor: trailingIconColor,
             ),
             _buildDrawerItem(
               context: context,
@@ -199,6 +246,9 @@ class _AppDrawerState extends State<AppDrawer> {
                 widget.onMenuItemTapped(3);
                 Navigator.pop(context);
               },
+              textColor: textColor,
+              iconColor: iconColor,
+              trailingIconColor: trailingIconColor,
             ),
             _buildDrawerItem(
               context: context,
@@ -208,6 +258,9 @@ class _AppDrawerState extends State<AppDrawer> {
                 widget.onMenuItemTapped(4);
                 Navigator.pop(context);
               },
+              textColor: textColor,
+              iconColor: iconColor,
+              trailingIconColor: trailingIconColor,
             ),
             _buildDrawerItem(
               context: context,
@@ -217,6 +270,9 @@ class _AppDrawerState extends State<AppDrawer> {
                 widget.onMarketWatchTapped();
                 Navigator.pop(context);
               },
+              textColor: textColor,
+              iconColor: iconColor,
+              trailingIconColor: trailingIconColor,
             ),
             _buildDrawerItem(
               context: context,
@@ -226,16 +282,22 @@ class _AppDrawerState extends State<AppDrawer> {
                 widget.onBuySellTapped();
                 Navigator.pop(context);
               },
+              textColor: textColor,
+              iconColor: iconColor,
+              trailingIconColor: trailingIconColor,
             ),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),
-              child: const Divider(color: Colors.white24, height: 1),
+              child: Divider(color: dividerColor, height: 1),
             ),
             _buildDrawerItem(
               context: context,
               icon: Icons.person_outline,
               title: 'Profile',
               onTap: _navigateToProfile,
+              textColor: textColor,
+              iconColor: iconColor,
+              trailingIconColor: trailingIconColor,
             ),
             _buildDrawerItem(
               context: context,
@@ -250,13 +312,19 @@ class _AppDrawerState extends State<AppDrawer> {
                   ),
                 );
               },
+              textColor: textColor,
+              iconColor: iconColor,
+              trailingIconColor: trailingIconColor,
             ),
             _buildDrawerItem(
               context: context,
               icon: Icons.logout,
               title: 'Logout',
-              onTap: _handleLogout,
+              onTap: () => _handleLogout(isDark),
               isLast: true,
+              textColor: textColor,
+              iconColor: iconColor,
+              trailingIconColor: trailingIconColor,
             ),
           ],
         ),
@@ -269,23 +337,26 @@ class _AppDrawerState extends State<AppDrawer> {
     required IconData icon,
     required String title,
     required VoidCallback onTap,
+    required Color textColor,
+    required Color iconColor,
+    required Color trailingIconColor,
     bool isLast = false,
   }) {
     return ListTile(
       leading: Icon(
         icon,
-        color: Colors.amber,
+        color: iconColor,
         size: 22,
       ),
       title: Text(
         title,
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
+          color: textColor,
           fontSize: 15,
           fontWeight: FontWeight.w500,
         ),
       ),
-      trailing: isLast ? null : const Icon(Icons.chevron_right, color: Colors.white38),
+      trailing: isLast ? null : Icon(Icons.chevron_right, color: trailingIconColor),
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
     );

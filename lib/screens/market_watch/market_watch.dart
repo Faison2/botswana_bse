@@ -4,6 +4,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+import '../../theme_provider.dart';
 
 class MarketWatchScreen extends StatefulWidget {
   const MarketWatchScreen({super.key});
@@ -106,13 +108,10 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
           });
         }
       } else if (response.statusCode == 401) {
-        // Token expired or invalid
         setState(() {
           _errorMessage = 'Session expired. Please login again.';
           _isLoading = false;
         });
-        // Optionally, navigate to login screen
-        // Navigator.pushReplacementNamed(context, '/login');
       } else {
         setState(() {
           _errorMessage = 'Failed to load data: ${response.statusCode}';
@@ -175,7 +174,12 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
     });
   }
 
-  void _showStockDetails(Map<String, dynamic> stock) {
+  void _showStockDetails(Map<String, dynamic> stock, bool isDark) {
+    final dialogBgColor = isDark ? const Color(0xFF2A2A2A) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subtextColor = isDark ? Colors.white.withOpacity(0.6) : Colors.black54;
+    final dividerColor = isDark ? const Color(0xFF3A3A3A) : Colors.grey.shade300;
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -184,11 +188,11 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
           child: Container(
             constraints: const BoxConstraints(maxWidth: 500),
             decoration: BoxDecoration(
-              color: const Color(0xFF2A2A2A),
+              color: dialogBgColor,
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withAlpha((0.5 * 255).round()),
+                  color: Colors.black.withOpacity(isDark ? 0.5 : 0.2),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -213,7 +217,7 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                         width: 60,
                         height: 60,
                         decoration: BoxDecoration(
-                          color: Colors.white.withAlpha((0.2 * 255).round()),
+                          color: Colors.white.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(15),
                         ),
                         child: Icon(
@@ -240,8 +244,8 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                             const SizedBox(height: 4),
                             Text(
                               stock['Symbol'] ?? 'N/A',
-                              style: TextStyle(
-                                color: Colors.white.withAlpha((0.7 * 255).round()),
+                              style: const TextStyle(
+                                color: Colors.white70,
                                 fontSize: 14,
                               ),
                             ),
@@ -270,15 +274,15 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                               Text(
                                 'Current Price',
                                 style: TextStyle(
-                                  color: Colors.white.withAlpha((0.6 * 255).round()),
+                                  color: subtextColor,
                                   fontSize: 14,
                                 ),
                               ),
                               const SizedBox(height: 8),
                               Text(
                                 'TZS ${stock['ClosingPrice']}',
-                                style: const TextStyle(
-                                  color: Colors.white,
+                                style: TextStyle(
+                                  color: textColor,
                                   fontSize: 36,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -291,10 +295,10 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: stock['status'] == 'GAIN'
-                                      ? Colors.green.withAlpha((0.2 * 255).round())
+                                      ? Colors.green.withOpacity(0.2)
                                       : stock['status'] == 'LOSE'
-                                      ? Colors.red.withAlpha((0.2 * 255).round())
-                                      : Colors.grey.withAlpha((0.2 * 255).round()),
+                                      ? Colors.red.withOpacity(0.2)
+                                      : Colors.grey.withOpacity(0.2),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
@@ -315,39 +319,39 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                         ),
 
                         const SizedBox(height: 24),
-                        const Divider(color: Color(0xFF3A3A3A)),
+                        Divider(color: dividerColor),
                         const SizedBox(height: 16),
 
                         // Price Details
-                        _buildDetailRow('Opening Price', 'TZS ${stock['OpeningPrice'] ?? 'N/A'}'),
+                        _buildDetailRow('Opening Price', 'TZS ${stock['OpeningPrice'] ?? 'N/A'}', textColor, subtextColor),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Closing Price', 'TZS ${stock['ClosingPrice'] ?? 'N/A'}'),
+                        _buildDetailRow('Closing Price', 'TZS ${stock['ClosingPrice'] ?? 'N/A'}', textColor, subtextColor),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Settlement Price', 'TZS ${stock['SettlementPrice'] ?? 'N/A'}'),
+                        _buildDetailRow('Settlement Price', 'TZS ${stock['SettlementPrice'] ?? 'N/A'}', textColor, subtextColor),
                         const SizedBox(height: 12),
-                        _buildDetailRow('VWAP Price', 'TZS ${stock['VwapPrice'] ?? 'N/A'}'),
+                        _buildDetailRow('VWAP Price', 'TZS ${stock['VwapPrice'] ?? 'N/A'}', textColor, subtextColor),
 
                         const SizedBox(height: 16),
-                        const Divider(color: Color(0xFF3A3A3A)),
+                        Divider(color: dividerColor),
                         const SizedBox(height: 16),
 
                         // Range Details
-                        _buildDetailRow('Maximum Price', 'TZS ${stock['MaxPrice'] ?? 'N/A'}'),
+                        _buildDetailRow('Maximum Price', 'TZS ${stock['MaxPrice'] ?? 'N/A'}', textColor, subtextColor),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Minimum Price', 'TZS ${stock['MinPrice'] ?? 'N/A'}'),
+                        _buildDetailRow('Minimum Price', 'TZS ${stock['MinPrice'] ?? 'N/A'}', textColor, subtextColor),
 
                         const SizedBox(height: 16),
-                        const Divider(color: Color(0xFF3A3A3A)),
+                        Divider(color: dividerColor),
                         const SizedBox(height: 16),
 
                         // Additional Details
-                        _buildDetailRow('ISIN', stock['ISIN'] ?? 'N/A'),
+                        _buildDetailRow('ISIN', stock['ISIN'] ?? 'N/A', textColor, subtextColor),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Code', stock['Code'] ?? 'N/A'),
+                        _buildDetailRow('Code', stock['Code'] ?? 'N/A', textColor, subtextColor),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Security Type', stock['securitytype'] ?? 'N/A'),
+                        _buildDetailRow('Security Type', stock['securitytype'] ?? 'N/A', textColor, subtextColor),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Open Interest', stock['Openinterest'] ?? 'N/A'),
+                        _buildDetailRow('Open Interest', stock['Openinterest'] ?? 'N/A', textColor, subtextColor),
                       ],
                     ),
                   ),
@@ -360,22 +364,22 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
+  Widget _buildDetailRow(String label, String value, Color textColor, Color subtextColor) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           label,
           style: TextStyle(
-            color: Colors.white.withAlpha((0.6 * 255).round()),
+            color: subtextColor,
             fontSize: 14,
           ),
         ),
         Flexible(
           child: Text(
             value,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: textColor,
               fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
@@ -395,19 +399,35 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDark = themeProvider.isDarkMode;
+
+    final bgGradient = isDark
+        ? const LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        Color(0xFF2C1810),
+        Color(0xFF1A1A1A),
+        Color(0xFF0D0D0D),
+      ],
+    )
+        : const LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        Color(0xFFFFF8E7),
+        Color(0xFFF5F5F5),
+        Color(0xFFFFFFFF),
+      ],
+    );
+
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final accentColor = isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855);
+
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF2C1810),
-              Color(0xFF1A1A1A),
-              Color(0xFF0D0D0D),
-            ],
-          ),
-        ),
+        decoration: BoxDecoration(gradient: bgGradient),
         child: SafeArea(
           child: Column(
             children: [
@@ -419,19 +439,19 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                       onTap: () => Navigator.pop(context),
                       child: Container(
                         padding: const EdgeInsets.all(8),
-                        child: const Icon(
+                        child: Icon(
                           Icons.arrow_back,
-                          color: Colors.white,
+                          color: textColor,
                           size: 24,
                         ),
                       ),
                     ),
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         'Market Watch',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: textColor,
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
                         ),
@@ -439,9 +459,9 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                     ),
                     IconButton(
                       onPressed: _fetchMarketData,
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.refresh,
-                        color: Colors.white,
+                        color: accentColor,
                         size: 24,
                       ),
                     ),
@@ -453,9 +473,9 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
               // Content
               Expanded(
                 child: _isLoading
-                    ? const Center(
+                    ? Center(
                   child: CircularProgressIndicator(
-                    color: Colors.white,
+                    color: accentColor,
                   ),
                 )
                     : _errorMessage != null
@@ -473,8 +493,8 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 32),
                         child: Text(
                           _errorMessage!,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: textColor,
                             fontSize: 16,
                           ),
                           textAlign: TextAlign.center,
@@ -483,17 +503,23 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                       const SizedBox(height: 16),
                       ElevatedButton(
                         onPressed: _initializeAndFetch,
-                        child: const Text('Retry'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: accentColor,
+                        ),
+                        child: const Text(
+                          'Retry',
+                          style: TextStyle(color: Colors.white),
+                        ),
                       ),
                     ],
                   ),
                 )
                     : _marketData.isEmpty
-                    ? const Center(
+                    ? Center(
                   child: Text(
                     'No market data available',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: textColor,
                       fontSize: 16,
                     ),
                   ),
@@ -503,7 +529,7 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                   itemCount: _marketData.length,
                   itemBuilder: (context, index) {
                     final stock = _marketData[index];
-                    return _buildStockCard(stock);
+                    return _buildStockCard(stock, isDark);
                   },
                 ),
               ),
@@ -514,22 +540,28 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
     );
   }
 
-  Widget _buildStockCard(Map<String, dynamic> stock) {
+  Widget _buildStockCard(Map<String, dynamic> stock, bool isDark) {
     final priceHistory = stock['priceHistory'] as List<double>;
     final closePrice = double.tryParse(stock['ClosingPrice']?.toString() ?? '0') ?? 0;
-    final isPositive = closePrice >= closePrice;
+    final status = stock['status']?.toString().toUpperCase() ?? '';
+
+    final cardBgColor = isDark ? const Color(0xFF2A2A2A) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subtextColor = isDark ? Colors.white.withOpacity(0.5) : Colors.black54;
 
     return GestureDetector(
-      onTap: () => _showStockDetails(stock),
+      onTap: () => _showStockDetails(stock, isDark),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFF2A2A2A),
+          color: cardBgColor,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withAlpha((0.2 * 255).round()),
+              color: isDark
+                  ? Colors.black.withOpacity(0.2)
+                  : Colors.black.withOpacity(0.08),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -558,8 +590,8 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                     children: [
                       Text(
                         stock['Company'] ?? 'N/A',
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: textColor,
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
                         ),
@@ -570,7 +602,7 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                       Text(
                         stock['Symbol'] ?? 'N/A',
                         style: TextStyle(
-                          color: Colors.white.withAlpha((0.5 * 255).round()),
+                          color: subtextColor,
                           fontSize: 12,
                         ),
                       ),
@@ -584,8 +616,8 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                   children: [
                     Text(
                       'TZS ${stock['ClosingPrice'] ?? '0'}',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: textColor,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -595,10 +627,10 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         color: stock['status'] == 'GAIN'
-                            ? Colors.green.withAlpha((0.2 * 255).round())
+                            ? Colors.green.withOpacity(0.2)
                             : stock['status'] == 'LOSE'
-                            ? Colors.red.withAlpha((0.2 * 255).round())
-                            : Colors.grey.withAlpha((0.2 * 255).round()),
+                            ? Colors.red.withOpacity(0.2)
+                            : Colors.grey.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -626,7 +658,7 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
               child: CustomPaint(
                 painter: MiniGraphPainter(
                   priceHistory: priceHistory,
-                  isPositive: isPositive,
+                  status: status,
                 ),
                 child: Container(),
               ),
@@ -638,9 +670,9 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildQuickStat('Open', 'TZS ${stock['OpeningPrice'] ?? 'N/A'}'),
-                _buildQuickStat('High', 'TZS ${stock['MaxPrice'] ?? 'N/A'}'),
-                _buildQuickStat('Low', 'TZS ${stock['MinPrice'] ?? 'N/A'}'),
+                _buildQuickStat('Open', 'TZS ${stock['OpeningPrice'] ?? 'N/A'}', subtextColor, textColor),
+                _buildQuickStat('High', 'TZS ${stock['MaxPrice'] ?? 'N/A'}', subtextColor, textColor),
+                _buildQuickStat('Low', 'TZS ${stock['MinPrice'] ?? 'N/A'}', subtextColor, textColor),
               ],
             ),
           ],
@@ -649,22 +681,22 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
     );
   }
 
-  Widget _buildQuickStat(String label, String value) {
+  Widget _buildQuickStat(String label, String value, Color subtextColor, Color textColor) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
           style: TextStyle(
-            color: Colors.white.withAlpha((0.5 * 255).round()),
+            color: subtextColor,
             fontSize: 10,
           ),
         ),
         const SizedBox(height: 2),
         Text(
           value,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: textColor,
             fontSize: 11,
             fontWeight: FontWeight.w600,
           ),
@@ -677,16 +709,26 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
 // Custom painter for mini graph
 class MiniGraphPainter extends CustomPainter {
   final List<double> priceHistory;
-  final bool isPositive;
+  final String status;
 
-  MiniGraphPainter({required this.priceHistory, required this.isPositive});
+  MiniGraphPainter({required this.priceHistory, required this.status});
 
   @override
   void paint(Canvas canvas, Size size) {
     if (priceHistory.isEmpty) return;
 
+    // Determine color based on status
+    Color graphColor;
+    if (status == 'GAIN') {
+      graphColor = const Color(0xFF4CAF50); // Green
+    } else if (status == 'LOSE') {
+      graphColor = Colors.red; // Red
+    } else {
+      graphColor = Colors.grey; // Gray for NO CHANGE or other
+    }
+
     final paint = Paint()
-      ..color = isPositive ? const Color(0xFF4CAF50) : Colors.red
+      ..color = graphColor
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -696,8 +738,8 @@ class MiniGraphPainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          (isPositive ? const Color(0xFF4CAF50) : Colors.red).withAlpha((0.3 * 255).round()),
-          (isPositive ? const Color(0xFF4CAF50) : Colors.red).withAlpha((0.0 * 255).round()),
+          graphColor.withOpacity(0.3),
+          graphColor.withOpacity(0.0),
         ],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
       ..style = PaintingStyle.fill;
