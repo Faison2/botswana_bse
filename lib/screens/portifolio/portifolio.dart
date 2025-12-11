@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../theme_provider.dart';
 
 class PortfolioScreen extends StatefulWidget {
   const PortfolioScreen({super.key});
@@ -44,23 +46,40 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDark = themeProvider.isDarkMode;
+
+    final bgGradient = isDark
+        ? const LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        Color(0xFF2C1810),
+        Color(0xFF1A1A1A),
+        Color(0xFF0D0D0D),
+      ],
+    )
+        : const LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        Color(0xFFFFF8E7),
+        Color(0xFFF5F5F5),
+        Color(0xFFFFFFFF),
+      ],
+    );
+
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF2C1810), Color(0xFF1A1A1A), Color(0xFF0D0D0D)],
-          ),
-        ),
+        decoration: BoxDecoration(gradient: bgGradient),
         child: SafeArea(
           child: Column(
             children: [
-              _buildTabSelector(),
+              _buildTabSelector(isDark),
               const SizedBox(height: 20),
-              _buildPortfolioCard(),
+              _buildPortfolioCard(isDark),
               const SizedBox(height: 20),
-              Expanded(child: _buildPortfolioTable()),
+              Expanded(child: _buildPortfolioTable(isDark)),
             ],
           ),
         ),
@@ -68,87 +87,138 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
     );
   }
 
+  Widget _buildTabSelector(bool isDark) {
+    final accentColor = isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855);
+    final inactiveColor = isDark ? Colors.white54 : Colors.black45;
+    final bgColor = isDark ? Colors.transparent : Colors.white.withOpacity(0.3);
 
-
-  Widget _buildTabSelector() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Row(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                setState(() => _selectedTab = 'PORTFOLIO');
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: _selectedTab == 'PORTFOLIO'
-                      ? const Color(0xFF8B6914)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(25),
-                ),
-                child: Text(
-                  'PORTFOLIO',
-                  style: TextStyle(
-                    color: _selectedTab == 'PORTFOLIO'
-                        ? Colors.white
-                        : Colors.white54,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1A1A1A) : Colors.white.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(25),
+          boxShadow: isDark
+              ? []
+              : [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(4),
+        child: Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() => _selectedTab = 'PORTFOLIO');
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: _selectedTab == 'PORTFOLIO' ? accentColor : bgColor,
+                    borderRadius: BorderRadius.circular(25),
+                    boxShadow: _selectedTab == 'PORTFOLIO'
+                        ? [
+                      BoxShadow(
+                        color: accentColor.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ]
+                        : [],
                   ),
-                  textAlign: TextAlign.center,
+                  child: Text(
+                    'PORTFOLIO',
+                    style: TextStyle(
+                      color: _selectedTab == 'PORTFOLIO'
+                          ? Colors.white
+                          : inactiveColor,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                setState(() => _selectedTab = 'ORDERS');
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: _selectedTab == 'ORDERS'
-                      ? const Color(0xFF8B6914)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(25),
-                ),
-                child: Text(
-                  'ORDERS',
-                  style: TextStyle(
-                    color: _selectedTab == 'ORDERS'
-                        ? Colors.white
-                        : Colors.white54,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+            const SizedBox(width: 12),
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() => _selectedTab = 'ORDERS');
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: _selectedTab == 'ORDERS' ? accentColor : bgColor,
+                    borderRadius: BorderRadius.circular(25),
+                    boxShadow: _selectedTab == 'ORDERS'
+                        ? [
+                      BoxShadow(
+                        color: accentColor.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ]
+                        : [],
                   ),
-                  textAlign: TextAlign.center,
+                  child: Text(
+                    'ORDERS',
+                    style: TextStyle(
+                      color: _selectedTab == 'ORDERS'
+                          ? Colors.white
+                          : inactiveColor,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildPortfolioCard() {
+  Widget _buildPortfolioCard(bool isDark) {
+    final cardGradient = isDark
+        ? const LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        Color(0xFF8B6914),
+        Color(0xFF6B5010),
+      ],
+    )
+        : const LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        Color(0xFFD4A855),
+        Color(0xFFB8860B),
+      ],
+    );
+
+    final textColor = Colors.white;
+    final subtextColor = isDark ? Colors.white.withOpacity(0.7) : Colors.white.withOpacity(0.9);
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [const Color(0xFF8B6914), const Color(0xFF6B5010)],
-        ),
+        gradient: cardGradient,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
+            color: isDark
+                ? Colors.black.withOpacity(0.3)
+                : Colors.black.withOpacity(0.15),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -158,10 +228,10 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Title
-          const Text(
+          Text(
             'Total Portfolio Balance',
             style: TextStyle(
-              color: Colors.white,
+              color: textColor,
               fontSize: 15,
               fontWeight: FontWeight.w500,
             ),
@@ -174,14 +244,14 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
             children: [
               Text(
                 _isBalanceVisible ? '\$ 16,300.50' : '••••••••',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: textColor,
                   fontSize: 42,
                   fontWeight: FontWeight.w300,
                   letterSpacing: 1,
                 ),
               ),
-              const Icon(Icons.refresh, color: Colors.white, size: 28),
+              Icon(Icons.refresh, color: textColor, size: 28),
             ],
           ),
           const SizedBox(height: 12),
@@ -207,7 +277,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
               Text(
                 'in the past week',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
+                  color: subtextColor,
                   fontSize: 13,
                 ),
               ),
@@ -218,12 +288,31 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
     );
   }
 
-  Widget _buildPortfolioTable() {
+  Widget _buildPortfolioTable(bool isDark) {
+    final tableBgColor = isDark
+        ? const Color(0xFF2A2A2A).withOpacity(0.5)
+        : Colors.white.withOpacity(0.7);
+    final headerBgColor = isDark
+        ? Colors.black.withOpacity(0.2)
+        : Colors.grey.shade200.withOpacity(0.5);
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final headerTextColor = isDark ? Colors.white.withOpacity(0.7) : Colors.black54;
+    final borderColor = isDark ? Colors.white.withOpacity(0.1) : Colors.grey.withOpacity(0.2);
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2A2A).withOpacity(0.5),
+        color: tableBgColor,
         borderRadius: BorderRadius.circular(12),
+        boxShadow: isDark
+            ? []
+            : [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -231,7 +320,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.2),
+              color: headerBgColor,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
@@ -244,7 +333,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                   child: Text(
                     'Date',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
+                      color: headerTextColor,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -255,7 +344,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                   child: Text(
                     'Company',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
+                      color: headerTextColor,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -266,7 +355,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                   child: Text(
                     'Current Price',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
+                      color: headerTextColor,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -278,7 +367,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                   child: Text(
                     'Quantity',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
+                      color: headerTextColor,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -290,7 +379,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                   child: Text(
                     'Value',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
+                      color: headerTextColor,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -316,7 +405,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                   decoration: BoxDecoration(
                     border: Border(
                       bottom: BorderSide(
-                        color: Colors.white.withOpacity(0.1),
+                        color: borderColor,
                         width: 1,
                       ),
                     ),
@@ -328,8 +417,8 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                         flex: 2,
                         child: Text(
                           item['date'],
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: textColor,
                             fontSize: 11,
                           ),
                         ),
@@ -338,8 +427,8 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                         flex: 3,
                         child: Text(
                           item['company'],
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: textColor,
                             fontSize: 11,
                             height: 1.3,
                           ),
@@ -349,8 +438,8 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                         flex: 2,
                         child: Text(
                           item['currentPrice'],
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: textColor,
                             fontSize: 11,
                           ),
                           textAlign: TextAlign.center,
@@ -360,8 +449,8 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                         flex: 2,
                         child: Text(
                           item['quantity'],
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: textColor,
                             fontSize: 11,
                           ),
                           textAlign: TextAlign.center,
@@ -371,8 +460,8 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                         flex: 2,
                         child: Text(
                           item['value'],
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: textColor,
                             fontSize: 11,
                           ),
                           textAlign: TextAlign.right,

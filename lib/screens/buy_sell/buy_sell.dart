@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+import '../../theme_provider.dart';
 import '../dashboard/dashboard.dart';
 
 class TradingPage extends StatefulWidget {
@@ -469,19 +471,41 @@ class _TradingPageState extends State<TradingPage> {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDark = themeProvider.isDarkMode;
+
+    final bgGradient = isDark
+        ? const LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        Color(0xFF2C1810),
+        Color(0xFF1A1A1A),
+        Color(0xFF0D0D0D),
+      ],
+    )
+        : const LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        Color(0xFFFFF8E7),
+        Color(0xFFF5F5F5),
+        Color(0xFFFFFFFF),
+      ],
+    );
+
+    final accentColor = isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855);
+    final toggleBgColor = isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF0F0F0);
+    final fieldBorderColor = isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855);
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subtextColor = isDark ? Colors.grey : Colors.grey.shade600;
+    final cardColor = isDark ? const Color(0xFF3A3530) : Colors.white;
+    final dropdownBgColor = isDark ? const Color(0xFF2A2A2A) : Colors.white;
+    final fieldBgColor = isDark ? Colors.transparent : Colors.grey.shade50;
+
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF2C1810),
-              Color(0xFF1A1A1A),
-              Color(0xFF0D0D0D),
-            ],
-          ),
-        ),
+        decoration: BoxDecoration(gradient: bgGradient),
         child: SafeArea(
           child: Column(
             children: [
@@ -494,8 +518,17 @@ class _TradingPageState extends State<TradingPage> {
                         // BUY/SELL Toggle
                         Container(
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1A1A1A),
+                            color: toggleBgColor,
                             borderRadius: BorderRadius.circular(30),
+                            boxShadow: isDark
+                                ? []
+                                : [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 10,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
                           padding: const EdgeInsets.all(4),
                           child: Row(
@@ -516,22 +549,26 @@ class _TradingPageState extends State<TradingPage> {
                                         end: Alignment.centerRight,
                                         colors: [
                                           Colors.green,
-                                          Colors.black12,
+                                          Colors.black,
                                         ],
                                       ),
                                       borderRadius: BorderRadius.circular(28),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.green.withOpacity(0.3),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
                                     )
-                                        : BoxDecoration(
-                                      color: Colors.transparent,
-                                      borderRadius: BorderRadius.circular(28),
-                                    ),
-                                    child: const Center(
+                                        : null,
+                                    child: Center(
                                       child: Text(
                                         'BUY',
                                         style: TextStyle(
-                                          color: Colors.white,
+                                          color: isBuy ? Colors.white : subtextColor,
                                           fontSize: 18,
-                                          fontWeight: FontWeight.w400,
+                                          fontWeight: isBuy ? FontWeight.bold : FontWeight.w400,
                                         ),
                                       ),
                                     ),
@@ -553,23 +590,27 @@ class _TradingPageState extends State<TradingPage> {
                                         begin: Alignment.centerLeft,
                                         end: Alignment.centerRight,
                                         colors: [
-                                          Colors.black26,
+                                         Colors.black,
                                           Colors.red,
                                         ],
                                       ),
                                       borderRadius: BorderRadius.circular(28),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.red.withOpacity(0.3),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
                                     )
-                                        : BoxDecoration(
-                                      color: Colors.transparent,
-                                      borderRadius: BorderRadius.circular(28),
-                                    ),
-                                    child: const Center(
+                                        : null,
+                                    child: Center(
                                       child: Text(
                                         'SELL',
                                         style: TextStyle(
-                                          color: Colors.white,
+                                          color: !isBuy ? Colors.white : subtextColor,
                                           fontSize: 18,
-                                          fontWeight: FontWeight.bold,
+                                          fontWeight: !isBuy ? FontWeight.bold : FontWeight.w400,
                                         ),
                                       ),
                                     ),
@@ -586,10 +627,10 @@ class _TradingPageState extends State<TradingPage> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
+                              Text(
                                 'Company',
                                 style: TextStyle(
-                                  color: Colors.white,
+                                  color: textColor,
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -598,15 +639,16 @@ class _TradingPageState extends State<TradingPage> {
                               Container(
                                 padding: const EdgeInsets.symmetric(vertical: 16),
                                 decoration: BoxDecoration(
+                                  color: fieldBgColor,
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: const Color(0xFF8B6914),
+                                    color: fieldBorderColor,
                                     width: 1,
                                   ),
                                 ),
-                                child: const Center(
+                                child: Center(
                                   child: CircularProgressIndicator(
-                                    color: Color(0xFF8B6914),
+                                    color: accentColor,
                                     strokeWidth: 2,
                                   ),
                                 ),
@@ -614,7 +656,13 @@ class _TradingPageState extends State<TradingPage> {
                             ],
                           )
                         else
-                          _buildCompanyDropdown(),
+                          _buildCompanyDropdown(
+                            textColor: textColor,
+                            fieldBorderColor: fieldBorderColor,
+                            dropdownBgColor: dropdownBgColor,
+                            accentColor: accentColor,
+                            fieldBgColor: fieldBgColor,
+                          ),
                         const SizedBox(height: 16),
 
                         // Time In Force Dropdown
@@ -627,6 +675,11 @@ class _TradingPageState extends State<TradingPage> {
                               selectedTimeInForce = value;
                             });
                           },
+                          textColor: textColor,
+                          fieldBorderColor: fieldBorderColor,
+                          dropdownBgColor: dropdownBgColor,
+                          accentColor: accentColor,
+                          fieldBgColor: fieldBgColor,
                         ),
                         const SizedBox(height: 16),
 
@@ -640,6 +693,11 @@ class _TradingPageState extends State<TradingPage> {
                               selectedBroker = value;
                             });
                           },
+                          textColor: textColor,
+                          fieldBorderColor: fieldBorderColor,
+                          dropdownBgColor: dropdownBgColor,
+                          accentColor: accentColor,
+                          fieldBgColor: fieldBgColor,
                         ),
                         const SizedBox(height: 16),
 
@@ -648,6 +706,9 @@ class _TradingPageState extends State<TradingPage> {
                           'Quantity',
                           quantityController,
                           keyboardType: TextInputType.number,
+                          textColor: textColor,
+                          fieldBorderColor: fieldBorderColor,
+                          fieldBgColor: fieldBgColor,
                         ),
                         const SizedBox(height: 16),
 
@@ -655,7 +716,10 @@ class _TradingPageState extends State<TradingPage> {
                         _buildTextField(
                           'Price',
                           priceController,
-                          keyboardType: TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          textColor: textColor,
+                          fieldBorderColor: fieldBorderColor,
+                          fieldBgColor: fieldBgColor,
                         ),
                         const SizedBox(height: 24),
 
@@ -663,25 +727,34 @@ class _TradingPageState extends State<TradingPage> {
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF3A3530),
+                            color: cardColor,
                             borderRadius: BorderRadius.circular(12),
+                            boxShadow: isDark
+                                ? []
+                                : [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
                           ),
                           child: Column(
                             children: [
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const Text(
+                                  Text(
                                     'GROSS TOTAL:',
                                     style: TextStyle(
-                                      color: Colors.grey,
+                                      color: subtextColor,
                                       fontSize: 14,
                                     ),
                                   ),
                                   Text(
                                     'BWP ${grossTotal.toStringAsFixed(2)}',
-                                    style: const TextStyle(
-                                      color: Colors.grey,
+                                    style: TextStyle(
+                                      color: subtextColor,
                                       fontSize: 14,
                                     ),
                                   ),
@@ -691,17 +764,17 @@ class _TradingPageState extends State<TradingPage> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const Text(
+                                  Text(
                                     'CUSTODIAL FEE (1%):',
                                     style: TextStyle(
-                                      color: Colors.grey,
+                                      color: subtextColor,
                                       fontSize: 14,
                                     ),
                                   ),
                                   Text(
                                     'BWP ${custodialFee.toStringAsFixed(2)}',
-                                    style: const TextStyle(
-                                      color: Colors.grey,
+                                    style: TextStyle(
+                                      color: subtextColor,
                                       fontSize: 14,
                                     ),
                                   ),
@@ -711,40 +784,40 @@ class _TradingPageState extends State<TradingPage> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const Text(
+                                  Text(
                                     'CHARGES:',
                                     style: TextStyle(
-                                      color: Colors.grey,
+                                      color: subtextColor,
                                       fontSize: 14,
                                     ),
                                   ),
                                   Text(
                                     'BWP ${charges.toStringAsFixed(2)}',
-                                    style: const TextStyle(
-                                      color: Colors.grey,
+                                    style: TextStyle(
+                                      color: subtextColor,
                                       fontSize: 14,
                                     ),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 12),
-                              const Divider(color: Colors.grey),
+                              Divider(color: subtextColor),
                               const SizedBox(height: 12),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const Text(
+                                  Text(
                                     'NET TOTAL:',
                                     style: TextStyle(
-                                      color: Colors.white,
+                                      color: textColor,
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                   Text(
                                     'BWP ${netTotal.toStringAsFixed(2)}',
-                                    style: const TextStyle(
-                                      color: Color(0xFF8B6914),
+                                    style: TextStyle(
+                                      color: accentColor,
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -762,7 +835,9 @@ class _TradingPageState extends State<TradingPage> {
                             Expanded(
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF4A4540),
+                                  backgroundColor: isDark
+                                      ? const Color(0xFF4A4540)
+                                      : Colors.grey.shade300,
                                   padding: const EdgeInsets.symmetric(vertical: 16),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
@@ -771,10 +846,10 @@ class _TradingPageState extends State<TradingPage> {
                                 onPressed: isLoading ? null : () {
                                   Navigator.pop(context);
                                 },
-                                child: const Text(
+                                child: Text(
                                   'CLOSE',
                                   style: TextStyle(
-                                    color: Colors.white,
+                                    color: isDark ? Colors.white : Colors.black87,
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -785,7 +860,7 @@ class _TradingPageState extends State<TradingPage> {
                             Expanded(
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF8B6914),
+                                  backgroundColor: accentColor,
                                   padding: const EdgeInsets.symmetric(vertical: 16),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
@@ -826,14 +901,20 @@ class _TradingPageState extends State<TradingPage> {
     );
   }
 
-  Widget _buildCompanyDropdown() {
+  Widget _buildCompanyDropdown({
+    required Color textColor,
+    required Color fieldBorderColor,
+    required Color dropdownBgColor,
+    required Color accentColor,
+    required Color fieldBgColor,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Company',
           style: TextStyle(
-            color: Colors.white,
+            color: textColor,
             fontSize: 14,
             fontWeight: FontWeight.w500,
           ),
@@ -841,30 +922,31 @@ class _TradingPageState extends State<TradingPage> {
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
+            color: fieldBgColor,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: const Color(0xFF8B6914),
+              color: fieldBorderColor,
               width: 1,
             ),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: selectedCompany,
-              hint: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
+              hint: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
                   'Select Company',
-                  style: TextStyle(color: Colors.white54),
+                  style: TextStyle(color: textColor.withOpacity(0.5)),
                 ),
               ),
               isExpanded: true,
-              dropdownColor: const Color(0xFF2A2A2A),
-              icon: const Padding(
-                padding: EdgeInsets.only(right: 16),
-                child: Icon(Icons.arrow_drop_down, color: Color(0xFF8B6914)),
+              dropdownColor: dropdownBgColor,
+              icon: Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: Icon(Icons.arrow_drop_down, color: accentColor),
               ),
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: textColor,
                 fontSize: 14,
               ),
               items: _allStocks.map((stock) {
@@ -887,8 +969,8 @@ class _TradingPageState extends State<TradingPage> {
                         Expanded(
                           child: Text(
                             companyName,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: textColor,
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
                             ),
@@ -897,8 +979,8 @@ class _TradingPageState extends State<TradingPage> {
                         ),
                         Text(
                           '(BWP $priceString)',
-                          style: const TextStyle(
-                            color: Color(0xFF8B6914), // Gold color for price
+                          style: TextStyle(
+                            color: accentColor,
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                           ),
@@ -931,15 +1013,20 @@ class _TradingPageState extends State<TradingPage> {
       String label,
       String? value,
       List<String> options,
-      ValueChanged<String?> onChanged,
-      ) {
+      ValueChanged<String?> onChanged, {
+        required Color textColor,
+        required Color fieldBorderColor,
+        required Color dropdownBgColor,
+        required Color accentColor,
+        required Color fieldBgColor,
+      }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: textColor,
             fontSize: 14,
             fontWeight: FontWeight.w500,
           ),
@@ -947,9 +1034,10 @@ class _TradingPageState extends State<TradingPage> {
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
+            color: fieldBgColor,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: const Color(0xFF8B6914),
+              color: fieldBorderColor,
               width: 1,
             ),
           ),
@@ -957,13 +1045,13 @@ class _TradingPageState extends State<TradingPage> {
             child: DropdownButton<String>(
               value: value,
               isExpanded: true,
-              dropdownColor: const Color(0xFF2A2A2A),
-              icon: const Padding(
-                padding: EdgeInsets.only(right: 16),
-                child: Icon(Icons.arrow_drop_down, color: Color(0xFF8B6914)),
+              dropdownColor: dropdownBgColor,
+              icon: Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: Icon(Icons.arrow_drop_down, color: accentColor),
               ),
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: textColor,
                 fontSize: 14,
               ),
               items: options.map((option) {
@@ -973,8 +1061,8 @@ class _TradingPageState extends State<TradingPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     child: Text(
                       option,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: textColor,
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                       ),
@@ -994,14 +1082,17 @@ class _TradingPageState extends State<TradingPage> {
       String label,
       TextEditingController controller, {
         TextInputType keyboardType = TextInputType.text,
+        required Color textColor,
+        required Color fieldBorderColor,
+        required Color fieldBgColor,
       }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: textColor,
             fontSize: 14,
             fontWeight: FontWeight.w500,
           ),
@@ -1009,31 +1100,33 @@ class _TradingPageState extends State<TradingPage> {
         const SizedBox(height: 8),
         TextField(
           controller: controller,
-          style: const TextStyle(color: Colors.white),
+          style: TextStyle(color: textColor),
           keyboardType: keyboardType,
           decoration: InputDecoration(
+            filled: true,
+            fillColor: fieldBgColor,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 14,
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(
-                color: Color(0xFF8B6914),
+              borderSide: BorderSide(
+                color: fieldBorderColor,
                 width: 1,
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(
-                color: Color(0xFF8B6914),
+              borderSide: BorderSide(
+                color: fieldBorderColor,
                 width: 1,
               ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(
-                color: Color(0xFF8B6914),
+              borderSide: BorderSide(
+                color: fieldBorderColor,
                 width: 2,
               ),
             ),
