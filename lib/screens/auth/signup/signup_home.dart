@@ -828,7 +828,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
             style: const TextStyle(
               color: Color(0xFFD4A855),
               fontSize: 10,
-              fontStyle: FontStyle.italic,
             ),
           ),
         ),
@@ -995,12 +994,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
           // CDS Number field only for existing clients
           if (!_isNewClient) ...[
-            _buildLabelWithField('CDS Number *', _buildTextField('Enter CDS number', _cdsNumberController)),
+            _buildLabelWithField('CDS Number ', _buildTextField('Enter CDS number', _cdsNumberController)),
             const SizedBox(height: 15),
           ],
 
           // Broker dropdown
-          _buildLabelWithField('Broker *', _buildBrokerDropdown()),
+          _buildLabelWithField('Broker ', _buildBrokerDropdown()),
           const SizedBox(height: 15),
 
           Row(
@@ -1029,17 +1028,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
             ],
           ),
           const SizedBox(height: 15),
-          _buildLabelWithField('First Name *', _buildTextField('Enter first name', _firstNameController)),
+          _buildLabelWithField('First Name ', _buildTextField('Enter first name', _firstNameController)),
           const SizedBox(height: 15),
-          _buildLabelWithField('Last Name *', _buildTextField('Enter last name', _lastNameController)),
+          _buildLabelWithField('Last Name ', _buildTextField('Enter last name', _lastNameController)),
           const SizedBox(height: 15),
-          _buildLabelWithField('Email *', _buildTextField('Enter email address', _emailController, keyboardType: TextInputType.emailAddress)),
+          _buildLabelWithField('Email ', _buildTextField('Enter email address', _emailController, keyboardType: TextInputType.emailAddress)),
           const SizedBox(height: 15),
-          _buildLabelWithField('ID Number *', _buildTextField('Enter ID number', _idNumberController)),
+          _buildLabelWithField('ID Number ', _buildTextField('Enter ID number', _idNumberController)),
           const SizedBox(height: 15),
-          _buildLabelWithField('Address *', _buildTextField('Enter address', _addressController)),
+          _buildLabelWithField('Address ', _buildTextField('Enter address', _addressController)),
           const SizedBox(height: 15),
-          _buildLabelWithField('Phone Number *', _buildPhoneField()),
+          _buildLabelWithField('Phone Number ', _buildPhoneField()),
         ],
       ),
     );
@@ -1050,7 +1049,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildLabelWithField('Date of Birth *', _buildTextField(
+          _buildLabelWithField('Date of Birth ', _buildTextField(
             'YYYY-MM-DD',
             _dobController,
             onTap: () async {
@@ -1335,11 +1334,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
             ],
           ),
 
-          // Document upload section for new clients
           if (_isNewClient) ...[
             const SizedBox(height: 25),
             const Text(
-              'Document Upload *',
+              'Document Upload ',
               style: TextStyle(
                 color: Color(0xFF6B5D4F),
                 fontSize: 12,
