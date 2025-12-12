@@ -243,16 +243,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
   }
 
-  // Infer content type from file extension
   String _contentTypeForFile(File file) {
     final name = file.path.toLowerCase();
-    if (name.endsWith('.pdf')) return 'application/pdf';
-    if (name.endsWith('.png')) return 'image/png';
+    if (name.endsWith('.pdf')) return '.pdf';
+    if (name.endsWith('.png')) return '.png';
+    if (name.endsWith('.docs')) return '.docs';
+    if (name.endsWith('.csv')) return '.csv';
+    if (name.endsWith('.xls')) return '.xls';
+    if (name.endsWith('.jpg')) return '.jpg';
+    if (name.endsWith('.xlsx')) return '.xlsx';
     if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg';
     return 'application/octet-stream';
   }
-
-  // Update the _buildDocumentUploadField widget to show PDF icon:
 
   Widget _buildDocumentUploadField(String label, File? file, String documentType) {
     return Column(
@@ -467,7 +469,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         "Othernames": _firstNameController.text,
         "Surname": _lastNameController.text,
         "accountClass": _selectedAccountClass,
-        "AccountType": _selectedAccountType,
+        "AccountType": _selectedAccountType == "Individual" ? "I" : "C", // Changed here
         "idtype": _selectedIdType,
         "myIdentification": _idNumberController.text,
         "myJointName": _jointNameController.text,
@@ -509,7 +511,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         "IDExpiryDate": _idExpiryDateController.text,
         "AgreementDate": _agreementDateController.text,
         "clientType": _isNewClient ? "new" : "existing",
-        "CreatedBy": "Mobile",
+        "CreatedBy": "MOBILE",
         "Documents": documents
       };
 
@@ -529,7 +531,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ),
       );
 
-      // Use same endpoint for both
       final response = await http.post(
         Uri.parse('http://192.168.3.201/MainAPI/Home/AccountOpening'),
         headers: {'Content-Type': 'application/json'},

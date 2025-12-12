@@ -408,6 +408,7 @@ class _TradingPageState extends State<TradingPage> {
         "Brokerage": 0.0,
         "MaturityDate": maturityDate.toIso8601String().split('T')[0],
         "Currency": "BWP",
+        "Source": "MOBILE",
       };
 
       final response = await http.post(
