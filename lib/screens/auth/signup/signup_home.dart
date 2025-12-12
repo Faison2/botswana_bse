@@ -1050,18 +1050,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 10),
-          const Center(
-            child: Text(
-              'Personal Details',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2C1810),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
           _buildLabelWithField('Date of Birth *', _buildTextField(
             'YYYY-MM-DD',
             _dobController,
@@ -1156,18 +1144,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 10),
-          const Center(
-            child: Text(
-              'Location Details',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2C1810),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
@@ -1221,18 +1197,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 10),
-          const Center(
-            child: Text(
-              'Employment & Income',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2C1810),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
@@ -1274,18 +1238,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 10),
-          const Center(
-            child: Text(
-              'Bank Details',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2C1810),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
@@ -1341,18 +1293,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 10),
-          const Center(
-            child: Text(
-              'Final Step',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2C1810),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
@@ -1660,10 +1600,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
       ),
     );
   }
-
   Widget _buildPhoneField() {
     return Container(
-      height: 50, // Increased from 45 for better spacing
+      height: 50,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
@@ -1680,7 +1619,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
                 color: const Color(0xFFF5F5F5),
                 borderRadius: const BorderRadius.only(
@@ -1691,41 +1630,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Botswana Flag
-                  Container(
-                    width: 24,
-                    height: 16,
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade900,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                    child: Center(
-                      child: Container(
-                        width: 20,
-                        height: 12,
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                        ),
-                        child: Center(
-                          child: Container(
-                            width: 16,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: Colors.black,
-                            ),
-                            child: Center(
-                              child: Container(
-                                width: 12,
-                                height: 4,
-                                decoration: const BoxDecoration(
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                  // Botswana Flag Emoji
+                  const Text(
+                    '🇧🇼',
+                    style: TextStyle(fontSize: 20),
                   ),
                   const SizedBox(width: 6),
                   Text(
