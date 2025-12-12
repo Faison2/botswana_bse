@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 class DepositsTab extends StatefulWidget {
-  const DepositsTab({Key? key}) : super(key: key);
+  final bool isDark;
+
+  const DepositsTab({Key? key, required this.isDark}) : super(key: key);
 
   @override
   State<DepositsTab> createState() => _DepositsTabState();
@@ -28,82 +30,118 @@ class _DepositsTabState extends State<DepositsTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Select Method',
-              style: TextStyle(color: Colors.white, fontSize: 16),
+              style: TextStyle(
+                color: widget.isDark ? Colors.white : Colors.black87,
+                fontSize: 16,
+              ),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _methodController,
-              style: const TextStyle(color: Colors.white, fontSize: 20),
+              style: TextStyle(
+                color: widget.isDark ? Colors.white : Colors.black87,
+                fontSize: 20,
+              ),
               decoration: InputDecoration(
                 filled: true,
                 fillColor: Colors.transparent,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white30),
+                  borderSide: BorderSide(
+                    color: widget.isDark ? Colors.white30 : Colors.black26,
+                  ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white30),
+                  borderSide: BorderSide(
+                    color: widget.isDark ? Colors.white30 : Colors.black26,
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF8B6914)),
+                  borderSide: BorderSide(
+                    color: widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
+                  ),
                 ),
                 contentPadding: const EdgeInsets.all(16),
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'Description',
-              style: TextStyle(color: Colors.white, fontSize: 16),
+              style: TextStyle(
+                color: widget.isDark ? Colors.white : Colors.black87,
+                fontSize: 16,
+              ),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _descriptionController,
-              style: const TextStyle(color: Colors.white, fontSize: 20),
+              style: TextStyle(
+                color: widget.isDark ? Colors.white : Colors.black87,
+                fontSize: 20,
+              ),
               decoration: InputDecoration(
                 filled: true,
                 fillColor: Colors.transparent,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white30),
+                  borderSide: BorderSide(
+                    color: widget.isDark ? Colors.white30 : Colors.black26,
+                  ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white30),
+                  borderSide: BorderSide(
+                    color: widget.isDark ? Colors.white30 : Colors.black26,
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF8B6914)),
+                  borderSide: BorderSide(
+                    color: widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
+                  ),
                 ),
                 contentPadding: const EdgeInsets.all(16),
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'Enter Amount',
-              style: TextStyle(color: Colors.white, fontSize: 16),
+              style: TextStyle(
+                color: widget.isDark ? Colors.white : Colors.black87,
+                fontSize: 16,
+              ),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _amountController,
-              style: const TextStyle(color: Colors.white, fontSize: 20),
+              style: TextStyle(
+                color: widget.isDark ? Colors.white : Colors.black87,
+                fontSize: 20,
+              ),
               decoration: InputDecoration(
                 filled: true,
                 fillColor: Colors.transparent,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white30),
+                  borderSide: BorderSide(
+                    color: widget.isDark ? Colors.white30 : Colors.black26,
+                  ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white30),
+                  borderSide: BorderSide(
+                    color: widget.isDark ? Colors.white30 : Colors.black26,
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF8B6914)),
+                  borderSide: BorderSide(
+                    color: widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
+                  ),
                 ),
                 contentPadding: const EdgeInsets.all(16),
               ),
@@ -115,16 +153,16 @@ class _DepositsTabState extends State<DepositsTab> {
                   child: ElevatedButton(
                     onPressed: () => Navigator.pop(context),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black45,
+                      backgroundColor: widget.isDark ? Colors.black45 : Colors.grey[300],
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text(
+                    child: Text(
                       'CLOSE',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: widget.isDark ? Colors.white : Colors.black87,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
@@ -136,7 +174,7 @@ class _DepositsTabState extends State<DepositsTab> {
                   child: ElevatedButton(
                     onPressed: () {},
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF8B6914),
+                      backgroundColor: widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -189,21 +227,30 @@ class _DepositsTabState extends State<DepositsTab> {
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
                   transaction['date']!,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: TextStyle(
+                    color: widget.isDark ? Colors.white : Colors.black87,
+                    fontSize: 14,
+                  ),
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
                   transaction['description']!,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: TextStyle(
+                    color: widget.isDark ? Colors.white : Colors.black87,
+                    fontSize: 14,
+                  ),
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
                   transaction['amount']!,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: TextStyle(
+                    color: widget.isDark ? Colors.white : Colors.black87,
+                    fontSize: 14,
+                  ),
                   textAlign: TextAlign.right,
                 ),
               ),
@@ -218,8 +265,8 @@ class _DepositsTabState extends State<DepositsTab> {
       padding: const EdgeInsets.only(bottom: 12),
       child: Text(
         text,
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
+          color: widget.isDark ? Colors.white : Colors.black87,
           fontSize: 15,
           fontWeight: FontWeight.w600,
         ),
