@@ -84,8 +84,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                             const Color(0xFF6B5010),
                           ]
                               : [
-                            const Color(0xFFFFD700),
                             const Color(0xFFDAA520),
+                            const Color(0xFF8B6914),
                           ],
                         ),
                         borderRadius: BorderRadius.circular(16),

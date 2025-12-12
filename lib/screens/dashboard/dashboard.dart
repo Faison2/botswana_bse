@@ -379,8 +379,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const Color(0xFF6B5010),
           ]
               : [
-            const Color(0xFFFFD700),
-            const Color(0xFFDAA520),
+            const Color(0xFF8B6914),
+            const Color(0xFF6B5010),
           ],
         ),
         borderRadius: BorderRadius.circular(20),

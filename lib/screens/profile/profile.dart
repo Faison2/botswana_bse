@@ -304,13 +304,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 30),
 
           // Theme Toggle Button
-          _buildActionButton(
-            isDark ? "Switch to Light Mode" : "Switch to Dark Mode",
-            isDark ? Icons.light_mode : Icons.dark_mode,
-            Colors.orange,
-                () => themeProvider.toggleTheme(),
-            isDark,
-          ),
+          // _buildActionButton(
+          //   isDark ? "Switch to Light Mode" : "Switch to Dark Mode",
+          //   isDark ? Icons.light_mode : Icons.dark_mode,
+          //   Colors.orange,
+          //       () => themeProvider.toggleTheme(),
+          //   isDark,
+          // ),
           const SizedBox(height: 12),
 
           // Change Password Button
