@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme_provider.dart';
 import 'withdrawals_tab.dart';
 import 'deposits_tab.dart';
@@ -14,6 +17,62 @@ class TransactionsScreen extends StatefulWidget {
 
 class _TransactionsScreenState extends State<TransactionsScreen> {
   int _selectedTab = 0;
+  double _currentBalance = 0.0;
+  double _weeklyChange = 0.0;
+  double _weeklyChangePercentage = 0.0;
+  String _currency = 'BWP';
+  bool _isLoadingBalance = true;
+  String? _cdsNumber;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBalance();
+  }
+
+  Future<void> _loadBalance() async {
+    setState(() {
+      _isLoadingBalance = true;
+    });
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _cdsNumber = prefs.getString('cdsNumber');
+
+      if (_cdsNumber == null) {
+        setState(() {
+          _isLoadingBalance = false;
+        });
+        return;
+      }
+
+      final response = await http.get(
+        Uri.parse('http://192.168.3.201:5000/api/Clients/$_cdsNumber/balance'),
+        headers: {
+          'accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _currentBalance = (data['currentBalance'] ?? 0).toDouble();
+          _weeklyChange = (data['weeklyChange'] ?? 0).toDouble();
+          _weeklyChangePercentage = (data['weeklyChangePercentage'] ?? 0).toDouble();
+          _currency = data['currency'] ?? 'BWP';
+          _isLoadingBalance = false;
+        });
+      } else {
+        setState(() {
+          _isLoadingBalance = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isLoadingBalance = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -92,32 +151,90 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                       ),
                       child: Row(
                         children: [
-                          const Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Total Cash Balance',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 14,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Total Cash Balance',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 14,
+                                  ),
                                 ),
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                'BWP 300.50',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 42,
-                                  fontWeight: FontWeight.w300,
-                                  letterSpacing: -1,
+                                const SizedBox(height: 8),
+                                _isLoadingBalance
+                                    ? const SizedBox(
+                                  height: 42,
+                                  child: Center(
+                                    child: SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      ),
+                                    ),
+                                  ),
+                                )
+                                    : Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '$_currency ${_currentBalance.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 42,
+                                        fontWeight: FontWeight.w300,
+                                        letterSpacing: -1,
+                                      ),
+                                    ),
+                                    if (_weeklyChange != 0) ...[
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            _weeklyChange > 0 ? Icons.arrow_upward : Icons.arrow_downward,
+                                            color: _weeklyChange > 0 ? Colors.greenAccent : Colors.redAccent,
+                                            size: 16,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '${_weeklyChange > 0 ? '+' : ''}${_weeklyChange.toStringAsFixed(2)} (${_weeklyChangePercentage.toStringAsFixed(1)}%)',
+                                            style: TextStyle(
+                                              color: _weeklyChange > 0 ? Colors.greenAccent : Colors.redAccent,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          const Text(
+                                            'this week',
+                                            style: TextStyle(
+                                              color: Colors.white60,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ],
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                          const Spacer(),
                           IconButton(
-                            icon: const Icon(Icons.refresh, color: Colors.white, size: 32),
-                            onPressed: () {},
+                            icon: _isLoadingBalance
+                                ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                                : const Icon(Icons.refresh, color: Colors.white, size: 32),
+                            onPressed: _isLoadingBalance ? null : _loadBalance,
                           ),
                         ],
                       ),
@@ -127,9 +244,15 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   // Content based on selected tab
                   Expanded(
                     child: _selectedTab == 0
-                        ? WithdrawalsTab(isDark: isDark)
+                        ? WithdrawalsTab(
+                      isDark: isDark,
+                      onTransactionComplete: _loadBalance,
+                    )
                         : _selectedTab == 1
-                        ? DepositsTab(isDark: isDark)
+                        ? DepositsTab(
+                      isDark: isDark,
+                      onTransactionComplete: _loadBalance,
+                    )
                         : TransactionsTab(isDark: isDark),
                   ),
                 ],
