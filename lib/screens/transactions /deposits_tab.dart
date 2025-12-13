@@ -27,6 +27,8 @@ class _DepositsTabState extends State<DepositsTab> {
   String _selectedProvider = 'BTC';
   String? _cdsNumber;
   bool _isLoading = false;
+  List<Map<String, dynamic>> _recentDeposits = [];
+  bool _isLoadingDeposits = true;
 
   final List<Map<String, String>> _providers = [
     {'name': 'Botswana Telecommunications', 'code': 'BTC'},
@@ -38,6 +40,7 @@ class _DepositsTabState extends State<DepositsTab> {
   void initState() {
     super.initState();
     _loadCdsNumber();
+    _loadRecentDeposits();
   }
 
   Future<void> _loadCdsNumber() async {
@@ -45,6 +48,81 @@ class _DepositsTabState extends State<DepositsTab> {
     setState(() {
       _cdsNumber = prefs.getString('cdsNumber') ?? 'CSDsd723'; // Fallback if not found
     });
+  }
+
+  Future<void> _loadRecentDeposits() async {
+    setState(() {
+      _isLoadingDeposits = true;
+    });
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cdsNumber = prefs.getString('cdsNumber');
+
+      if (cdsNumber == null) {
+        setState(() {
+          _isLoadingDeposits = false;
+        });
+        return;
+      }
+
+      final response = await http.get(
+        Uri.parse('http://192.168.3.201:5000/api/Clients/$cdsNumber/transactions?page=1&pageSize=50'),
+        headers: {
+          'accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data is Map && data.containsKey('data')) {
+          final allTransactions = List<Map<String, dynamic>>.from(data['data']);
+          // Filter only deposits and take last 3
+          final deposits = allTransactions.where((t) {
+            final transType = t['transType']?.toString().toLowerCase() ?? '';
+            return transType.contains('deposit');
+          }).take(3).toList();
+
+          setState(() {
+            _recentDeposits = deposits;
+            _isLoadingDeposits = false;
+          });
+        } else {
+          setState(() {
+            _isLoadingDeposits = false;
+          });
+        }
+      } else {
+        setState(() {
+          _isLoadingDeposits = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isLoadingDeposits = false;
+      });
+    }
+  }
+
+  String _formatDate(String? dateString) {
+    if (dateString == null) return 'N/A';
+    try {
+      final date = DateTime.parse(dateString);
+      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+    } catch (e) {
+      return dateString;
+    }
+  }
+
+  String _formatAmount(dynamic amount) {
+    if (amount == null) return 'BWP 0.00';
+    try {
+      final numAmount = amount is String ? double.parse(amount) : amount.toDouble();
+      return 'BWP ${numAmount.toStringAsFixed(2)}';
+    } catch (e) {
+      return 'BWP ${amount.toString()}';
+    }
   }
 
   @override
@@ -291,6 +369,8 @@ class _DepositsTabState extends State<DepositsTab> {
 
         if (data['success'] == true && data['status'] == 'SUCCESS') {
           _showSuccessDialog(data['amount'], transactionRef);
+          // Update balance immediately
+          widget.onBalanceUpdate?.call(data['amount'].toDouble());
         } else if (data['status'] == 'PAUSED' || data['status'] == 'PENDING') {
           _showErrorDialog('Transaction is still pending. Please check back later.');
         } else {
@@ -372,6 +452,8 @@ class _DepositsTabState extends State<DepositsTab> {
                 _phoneController.clear();
                 // Refresh balance after successful transaction
                 widget.onTransactionComplete?.call();
+                // Reload recent deposits
+                _loadRecentDeposits();
               },
               child: Text(
                 'OK',
@@ -479,15 +561,7 @@ class _DepositsTabState extends State<DepositsTab> {
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-            Text(
-              'Phone Number',
-              style: TextStyle(
-                color: widget.isDark ? Colors.white : Colors.black87,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 30),
             TextField(
               controller: _phoneController,
               keyboardType: TextInputType.phone,
@@ -496,7 +570,7 @@ class _DepositsTabState extends State<DepositsTab> {
                 fontSize: 20,
               ),
               decoration: InputDecoration(
-                hintText: 'e.g., 73001762',
+                hintText: 'Phone Number',
                 hintStyle: TextStyle(
                   color: widget.isDark ? Colors.white30 : Colors.black26,
                 ),
@@ -524,15 +598,7 @@ class _DepositsTabState extends State<DepositsTab> {
                 contentPadding: const EdgeInsets.all(16),
               ),
             ),
-            const SizedBox(height: 20),
-            Text(
-              'Enter Amount (BWP)',
-              style: TextStyle(
-                color: widget.isDark ? Colors.white : Colors.black87,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 30),
             TextField(
               controller: _amountController,
               keyboardType: TextInputType.number,
@@ -541,7 +607,7 @@ class _DepositsTabState extends State<DepositsTab> {
                 fontSize: 20,
               ),
               decoration: InputDecoration(
-                hintText: 'e.g., 200',
+                hintText: 'Enter Amount',
                 hintStyle: TextStyle(
                   color: widget.isDark ? Colors.white30 : Colors.black26,
                 ),
@@ -635,19 +701,49 @@ class _DepositsTabState extends State<DepositsTab> {
               ],
             ),
             const SizedBox(height: 32),
-            _buildTransactionTable([
-              {'date': '2023-01-15', 'description': 'Initial funding', 'amount': 'BWP 1,500.00'},
-              {'date': '2023-02-20', 'description': 'Bonus Received', 'amount': 'BWP 375.00'},
-              {'date': '2023-03-10', 'description': 'Freelance income', 'amount': 'BWP 360.00'},
-              {'date': '2023-04-05', 'description': 'Deposit', 'amount': 'BWP 1,650.00'},
-            ]),
+            if (_isLoadingDeposits)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
+                    ),
+                  ),
+                ),
+              )
+            else if (_recentDeposits.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.receipt_long,
+                        size: 48,
+                        color: widget.isDark ? Colors.white30 : Colors.black26,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No recent deposits',
+                        style: TextStyle(
+                          color: widget.isDark ? Colors.white54 : Colors.black38,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              _buildTransactionTable(_recentDeposits),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTransactionTable(List<Map<String, String>> transactions) {
+  Widget _buildTransactionTable(List<Map<String, dynamic>> deposits) {
     return Table(
       columnWidths: const {
         0: FlexColumnWidth(1.2),
@@ -662,13 +758,13 @@ class _DepositsTabState extends State<DepositsTab> {
             _buildTableHeader('Amount'),
           ],
         ),
-        for (var transaction in transactions)
+        for (var deposit in deposits)
           TableRow(
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
-                  transaction['date']!,
+                  _formatDate(deposit['dateCreated']),
                   style: TextStyle(
                     color: widget.isDark ? Colors.white : Colors.black87,
                     fontSize: 14,
@@ -678,17 +774,19 @@ class _DepositsTabState extends State<DepositsTab> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
-                  transaction['description']!,
+                  deposit['description'] ?? 'Deposit',
                   style: TextStyle(
                     color: widget.isDark ? Colors.white : Colors.black87,
                     fontSize: 14,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
-                  transaction['amount']!,
+                  _formatAmount(deposit['amount']),
                   style: TextStyle(
                     color: widget.isDark ? Colors.white : Colors.black87,
                     fontSize: 14,

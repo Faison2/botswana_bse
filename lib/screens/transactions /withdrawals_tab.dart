@@ -6,8 +6,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 class WithdrawalsTab extends StatefulWidget {
   final bool isDark;
   final VoidCallback? onTransactionComplete;
+  final Function(double)? onBalanceUpdate;
 
-  const WithdrawalsTab({Key? key, required this.isDark, this.onTransactionComplete, required void Function(double amount) onBalanceUpdate}) : super(key: key);
+  const WithdrawalsTab({
+    Key? key,
+    required this.isDark,
+    this.onTransactionComplete,
+    this.onBalanceUpdate,
+  }) : super(key: key);
 
   @override
   State<WithdrawalsTab> createState() => _WithdrawalsTabState();
@@ -20,6 +26,8 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
   String _selectedProvider = 'BTC';
   String? _cdsNumber;
   bool _isLoading = false;
+  List<Map<String, dynamic>> _recentWithdrawals = [];
+  bool _isLoadingWithdrawals = true;
 
   final List<Map<String, String>> _providers = [
     {'name': 'Botswana Telecommunications', 'code': 'BTC'},
@@ -31,6 +39,7 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
   void initState() {
     super.initState();
     _loadCdsNumber();
+    _loadRecentWithdrawals();
   }
 
   Future<void> _loadCdsNumber() async {
@@ -38,6 +47,81 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
     setState(() {
       _cdsNumber = prefs.getString('cdsNumber') ?? 'CSDsd723'; // Fallback if not found
     });
+  }
+
+  Future<void> _loadRecentWithdrawals() async {
+    setState(() {
+      _isLoadingWithdrawals = true;
+    });
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cdsNumber = prefs.getString('cdsNumber');
+
+      if (cdsNumber == null) {
+        setState(() {
+          _isLoadingWithdrawals = false;
+        });
+        return;
+      }
+
+      final response = await http.get(
+        Uri.parse('http://192.168.3.201:5000/api/Clients/$cdsNumber/transactions?page=1&pageSize=50'),
+        headers: {
+          'accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data is Map && data.containsKey('data')) {
+          final allTransactions = List<Map<String, dynamic>>.from(data['data']);
+          // Filter only withdrawals and take last 3
+          final withdrawals = allTransactions.where((t) {
+            final transType = t['transType']?.toString().toLowerCase() ?? '';
+            return transType.contains('withdrawal');
+          }).take(3).toList();
+
+          setState(() {
+            _recentWithdrawals = withdrawals;
+            _isLoadingWithdrawals = false;
+          });
+        } else {
+          setState(() {
+            _isLoadingWithdrawals = false;
+          });
+        }
+      } else {
+        setState(() {
+          _isLoadingWithdrawals = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isLoadingWithdrawals = false;
+      });
+    }
+  }
+
+  String _formatDate(String? dateString) {
+    if (dateString == null) return 'N/A';
+    try {
+      final date = DateTime.parse(dateString);
+      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+    } catch (e) {
+      return dateString;
+    }
+  }
+
+  String _formatAmount(dynamic amount) {
+    if (amount == null) return 'BWP 0.00';
+    try {
+      final numAmount = amount is String ? double.parse(amount) : amount.toDouble();
+      return 'BWP ${numAmount.toStringAsFixed(2)}';
+    } catch (e) {
+      return 'BWP ${amount.toString()}';
+    }
   }
 
   @override
@@ -90,6 +174,8 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
             data['amount'] ?? 0.0,
             data['transactionReference'] ?? '',
           );
+          // Update balance immediately (subtract withdrawal amount)
+          widget.onBalanceUpdate?.call(-(data['amount'].toDouble()));
         } else {
           _showErrorDialog(data['message'] ?? 'Withdrawal failed');
         }
@@ -211,6 +297,8 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
                 _phoneController.clear();
                 // Refresh balance after successful transaction
                 widget.onTransactionComplete?.call();
+                // Reload recent withdrawals
+                _loadRecentWithdrawals();
               },
               style: TextButton.styleFrom(
                 backgroundColor: widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
@@ -330,15 +418,7 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-            Text(
-              'Phone Number',
-              style: TextStyle(
-                color: widget.isDark ? Colors.white : Colors.black87,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 30),
             TextField(
               controller: _phoneController,
               keyboardType: TextInputType.phone,
@@ -347,7 +427,7 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
                 fontSize: 20,
               ),
               decoration: InputDecoration(
-                hintText: 'e.g., 73001762',
+                hintText: 'Phone Number',
                 hintStyle: TextStyle(
                   color: widget.isDark ? Colors.white30 : Colors.black26,
                 ),
@@ -375,15 +455,7 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
                 contentPadding: const EdgeInsets.all(16),
               ),
             ),
-            const SizedBox(height: 20),
-            Text(
-              'Enter Amount (BWP)',
-              style: TextStyle(
-                color: widget.isDark ? Colors.white : Colors.black87,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 30),
             TextField(
               controller: _amountController,
               keyboardType: TextInputType.number,
@@ -392,7 +464,7 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
                 fontSize: 20,
               ),
               decoration: InputDecoration(
-                hintText: 'e.g., 100',
+                hintText: 'Enter Amount',
                 hintStyle: TextStyle(
                   color: widget.isDark ? Colors.white30 : Colors.black26,
                 ),
@@ -486,19 +558,49 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
               ],
             ),
             const SizedBox(height: 32),
-            _buildTransactionTable([
-              {'date': '2023-01-15', 'description': 'Withdrawal', 'amount': 'BWP 1,500.00'},
-              {'date': '2023-02-20', 'description': 'Emergency funds', 'amount': 'BWP 375.00'},
-              {'date': '2023-03-10', 'description': 'Withdrawal', 'amount': 'BWP 360.00'},
-              {'date': '2023-04-05', 'description': 'Withdrawal', 'amount': 'BWP 1,650.00'},
-            ]),
+            if (_isLoadingWithdrawals)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
+                    ),
+                  ),
+                ),
+              )
+            else if (_recentWithdrawals.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.receipt_long,
+                        size: 48,
+                        color: widget.isDark ? Colors.white30 : Colors.black26,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No recent withdrawals',
+                        style: TextStyle(
+                          color: widget.isDark ? Colors.white54 : Colors.black38,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              _buildTransactionTable(_recentWithdrawals),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTransactionTable(List<Map<String, String>> transactions) {
+  Widget _buildTransactionTable(List<Map<String, dynamic>> withdrawals) {
     return Table(
       columnWidths: const {
         0: FlexColumnWidth(1.2),
@@ -513,13 +615,13 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
             _buildTableHeader('Amount'),
           ],
         ),
-        for (var transaction in transactions)
+        for (var withdrawal in withdrawals)
           TableRow(
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
-                  transaction['date']!,
+                  _formatDate(withdrawal['dateCreated']),
                   style: TextStyle(
                     color: widget.isDark ? Colors.white : Colors.black87,
                     fontSize: 14,
@@ -529,17 +631,19 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
-                  transaction['description']!,
+                  withdrawal['description'] ?? 'Withdrawal',
                   style: TextStyle(
                     color: widget.isDark ? Colors.white : Colors.black87,
                     fontSize: 14,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
-                  transaction['amount']!,
+                  _formatAmount(withdrawal['amount']),
                   style: TextStyle(
                     color: widget.isDark ? Colors.white : Colors.black87,
                     fontSize: 14,
