@@ -74,6 +74,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     }
   }
 
+  void _updateBalanceOptimistically(double amount) {
+    setState(() {
+      _currentBalance += amount;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<ThemeProvider>(
@@ -247,11 +253,13 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         ? WithdrawalsTab(
                       isDark: isDark,
                       onTransactionComplete: _loadBalance,
+                      onBalanceUpdate: _updateBalanceOptimistically,
                     )
                         : _selectedTab == 1
                         ? DepositsTab(
                       isDark: isDark,
                       onTransactionComplete: _loadBalance,
+                      onBalanceUpdate: _updateBalanceOptimistically,
                     )
                         : TransactionsTab(isDark: isDark),
                   ),

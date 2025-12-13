@@ -7,7 +7,7 @@ class WithdrawalsTab extends StatefulWidget {
   final bool isDark;
   final VoidCallback? onTransactionComplete;
 
-  const WithdrawalsTab({Key? key, required this.isDark, this.onTransactionComplete}) : super(key: key);
+  const WithdrawalsTab({Key? key, required this.isDark, this.onTransactionComplete, required void Function(double amount) onBalanceUpdate}) : super(key: key);
 
   @override
   State<WithdrawalsTab> createState() => _WithdrawalsTabState();

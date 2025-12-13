@@ -7,8 +7,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 class DepositsTab extends StatefulWidget {
   final bool isDark;
   final VoidCallback? onTransactionComplete;
+  final Function(double)? onBalanceUpdate;
 
-  const DepositsTab({Key? key, required this.isDark, this.onTransactionComplete}) : super(key: key);
+  const DepositsTab({
+    Key? key,
+    required this.isDark,
+    this.onTransactionComplete,
+    this.onBalanceUpdate,
+  }) : super(key: key);
 
   @override
   State<DepositsTab> createState() => _DepositsTabState();
@@ -364,6 +370,8 @@ class _DepositsTabState extends State<DepositsTab> {
                 Navigator.of(context).pop();
                 _amountController.clear();
                 _phoneController.clear();
+                // Refresh balance after successful transaction
+                widget.onTransactionComplete?.call();
               },
               child: Text(
                 'OK',
