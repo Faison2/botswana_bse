@@ -200,12 +200,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
   }
 
-  // Replace the _pickDocument method with this updated version:
-
   Future<void> _pickDocument(String documentType) async {
     try {
-      // Use file_picker package instead of image_picker for PDF support
-      // Allow PDF and common image formats (screenshots are usually PNG/JPG)
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg'],

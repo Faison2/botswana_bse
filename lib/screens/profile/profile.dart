@@ -27,10 +27,58 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _dateCreated = '';
   String _token = '';
 
+  // Broker data
+  List<Map<String, dynamic>> _brokersList = [];
+  bool _isLoadingBrokers = false;
+
   @override
   void initState() {
     super.initState();
     _loadProfileData();
+    _fetchBrokers();
+  }
+
+  Future<void> _fetchBrokers() async {
+    setState(() {
+      _isLoadingBrokers = true;
+    });
+
+    try {
+      final response = await http.get(
+        Uri.parse('https://zamagm.escrowagm.com/MainAPI/Home/getAllBrokers'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+
+        if (responseData is List) {
+          setState(() {
+            _brokersList = List<Map<String, dynamic>>.from(responseData);
+            _isLoadingBrokers = false;
+          });
+        } else if (responseData is Map && responseData.containsKey('brokers')) {
+          setState(() {
+            _brokersList = List<Map<String, dynamic>>.from(responseData['brokers']);
+            _isLoadingBrokers = false;
+          });
+        } else {
+          setState(() {
+            _isLoadingBrokers = false;
+          });
+        }
+      } else {
+        setState(() {
+          _isLoadingBrokers = false;
+        });
+        _showSnackBar('Failed to load brokers', Colors.red);
+      }
+    } catch (e) {
+      setState(() {
+        _isLoadingBrokers = false;
+      });
+      _showSnackBar('Error loading brokers: $e', Colors.red);
+    }
   }
 
   Future<void> _loadProfileData() async {
@@ -50,7 +98,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       final response = await http
           .post(
-        Uri.parse('http://192.168.3.201/MainAPI/Authentication/GetProfile'),
+        Uri.parse('https://zamagm.escrowagm.com/MainAPI/Authentication/GetProfile'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'Token': token}),
       )
@@ -91,6 +139,278 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _errorMessage = 'Error: ${e.toString()}';
       });
     }
+  }
+
+  Future<void> _linkBroker(String brokerCode) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+
+      if (_cdsNumber.isEmpty) {
+        _showSnackBar('CDS Number not available', Colors.red);
+        return;
+      }
+
+      final response = await http.post(
+        Uri.parse('https://zamagm.escrowagm.com/MainAPI/Home/BrokerLink'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'CdsNumber': _cdsNumber,
+          'BrokerCode': brokerCode,
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['responseCode'] == 200) {
+          _showSnackBar(data['responseMessage'] ?? 'Broker linked successfully', Colors.green);
+          Navigator.pop(context);
+        } else {
+          _showSnackBar(data['responseMessage'] ?? 'Failed to link broker', Colors.red);
+        }
+      } else {
+        _showSnackBar('Failed to link broker. Please try again.', Colors.red);
+      }
+    } catch (e) {
+      _showSnackBar('Error: ${e.toString()}', Colors.red);
+    }
+  }
+
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _showBrokerLinkDialog(bool isDark) {
+    String? selectedBrokerCode;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Container(
+            padding: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFD4A855), Color(0xFFB8860B)],
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Padding(
+              padding: EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'BROKER LINK',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Link your account to a broker',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      fontWeight: FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // CDS Number Display
+                Text(
+                  'CDS Number',
+                  style: TextStyle(
+                    color: isDark ? Colors.white70 : Colors.black87,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF3C3C3C) : Colors.grey[200],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _cdsNumber.isEmpty ? 'Not available' : _cdsNumber,
+                    style: TextStyle(
+                      color: _cdsNumber.isEmpty
+                          ? Colors.grey
+                          : (isDark ? Colors.white : Colors.black87),
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Broker Dropdown
+                Text(
+                  'Select Broker',
+                  style: TextStyle(
+                    color: isDark ? Colors.white70 : Colors.black87,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF3C3C3C) : Colors.grey[200],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: _isLoadingBrokers
+                      ? const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(
+                      child: SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
+                        ),
+                      ),
+                    ),
+                  )
+                      : DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      hint: Text(
+                        'Select a broker',
+                        style: TextStyle(
+                          color: isDark ? Colors.white54 : Colors.black54,
+                        ),
+                      ),
+                      value: selectedBrokerCode,
+                      dropdownColor: isDark ? const Color(0xFF3C3C3C) : Colors.white,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black87,
+                        fontSize: 16,
+                      ),
+                      icon: Icon(
+                        Icons.keyboard_arrow_down,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                      ),
+                      items: _brokersList.map((broker) {
+                        String brokerName = broker['fnam']?.toString() ?? 'Unknown Broker';
+                        String brokerCode = broker['broker_code']?.toString() ?? '';
+
+                        return DropdownMenuItem<String>(
+                          value: brokerCode,
+                          child: Text(
+                            '$brokerName ($brokerCode)',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setDialogState(() {
+                          selectedBrokerCode = value;
+                        });
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Info Note
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.blue.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.info_outline,
+                        color: Colors.blue,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Note: Your broker link request will be submitted for approval. You will be notified once it has been processed.',
+                          style: TextStyle(
+                            color: isDark ? Colors.blue[200] : Colors.blue[900],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+              child: Text(
+                'CANCEL',
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.black54,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: selectedBrokerCode == null || _cdsNumber.isEmpty
+                  ? null
+                  : () => _linkBroker(selectedBrokerCode!),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFD4A855),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                disabledBackgroundColor: Colors.grey,
+              ),
+              child: const Text(
+                'LINK BROKER',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -303,33 +623,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           const SizedBox(height: 30),
 
-          // Theme Toggle Button
-          // _buildActionButton(
-          //   isDark ? "Switch to Light Mode" : "Switch to Dark Mode",
-          //   isDark ? Icons.light_mode : Icons.dark_mode,
-          //   Colors.orange,
-          //       () => themeProvider.toggleTheme(),
-          //   isDark,
-          // ),
+          // Broker Link Button
+          _buildActionButton(
+            "Link Broker",
+            Icons.link,
+            const Color(0xFFD4A855),
+                () => _showBrokerLinkDialog(isDark),
+            isDark,
+          ),
+
           const SizedBox(height: 12),
 
-          // Change Password Button
-          // _buildActionButton(
-          //   "Change Password",
-          //   Icons.lock,
-          //   Colors.blue,
-          //       () {
-          //     Navigator.push(
-          //       context,
-          //       MaterialPageRoute(
-          //         builder: (context) => const ChangePasswordScreen(),
-          //       ),
-          //     );
-          //   },
-          //   isDark,
-          // ),
-          const SizedBox(height: 12),
-
+          // Logout Button
           _buildActionButton(
             "Logout",
             Icons.logout,
@@ -473,4 +778,3 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 }
-
