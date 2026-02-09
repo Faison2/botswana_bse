@@ -64,9 +64,20 @@ class _TradingPageState extends State<TradingPage> {
 
     if (widget.prefilledStockData != null) {
       final stockData = widget.prefilledStockData!;
+      final ticker = stockData['ticker'];
+      final code = stockData['code'] ?? '';
 
-      // Set selected company
-      selectedCompany = stockData['ticker'] ?? stockData['name'];
+      // Find the index of this stock
+      final index = _allStocks.indexWhere((stock) =>
+      stock['ticker'] == ticker && stock['code'] == code);
+
+      if (index != -1) {
+        selectedCompany = '$ticker-$code-$index';
+      } else {
+        // If not found, add it and use that index
+        _allStocks.add(stockData);
+        selectedCompany = '$ticker-$code-${_allStocks.length - 1}';
+      }
 
       // Pre-fill price
       priceController.text = stockData['closingPriceValue']?.toString() ?? '0.00';
@@ -150,25 +161,35 @@ class _TradingPageState extends State<TradingPage> {
           // add it to ensure we can select it
           if (widget.prefilledStockData != null && stocks.isNotEmpty) {
             final prefilledTicker = widget.prefilledStockData!['ticker'];
-            final prefilledName = widget.prefilledStockData!['name'];
+            final prefilledCode = widget.prefilledStockData!['code'] ?? '';
 
             // Check if prefilled stock exists in fetched list
             bool exists = stocks.any((stock) =>
-            stock['ticker'] == prefilledTicker || stock['name'] == prefilledName);
+            stock['ticker'] == prefilledTicker &&
+                stock['code'] == prefilledCode);
 
             if (!exists) {
               // Add the prefilled stock to the list
               _allStocks.add(widget.prefilledStockData!);
             }
 
-            // Set selected company from prefilled data
-            selectedCompany = prefilledTicker ?? prefilledName;
+            // Find the index and set selected company
+            final index = _allStocks.indexWhere((stock) =>
+            stock['ticker'] == prefilledTicker &&
+                stock['code'] == prefilledCode);
+
+            if (index != -1) {
+              selectedCompany = '$prefilledTicker-$prefilledCode-$index';
+            }
 
             // Update price from prefilled data
             priceController.text = widget.prefilledStockData!['closingPriceValue']?.toString() ?? '0.00';
           } else if (selectedCompany == null && _allStocks.isNotEmpty) {
             // If no company is selected yet, select the first one
-            selectedCompany = _allStocks[0]['ticker'] ?? _allStocks[0]['name'];
+            final firstStock = _allStocks[0];
+            final ticker = firstStock['ticker'] ?? '';
+            final code = firstStock['code'] ?? '';
+            selectedCompany = '$ticker-$code-0';
             // Also update price for the selected company
             priceController.text = _allStocks[0]['closingPriceValue']?.toString() ?? '0.00';
           }
@@ -181,7 +202,9 @@ class _TradingPageState extends State<TradingPage> {
         if (widget.prefilledStockData != null) {
           setState(() {
             _allStocks = [widget.prefilledStockData!];
-            selectedCompany = widget.prefilledStockData!['ticker'] ?? widget.prefilledStockData!['name'];
+            final ticker = widget.prefilledStockData!['ticker'] ?? '';
+            final code = widget.prefilledStockData!['code'] ?? '';
+            selectedCompany = '$ticker-$code-0';
           });
         }
       }
@@ -191,7 +214,9 @@ class _TradingPageState extends State<TradingPage> {
       if (widget.prefilledStockData != null) {
         setState(() {
           _allStocks = [widget.prefilledStockData!];
-          selectedCompany = widget.prefilledStockData!['ticker'] ?? widget.prefilledStockData!['name'];
+          final ticker = widget.prefilledStockData!['ticker'] ?? '';
+          final code = widget.prefilledStockData!['code'] ?? '';
+          selectedCompany = '$ticker-$code-0';
         });
       }
     } finally {
@@ -350,19 +375,19 @@ class _TradingPageState extends State<TradingPage> {
     setState(() {});
   }
 
-  void _onCompanyChanged(String? newCompany) {
-    if (newCompany == null) return;
+  void _onCompanyChanged(String? uniqueId) {
+    if (uniqueId == null) return;
 
     setState(() {
-      selectedCompany = newCompany;
+      selectedCompany = uniqueId;
 
-      // Find the stock data for the selected company
-      final stockData = _allStocks.firstWhere(
-            (stock) => stock['ticker'] == newCompany || stock['name'] == newCompany,
-        orElse: () => {},
-      );
+      // Extract the index from the uniqueId
+      final parts = uniqueId.split('-');
+      final index = int.tryParse(parts.last);
 
-      if (stockData.isNotEmpty) {
+      if (index != null && index < _allStocks.length) {
+        final stockData = _allStocks[index];
+
         // Update price
         priceController.text = stockData['closingPriceValue']?.toString() ?? '0.00';
         updateCalculations();
@@ -386,13 +411,22 @@ class _TradingPageState extends State<TradingPage> {
     });
 
     try {
+      // Extract the index from the uniqueId
+      final parts = selectedCompany!.split('-');
+      final index = int.tryParse(parts.last);
+
+      String companyName = '';
+      if (index != null && index < _allStocks.length) {
+        companyName = _allStocks[index]['ticker'] ?? _allStocks[index]['name'] ?? '';
+      }
+
       final settlementDate = DateTime.now().add(const Duration(days: 2));
       final maturityDate = DateTime.now().add(const Duration(days: 365));
 
       final orderData = {
         "OrderType": isBuy ? "BUY" : "SELL",
         "ReferenceNumber": "ORD${DateTime.now().millisecondsSinceEpoch}",
-        "Company": selectedCompany,
+        "Company": companyName,
         "Quantity": double.tryParse(quantityController.text) ?? 0,
         "BasePrice": double.tryParse(priceController.text) ?? 0,
         "TimeInForce": selectedTimeInForce,
@@ -591,7 +625,7 @@ class _TradingPageState extends State<TradingPage> {
                                         begin: Alignment.centerLeft,
                                         end: Alignment.centerRight,
                                         colors: [
-                                         Colors.black,
+                                          Colors.black,
                                           Colors.red,
                                         ],
                                       ),
@@ -950,18 +984,23 @@ class _TradingPageState extends State<TradingPage> {
                 color: textColor,
                 fontSize: 14,
               ),
-              items: _allStocks.map((stock) {
+              items: _allStocks.asMap().entries.map((entry) {
+                final index = entry.key;
+                final stock = entry.value;
                 final companyName = stock['name'] ?? 'Unknown Company';
                 final ticker = stock['ticker'] ?? companyName;
+                final code = stock['code'] ?? '';
 
-                // Get the current price
+                // Create a unique identifier
+                final uniqueId = '$ticker-$code-$index';
+
                 final priceValue = stock['closingPriceValue'] ?? 0.0;
                 final priceString = priceValue is double
                     ? priceValue.toStringAsFixed(2)
                     : priceValue.toString();
 
                 return DropdownMenuItem<String>(
-                  value: ticker,
+                  value: uniqueId,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     child: Row(

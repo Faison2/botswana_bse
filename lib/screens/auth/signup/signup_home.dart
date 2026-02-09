@@ -411,6 +411,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return false;
     }
 
+    // Validate ID number - must be exactly 9 digits
+    if (_idNumberController.text.length != 9) {
+      _showSnackBar('ID number must be exactly 9 digits');
+      return false;
+    }
+
+    // Validate ID number - must contain only digits
+    if (!RegExp(r'^[0-9]+$').hasMatch(_idNumberController.text)) {
+      _showSnackBar('ID number must contain only numbers');
+      return false;
+    }
+
     // For existing clients, validate CDS number
     if (!_isNewClient && _cdsNumberController.text.isEmpty) {
       _showSnackBar('Please enter CDS number for existing client');
@@ -1030,7 +1042,45 @@ class _SignUpScreenState extends State<SignUpScreen> {
           const SizedBox(height: 15),
           _buildLabelWithField('Email ', _buildTextField('Enter email address', _emailController, keyboardType: TextInputType.emailAddress)),
           const SizedBox(height: 15),
-          _buildLabelWithField('ID Number ', _buildTextField('Enter ID number', _idNumberController)),
+          _buildLabelWithField(
+            'ID Number ',
+            Container(
+              height: 50,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE8D7B8)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 5,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: TextField(
+                controller: _idNumberController,
+                keyboardType: TextInputType.number,
+                maxLength: 9,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(9),
+                ],
+                style: const TextStyle(color: Colors.black87, fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Enter 9-digit ID number',
+                  hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+                  border: InputBorder.none,
+                  counterText: '', // Hides the character counter
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
           const SizedBox(height: 15),
           _buildLabelWithField('Address ', _buildTextField('Enter address', _addressController)),
           const SizedBox(height: 15),
@@ -1250,7 +1300,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 child: _buildLabelWithField('Account Type', _buildDropdownField(
                   'Account Type',
                   _selectedAccountType,
-                  ['Individual', 'Corporate'],
+                  ['Individual'],
                       (val) {
                     setState(() => _selectedAccountType = val!);
                   },
