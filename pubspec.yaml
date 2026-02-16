@@ -13,11 +13,13 @@ dependencies:
   cupertino_icons: ^1.0.8
   fl_chart: ^0.69.0
   http: ^1.1.0
-  shared_preferences: ^2.2.0
+  #shared_preferences: ^2.2.0
   intl: ^0.18.0  # For date formatting
-  provider: ^6.0.5  # Add this line
+  #provider: ^6.0.5  # Add this line
   file_picker: ^10.1.2
   permission_handler: ^11.0.1
+  shared_preferences: ^2.5.4
+  provider: ^6.1.5+1
 
 
 dev_dependencies:

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:provider/provider.dart';
 import '../../theme_provider.dart';
+import '../market_watch/advanced.dart';
 import '../settings /settings.dart';
 
 class AppDrawer extends StatefulWidget {
@@ -289,6 +290,23 @@ class _AppDrawerState extends State<AppDrawer> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),
               child: Divider(color: dividerColor, height: 1),
+            ),
+            _buildDrawerItem(
+              context: context,
+              icon: Icons.ad_units_sharp,
+              title: 'Advanced',
+              onTap: () {
+                Navigator.pop(context); // Close drawer first
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CompanyComparisonScreen(allStocks: [],),
+                  ),
+                );
+              },
+              textColor: textColor,
+              iconColor: iconColor,
+              trailingIconColor: trailingIconColor,
             ),
             _buildDrawerItem(
               context: context,
