@@ -464,17 +464,17 @@ class _ComparisonAnalysisScreenState extends State<ComparisonAnalysisScreen> wit
                 const SizedBox(height: 16),
 
                 // Details
-                _buildDetailRow('Opening Price', 'TZS ${stock['OpeningPrice'] ?? 'N/A'}', textColor, subtextColor),
+                _buildDetailRow('Opening Price', 'BWP ${stock['OpeningPrice'] ?? 'N/A'}', textColor, subtextColor),
                 const SizedBox(height: 12),
-                _buildDetailRow('Closing Price', 'TZS ${stock['ClosingPrice'] ?? 'N/A'}', textColor, subtextColor),
+                _buildDetailRow('Closing Price', 'BWP ${stock['ClosingPrice'] ?? 'N/A'}', textColor, subtextColor),
                 const SizedBox(height: 12),
-                _buildDetailRow('High', 'TZS ${stock['MaxPrice'] ?? 'N/A'}', textColor, subtextColor),
+                _buildDetailRow('High', 'BWP ${stock['MaxPrice'] ?? 'N/A'}', textColor, subtextColor),
                 const SizedBox(height: 12),
-                _buildDetailRow('Low', 'TZS ${stock['MinPrice'] ?? 'N/A'}', textColor, subtextColor),
+                _buildDetailRow('Low', 'BWP ${stock['MinPrice'] ?? 'N/A'}', textColor, subtextColor),
                 const SizedBox(height: 12),
-                _buildDetailRow('Settlement', 'TZS ${stock['SettlementPrice'] ?? 'N/A'}', textColor, subtextColor),
+                _buildDetailRow('Settlement', 'BWP ${stock['SettlementPrice'] ?? 'N/A'}', textColor, subtextColor),
                 const SizedBox(height: 12),
-                _buildDetailRow('VWAP', 'TZS ${stock['VwapPrice'] ?? 'N/A'}', textColor, subtextColor),
+                _buildDetailRow('VWAP', 'BWP ${stock['VwapPrice'] ?? 'N/A'}', textColor, subtextColor),
                 const SizedBox(height: 12),
                 _buildDetailRow('Market Cap', stock['marketCap'] ?? 'N/A', textColor, subtextColor),
                 const SizedBox(height: 12),
@@ -564,7 +564,7 @@ class _ComparisonAnalysisScreenState extends State<ComparisonAnalysisScreen> wit
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'TZS ${closePrice.toStringAsFixed(2)}',
+                    'BWP ${closePrice.toStringAsFixed(2)}',
                     style: TextStyle(
                       color: textColor,
                       fontSize: 18,
@@ -606,9 +606,9 @@ class _ComparisonAnalysisScreenState extends State<ComparisonAnalysisScreen> wit
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildQuickStat('Open', 'TZS ${openPrice.toStringAsFixed(2)}', textColor, subtextColor),
-              _buildQuickStat('High', 'TZS ${maxPrice.toStringAsFixed(2)}', textColor, subtextColor),
-              _buildQuickStat('Low', 'TZS ${minPrice.toStringAsFixed(2)}', textColor, subtextColor),
+              _buildQuickStat('Open', 'BWP ${openPrice.toStringAsFixed(2)}', textColor, subtextColor),
+              _buildQuickStat('High', 'BWP ${maxPrice.toStringAsFixed(2)}', textColor, subtextColor),
+              _buildQuickStat('Low', 'BWP ${minPrice.toStringAsFixed(2)}', textColor, subtextColor),
             ],
           ),
         ],

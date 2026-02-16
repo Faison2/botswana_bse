@@ -101,9 +101,9 @@ class _MarketWatchWidgetState extends State<MarketWatchWidget> {
     String maxPrice = item['MaxPrice']?.toString() ?? '0';
     String minPrice = item['MinPrice']?.toString() ?? '0';
 
-    String price = 'TZS $closingPrice';
-    String bestBid = 'TZS $openingPrice';
-    String bestAsk = 'TZS $maxPrice';
+    String price = 'BWP $closingPrice';
+    String bestBid = 'BWP $openingPrice';
+    String bestAsk = 'bwp $maxPrice';
 
     String openInterest = item['Openinterest']?.toString() ?? '0';
     String supply = _formatVolume(openInterest);

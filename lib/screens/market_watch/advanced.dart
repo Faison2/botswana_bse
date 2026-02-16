@@ -648,7 +648,7 @@ class _CompanyComparisonScreenState extends State<CompanyComparisonScreen> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  'TZS ${closePrice.toStringAsFixed(2)}',
+                  'BWP ${closePrice.toStringAsFixed(2)}',
                   style: TextStyle(
                     color: textColor,
                     fontSize: 16,
