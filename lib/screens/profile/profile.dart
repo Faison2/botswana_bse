@@ -108,13 +108,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final responseData = jsonDecode(response.body);
 
         if (responseData['responseCode'] == 200) {
+          final phoneNumber = responseData['phoneNumber'] ?? '';
+          final cdsNumber = responseData['cdsNumber'] ?? '';
+
+          // Save to SharedPreferences for use in other screens
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('phoneNumber', phoneNumber);
+          await prefs.setString('cdsNumber', cdsNumber);
+
           setState(() {
             _userId = responseData['userId'] ?? '';
             _username = responseData['username'] ?? '';
             _email = responseData['email'] ?? '';
             _fullName = responseData['fullName'] ?? '';
-            _phoneNumber = responseData['phoneNumber'] ?? '';
-            _cdsNumber = responseData['cdsNumber'] ?? '';
+            _phoneNumber = phoneNumber;
+            _cdsNumber = cdsNumber;
             _status = responseData['status'] ?? '';
             _lastLoginDate = responseData['lastLoginDate'] ?? '';
             _dateCreated = responseData['dateCreated'] ?? '';

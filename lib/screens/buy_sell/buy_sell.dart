@@ -27,6 +27,8 @@ class _TradingPageState extends State<TradingPage> {
   bool isFetchingStocks = false;
   String? _token;
   String? _userName;
+  String? _cdsNumber;
+  String? _phoneNumber;
 
   // Controllers
   String? selectedCompany;
@@ -92,11 +94,15 @@ class _TradingPageState extends State<TradingPage> {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
       final fullName = prefs.getString('fullName');
+      final cdsNumber = prefs.getString('cdsNumber');
+      final phoneNumber = prefs.getString('phoneNumber');
 
       if (token != null && token.isNotEmpty) {
         setState(() {
           _token = token;
           _userName = fullName ?? 'N/A';
+          _cdsNumber = cdsNumber ?? '';
+          _phoneNumber = phoneNumber ?? '';
         });
       }
     } catch (e) {
@@ -432,7 +438,7 @@ class _TradingPageState extends State<TradingPage> {
         "BasePrice": double.tryParse(priceController.text) ?? 0,
         "TimeInForce": selectedTimeInForce,
         "BrokerCode": selectedBroker,
-        "CdsAcNo": "CDS123456",
+        "CdsAcNo": _cdsNumber ?? '',
         "Shareholder": "SHR7891011",
         "LiNumber": "LI998877",
         "ClientName": _userName ?? 'N/A',
@@ -753,6 +759,26 @@ class _TradingPageState extends State<TradingPage> {
                           'Price',
                           priceController,
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          textColor: textColor,
+                          fieldBorderColor: fieldBorderColor,
+                          fieldBgColor: fieldBgColor,
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Phone Number Display (Read-only)
+                        _buildReadOnlyField(
+                          'Phone Number',
+                          _phoneNumber ?? 'N/A',
+                          textColor: textColor,
+                          fieldBorderColor: fieldBorderColor,
+                          fieldBgColor: fieldBgColor,
+                        ),
+                        const SizedBox(height: 16),
+
+                        // CDS Number Display (Read-only)
+                        _buildReadOnlyField(
+                          'CDS Number',
+                          _cdsNumber ?? 'N/A',
                           textColor: textColor,
                           fieldBorderColor: fieldBorderColor,
                           fieldBgColor: fieldBgColor,
@@ -1170,6 +1196,51 @@ class _TradingPageState extends State<TradingPage> {
                 color: fieldBorderColor,
                 width: 2,
               ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildReadOnlyField(
+      String label,
+      String value, {
+        required Color textColor,
+        required Color fieldBorderColor,
+        required Color fieldBgColor,
+      }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: textColor,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
+          decoration: BoxDecoration(
+            color: fieldBgColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: fieldBorderColor,
+              width: 1,
+            ),
+          ),
+          child: Text(
+            value,
+            style: TextStyle(
+              color: textColor,
+              fontSize: 14,
             ),
           ),
         ),

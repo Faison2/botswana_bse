@@ -44,8 +44,10 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
 
   Future<void> _loadCdsNumber() async {
     final prefs = await SharedPreferences.getInstance();
+    final phoneNumber = prefs.getString('phoneNumber');
     setState(() {
       _cdsNumber = prefs.getString('cdsNumber') ?? 'CSDsd723'; // Fallback if not found
+      _phoneController.text = phoneNumber ?? ''; // Auto-populate phone number
     });
   }
 

@@ -243,7 +243,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                _isBalanceVisible ? '\$ 16,300.50' : '••••••••',
+                _isBalanceVisible ? '\$ 0,0' : '••••••••',
                 style: TextStyle(
                   color: textColor,
                   fontSize: 42,
