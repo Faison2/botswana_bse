@@ -1,3 +1,4 @@
+import 'package:bse/contants/constants.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -48,7 +49,7 @@ class _MarketWatchWidgetState extends State<MarketWatchWidget> {
       }
 
       final response = await http.post(
-        Uri.parse('http://192.168.3.201/MainAPI/Home/getMarketData'),
+        Uri.parse('$baseUrl/Home/getMarketData'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',

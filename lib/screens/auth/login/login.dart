@@ -1,3 +1,4 @@
+import 'package:bse/contants/constants.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -43,7 +44,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('http://192.168.3.201/MainAPI/Authentication/Login'),
+        Uri.parse('$baseUrl/Authentication/Login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'Email': _emailController.text,

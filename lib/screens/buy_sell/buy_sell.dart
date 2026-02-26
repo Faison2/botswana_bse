@@ -1,3 +1,4 @@
+import 'package:bse/contants/constants.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -43,8 +44,8 @@ class _TradingPageState extends State<TradingPage> {
   final List<String> timeInForceOptions = ['Day Order', 'Good Till Cancelled'];
   final List<String> brokerOptions = ['INVESTOR IQ', 'Other'];
 
-  static const String apiUrl = 'http://192.168.3.201/MainAPI/Home/OrderPosting';
-  static const String marketDataUrl = 'http://192.168.3.201/MainAPI/Home/getMarketData';
+  static const String apiUrl = '$baseUrl/Home/OrderPosting';
+  static const String marketDataUrl = '$baseUrl/Home/getMarketData';
 
   @override
   void initState() {

@@ -1,3 +1,4 @@
+import 'package:bse/contants/constants.dart';
 import 'package:bse/screens/buy_sell/buy_sell.dart';
 import 'package:bse/screens/dashboard/widgets/portifolio_widget.dart';
 import 'package:flutter/material.dart';
@@ -117,7 +118,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _fetchProfileData(String token) async {
     try {
       final response = await http.post(
-        Uri.parse('http://192.168.3.201/MainAPI/Authentication/GetProfile'),
+        Uri.parse('$baseUrl/Authentication/GetProfile'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'Token': token}),
       ).timeout(const Duration(seconds: 30));

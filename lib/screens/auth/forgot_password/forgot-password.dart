@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
-// Password Reset Service
-class PasswordResetService {
-  static const String baseUrl = 'http://192.168.3.201/MainAPI/Authentication';
+import '../../../contants/constants.dart';
 
+
+class PasswordResetService {
   // Send OTP to email
   static Future<Map<String, dynamic>> requestPasswordReset(String email) async {
     try {

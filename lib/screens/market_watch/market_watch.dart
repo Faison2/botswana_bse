@@ -1,3 +1,4 @@
+import 'package:bse/contants/constants.dart';
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'dart:async';
@@ -22,7 +23,7 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
   String? _errorMessage;
   String? _token;
 
-  final String _apiUrl = 'http://192.168.3.201/MainAPI/Home/getMarketData';
+  final String _apiUrl = '$baseUrl/Home/getMarketData';
 
   @override
   void initState() {

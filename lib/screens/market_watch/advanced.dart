@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../contants/constants.dart';
 import '../../theme_provider.dart';
 import 'comparison_screen_analysis.dart';
 
@@ -28,7 +29,7 @@ class _CompanyComparisonScreenState extends State<CompanyComparisonScreen> {
   String? _errorMessage;
   String? _token;
 
-  final String _apiUrl = 'http://192.168.3.201/MainAPI/Home/getMarketData';
+  final String _apiUrl = '$baseUrl/Home/getMarketData';
 
   @override
   void initState() {
