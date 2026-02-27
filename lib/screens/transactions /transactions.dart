@@ -41,17 +41,24 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
       if (_cdsNumber == null) {
         setState(() {
+          _currentBalance = 0.0;
+          _weeklyChange = 0.0;
+          _weeklyChangePercentage = 0.0;
           _isLoadingBalance = false;
         });
         return;
       }
 
-      final response = await http.get(
+      final response = await http
+          .get(
         Uri.parse('http://192.168.3.201:5000/api/Clients/$_cdsNumber/balance'),
         headers: {
           'accept': 'application/json',
         },
-      );
+      )
+          .timeout(const Duration(seconds: 15), onTimeout: () {
+        throw Exception('Connection timeout - unable to load balance');
+      });
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -63,12 +70,21 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           _isLoadingBalance = false;
         });
       } else {
+        // API error - show 0 balance
         setState(() {
+          _currentBalance = 0.0;
+          _weeklyChange = 0.0;
+          _weeklyChangePercentage = 0.0;
           _isLoadingBalance = false;
         });
       }
     } catch (e) {
+      // Connection error or exception - show 0 balance
+      print('Error loading balance: $e');
       setState(() {
+        _currentBalance = 0.0;
+        _weeklyChange = 0.0;
+        _weeklyChangePercentage = 0.0;
         _isLoadingBalance = false;
       });
     }

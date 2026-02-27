@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class TransactionsTab extends StatefulWidget {
@@ -61,12 +62,16 @@ class _TransactionsTabState extends State<TransactionsTab> {
         return;
       }
 
-      final response = await http.get(
+      final response = await http
+          .get(
         Uri.parse('http://192.168.3.201:5000/api/Clients/$_cdsNumber/transactions?page=$_currentPage&pageSize=$_pageSize'),
         headers: {
           'accept': 'application/json',
         },
-      );
+      )
+          .timeout(const Duration(seconds: 15), onTimeout: () {
+        throw TimeoutException('Connection timeout - unable to load transactions');
+      });
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -86,7 +91,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
           });
         } else {
           setState(() {
-            _errorMessage = 'Unexpected response format';
+            _errorMessage = 'Data Not Available - Unexpected response format';
             _isLoading = false;
           });
         }
@@ -95,17 +100,29 @@ class _TransactionsTabState extends State<TransactionsTab> {
           _errorMessage = 'No transactions found';
           _isLoading = false;
         });
+      } else if (response.statusCode == 500) {
+        setState(() {
+          _errorMessage = 'Data Not Available - Server error. Please try again later.';
+          _isLoading = false;
+        });
       } else {
         setState(() {
-          _errorMessage = 'Failed to load transactions';
+          _errorMessage = 'Data Not Available - Failed to load transactions. Status: ${response.statusCode}';
           _isLoading = false;
         });
       }
-    } catch (e) {
+    } on TimeoutException catch (e) {
       setState(() {
-        _errorMessage = 'Network error: ${e.toString()}';
+        _errorMessage = 'Data Not Available - Connection timeout. Please check your internet connection.';
         _isLoading = false;
       });
+      print('Timeout loading transactions: $e');
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Data Not Available - Error: ${e.toString()}';
+        _isLoading = false;
+      });
+      print('Error loading transactions: $e');
     }
   }
 
@@ -118,12 +135,16 @@ class _TransactionsTabState extends State<TransactionsTab> {
 
     try {
       final nextPage = _currentPage + 1;
-      final response = await http.get(
+      final response = await http
+          .get(
         Uri.parse('http://192.168.3.201:5000/api/Clients/$_cdsNumber/transactions?page=$nextPage&pageSize=$_pageSize'),
         headers: {
           'accept': 'application/json',
         },
-      );
+      )
+          .timeout(const Duration(seconds: 15), onTimeout: () {
+        throw TimeoutException('Connection timeout - unable to load more transactions');
+      });
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -150,7 +171,14 @@ class _TransactionsTabState extends State<TransactionsTab> {
           _isLoading = false;
         });
       }
+    } on TimeoutException catch (e) {
+      print('Timeout loading more transactions: $e');
+      setState(() {
+        _hasMore = false;
+        _isLoading = false;
+      });
     } catch (e) {
+      print('Error loading more transactions: $e');
       setState(() {
         _isLoading = false;
       });
@@ -407,7 +435,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: typeColor.withOpacity(0.1),
+              color: typeColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(

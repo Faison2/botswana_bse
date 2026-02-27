@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class WithdrawalsTab extends StatefulWidget {
@@ -67,12 +68,16 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
         return;
       }
 
-      final response = await http.get(
+      final response = await http
+          .get(
         Uri.parse('http://192.168.3.201:5000/api/Clients/$cdsNumber/transactions?page=1&pageSize=50'),
         headers: {
           'accept': 'application/json',
         },
-      );
+      )
+          .timeout(const Duration(seconds: 10), onTimeout: () {
+        throw Exception('Connection timeout - unable to fetch recent withdrawals');
+      });
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -100,6 +105,7 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
         });
       }
     } catch (e) {
+      print('Error loading withdrawals: $e');
       setState(() {
         _isLoadingWithdrawals = false;
       });
@@ -234,10 +240,10 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: widget.isDark ? Colors.green.withOpacity(0.1) : Colors.green.withOpacity(0.05),
+                  color: widget.isDark ? Colors.green.withValues(alpha: 0.1) : Colors.green.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: Colors.green.withOpacity(0.3),
+                    color: Colors.green.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Text(
@@ -423,18 +429,23 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
             const SizedBox(height: 30),
             TextField(
               controller: _phoneController,
+              enabled: false,
               keyboardType: TextInputType.phone,
               style: TextStyle(
-                color: widget.isDark ? Colors.white : Colors.black87,
+                color: widget.isDark ? Colors.white60 : Colors.black54,
                 fontSize: 20,
               ),
               decoration: InputDecoration(
-                hintText: 'Phone Number',
+                labelText: 'Phone Number',
+                labelStyle: TextStyle(
+                  color: widget.isDark ? Colors.white60 : Colors.black54,
+                  fontSize: 14,
+                ),
                 hintStyle: TextStyle(
                   color: widget.isDark ? Colors.white30 : Colors.black26,
                 ),
                 filled: true,
-                fillColor: Colors.transparent,
+                fillColor: widget.isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.02),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(
@@ -447,14 +458,28 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
                     color: widget.isDark ? Colors.white30 : Colors.black26,
                   ),
                 ),
+                disabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: widget.isDark ? Colors.white30 : Colors.black26,
+                  ),
+                ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(
-                    color: widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
+                    color: widget.isDark ? Colors.white30 : Colors.black26,
                     width: 2,
                   ),
                 ),
                 contentPadding: const EdgeInsets.all(16),
+                suffixIcon: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Icon(
+                    Icons.lock,
+                    color: widget.isDark ? Colors.white30 : Colors.black26,
+                    size: 20,
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 30),
@@ -509,7 +534,16 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : () => Navigator.pop(context),
+                    onPressed: _isLoading ? null : () {
+                      // Reset form fields
+                      _phoneController.clear();
+                      _amountController.text = '';
+                      _selectedProvider = 'BTC';
+                      // Close the current bottom sheet or dialog
+                      if (Navigator.canPop(context)) {
+                        Navigator.pop(context);
+                      }
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: widget.isDark ? Colors.black45 : Colors.grey[300],
                       padding: const EdgeInsets.symmetric(vertical: 16),
