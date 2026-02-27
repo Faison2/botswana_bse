@@ -25,6 +25,7 @@ class _TradingPageState extends State<TradingPage> {
   bool isBuy = true;
   bool isLoading = false;
   bool isFetchingStocks = false;
+  bool isFetchingBrokers = false;
   String? _token;
   String? _userName;
   String? _cdsNumber;
@@ -33,21 +34,26 @@ class _TradingPageState extends State<TradingPage> {
   // Controllers
   String? selectedCompany;
   String? selectedTimeInForce = 'Day Order';
-  String? selectedBroker = 'INVESTOR IQ';
-  final quantityController = TextEditingController(text: '200');
-  final priceController = TextEditingController(text: '6.20');
 
-  // For calculations
+  // Broker: selectedBroker holds broker_code (sent to API),
+  //         selectedBrokerName holds fnam (displayed to user)
+  String? selectedBroker;
+  String? selectedBrokerName;
+
+  final quantityController = TextEditingController(text: '');
+  final priceController = TextEditingController(text: '');
   final chargesController = TextEditingController(text: '0.00');
 
   List<Map<String, dynamic>> _allStocks = [];
+  List<Map<String, dynamic>> _brokers = [];
 
   // Dropdown options
   final List<String> timeInForceOptions = ['Day Order', 'Good Till Cancelled'];
-  final List<String> brokerOptions = ['INVESTOR IQ', 'Other'];
 
   static const String apiUrl = '$baseUrl/Home/OrderPosting';
   static const String marketDataUrl = '$baseUrl/Home/getMarketData';
+  static const String brokersUrl =
+      'https://zamagm.escrowagm.com/MainAPI/Home/getAllBrokers';
 
   @override
   void initState() {
@@ -55,6 +61,7 @@ class _TradingPageState extends State<TradingPage> {
     _loadUserData();
     _initializeWithPrefilledData();
     _fetchStocksIfNeeded();
+    _fetchBrokers();
 
     quantityController.addListener(updateCalculations);
     priceController.addListener(updateCalculations);
@@ -70,20 +77,18 @@ class _TradingPageState extends State<TradingPage> {
       final ticker = stockData['ticker'];
       final code = stockData['code'] ?? '';
 
-      // Find the index of this stock
-      final index = _allStocks.indexWhere((stock) =>
-      stock['ticker'] == ticker && stock['code'] == code);
+      final index = _allStocks.indexWhere(
+              (stock) => stock['ticker'] == ticker && stock['code'] == code);
 
       if (index != -1) {
         selectedCompany = '$ticker-$code-$index';
       } else {
-        // If not found, add it and use that index
         _allStocks.add(stockData);
         selectedCompany = '$ticker-$code-${_allStocks.length - 1}';
       }
 
-      // Pre-fill price
-      priceController.text = stockData['closingPriceValue']?.toString() ?? '0.00';
+      priceController.text =
+          stockData['closingPriceValue']?.toString() ?? '0.00';
 
       updateCalculations();
     }
@@ -93,30 +98,126 @@ class _TradingPageState extends State<TradingPage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
-      final fullName = prefs.getString('fullName');
-      final cdsNumber = prefs.getString('cdsNumber');
-      final phoneNumber = prefs.getString('phoneNumber');
 
-      if (token != null && token.isNotEmpty) {
+      if (token == null || token.isEmpty) {
+        print('No token available');
+        return;
+      }
+
+      setState(() => _token = token);
+
+      // Fetch current user profile from API
+      final response = await http.post(
+        Uri.parse('https://zamagm.escrowagm.com/MainAPI/Authentication/GetProfile'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({'Token': token}),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+
+        if (responseData['responseCode'] == 200) {
+          final fullName = responseData['fullName'] ?? 'N/A';
+          final phoneNumber = responseData['phoneNumber'] ?? '';
+          final cdsNumber = responseData['cdsNumber'] ?? '';
+
+          // Update SharedPreferences with current data
+          await prefs.setString('fullName', fullName);
+          await prefs.setString('phoneNumber', phoneNumber);
+          await prefs.setString('cdsNumber', cdsNumber);
+
+          setState(() {
+            _userName = fullName;
+            _phoneNumber = phoneNumber;
+            _cdsNumber = cdsNumber;
+          });
+
+          print('User data loaded successfully: $_userName, $_phoneNumber, $_cdsNumber');
+        } else {
+          print('Failed to load profile: ${responseData['responseMessage']}');
+          // Fallback to cached data if API fails
+          setState(() {
+            _userName = prefs.getString('fullName') ?? 'N/A';
+            _phoneNumber = prefs.getString('phoneNumber') ?? '';
+            _cdsNumber = prefs.getString('cdsNumber') ?? '';
+          });
+        }
+      } else {
+        print('Failed to fetch profile. Status: ${response.statusCode}');
+        // Fallback to cached data if API fails
         setState(() {
-          _token = token;
-          _userName = fullName ?? 'N/A';
-          _cdsNumber = cdsNumber ?? '';
-          _phoneNumber = phoneNumber ?? '';
+          _userName = prefs.getString('fullName') ?? 'N/A';
+          _phoneNumber = prefs.getString('phoneNumber') ?? '';
+          _cdsNumber = prefs.getString('cdsNumber') ?? '';
         });
       }
     } catch (e) {
       print('Error loading user data: $e');
+      // Fallback to cached data if exception occurs
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        setState(() {
+          _userName = prefs.getString('fullName') ?? 'N/A';
+          _phoneNumber = prefs.getString('phoneNumber') ?? '';
+          _cdsNumber = prefs.getString('cdsNumber') ?? '';
+        });
+      } catch (e) {
+        print('Error loading cached user data: $e');
+      }
     }
   }
 
-  Future<void> _fetchStocksIfNeeded() async {
-    // If stocks were passed from previous screen, don't fetch again
-    if (widget.allStocks != null && widget.allStocks!.isNotEmpty) {
-      return;
-    }
+  // ─── Fetch Brokers ────────────────────────────────────────────────────────
 
-    // Wait for token to load
+  Future<void> _fetchBrokers() async {
+    setState(() => isFetchingBrokers = true);
+
+    try {
+      final response = await http.get(
+        Uri.parse(brokersUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
+        },
+      );
+
+      print('Brokers API status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+
+        setState(() {
+          _brokers = data
+              .map((e) => {
+            'broker_code': e['broker_code']?.toString() ?? '',
+            'fnam': e['fnam']?.toString() ?? '',
+          })
+              .toList();
+
+          // Auto-select first broker
+          if (_brokers.isNotEmpty && selectedBroker == null) {
+            selectedBroker = _brokers[0]['broker_code'];
+            selectedBrokerName = _brokers[0]['fnam'];
+          }
+        });
+      } else {
+        print('Failed to fetch brokers: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching brokers: $e');
+    } finally {
+      setState(() => isFetchingBrokers = false);
+    }
+  }
+
+  // ─── Fetch Stocks ─────────────────────────────────────────────────────────
+
+  Future<void> _fetchStocksIfNeeded() async {
+    if (widget.allStocks != null && widget.allStocks!.isNotEmpty) return;
+
     if (_token == null) {
       await Future.delayed(const Duration(milliseconds: 500));
     }
@@ -126,14 +227,11 @@ class _TradingPageState extends State<TradingPage> {
       return;
     }
 
-    // Fetch stocks from API
     await _fetchStocksFromApi();
   }
 
   Future<void> _fetchStocksFromApi() async {
-    setState(() {
-      isFetchingStocks = true;
-    });
+    setState(() => isFetchingStocks = true);
 
     try {
       final response = await http.post(
@@ -153,7 +251,6 @@ class _TradingPageState extends State<TradingPage> {
 
         if (jsonData.isNotEmpty && jsonData[0]['MdataItem'] != null) {
           final List<dynamic> items = jsonData[0]['MdataItem'];
-
           for (var item in items) {
             stocks.add(_mapApiDataToStock(item));
           }
@@ -164,23 +261,18 @@ class _TradingPageState extends State<TradingPage> {
         setState(() {
           _allStocks = stocks;
 
-          // If we have prefilled data but it's not in our fetched list,
-          // add it to ensure we can select it
           if (widget.prefilledStockData != null && stocks.isNotEmpty) {
             final prefilledTicker = widget.prefilledStockData!['ticker'];
             final prefilledCode = widget.prefilledStockData!['code'] ?? '';
 
-            // Check if prefilled stock exists in fetched list
             bool exists = stocks.any((stock) =>
             stock['ticker'] == prefilledTicker &&
                 stock['code'] == prefilledCode);
 
             if (!exists) {
-              // Add the prefilled stock to the list
               _allStocks.add(widget.prefilledStockData!);
             }
 
-            // Find the index and set selected company
             final index = _allStocks.indexWhere((stock) =>
             stock['ticker'] == prefilledTicker &&
                 stock['code'] == prefilledCode);
@@ -189,23 +281,22 @@ class _TradingPageState extends State<TradingPage> {
               selectedCompany = '$prefilledTicker-$prefilledCode-$index';
             }
 
-            // Update price from prefilled data
-            priceController.text = widget.prefilledStockData!['closingPriceValue']?.toString() ?? '0.00';
+            priceController.text =
+                widget.prefilledStockData!['closingPriceValue']?.toString() ??
+                    '0.00';
           } else if (selectedCompany == null && _allStocks.isNotEmpty) {
-            // If no company is selected yet, select the first one
             final firstStock = _allStocks[0];
             final ticker = firstStock['ticker'] ?? '';
             final code = firstStock['code'] ?? '';
             selectedCompany = '$ticker-$code-0';
-            // Also update price for the selected company
-            priceController.text = _allStocks[0]['closingPriceValue']?.toString() ?? '0.00';
+            priceController.text =
+                _allStocks[0]['closingPriceValue']?.toString() ?? '0.00';
           }
 
           updateCalculations();
         });
       } else {
         print('Failed to fetch stocks in TradingPage: ${response.statusCode}');
-        // If we have prefilled data, use it as the only option
         if (widget.prefilledStockData != null) {
           setState(() {
             _allStocks = [widget.prefilledStockData!];
@@ -217,7 +308,6 @@ class _TradingPageState extends State<TradingPage> {
       }
     } catch (e) {
       print('Error fetching stocks in TradingPage: $e');
-      // If we have prefilled data, use it as the only option
       if (widget.prefilledStockData != null) {
         setState(() {
           _allStocks = [widget.prefilledStockData!];
@@ -227,13 +317,10 @@ class _TradingPageState extends State<TradingPage> {
         });
       }
     } finally {
-      setState(() {
-        isFetchingStocks = false;
-      });
+      setState(() => isFetchingStocks = false);
     }
   }
 
-  // Same mapping function as in MarketWatchWidget
   Map<String, dynamic> _mapApiDataToStock(dynamic item) {
     String name = item['Company']?.toString() ?? 'Unknown';
     String ticker = item['Symbol']?.toString() ?? 'N/A';
@@ -251,10 +338,8 @@ class _TradingPageState extends State<TradingPage> {
     String openInterest = item['Openinterest']?.toString() ?? '0';
     String supply = _formatVolume(openInterest);
     String demand = '-';
-
     String status = item['status']?.toString() ?? '';
 
-    // Get icon and color (optional, you can remove if not needed)
     IconData icon = _getIconForStock(ticker);
     Color color = _getColorForStock(ticker);
 
@@ -270,7 +355,6 @@ class _TradingPageState extends State<TradingPage> {
       'color': color,
       'status': status,
       'code': code,
-      // Add raw numeric values for trading page
       'closingPriceValue': double.tryParse(closingPrice) ?? 0.0,
       'openingPriceValue': double.tryParse(openingPrice) ?? 0.0,
       'maxPriceValue': double.tryParse(maxPrice) ?? 0.0,
@@ -282,13 +366,9 @@ class _TradingPageState extends State<TradingPage> {
   String _formatVolume(String volume) {
     try {
       final num = double.parse(volume);
-      if (num >= 1000000000) {
-        return '${(num / 1000000000).toStringAsFixed(2)}B';
-      } else if (num >= 1000000) {
-        return '${(num / 1000000).toStringAsFixed(2)}M';
-      } else if (num >= 1000) {
-        return '${(num / 1000).toStringAsFixed(2)}K';
-      }
+      if (num >= 1000000000) return '${(num / 1000000000).toStringAsFixed(2)}B';
+      if (num >= 1000000) return '${(num / 1000000).toStringAsFixed(2)}M';
+      if (num >= 1000) return '${(num / 1000).toStringAsFixed(2)}K';
       return num.toStringAsFixed(0);
     } catch (e) {
       return '0';
@@ -296,43 +376,25 @@ class _TradingPageState extends State<TradingPage> {
   }
 
   IconData _getIconForStock(String symbol) {
-    final upperSymbol = symbol.toUpperCase();
-
-    if (upperSymbol.contains('BANK') ||
-        upperSymbol.contains('CRDB') ||
-        upperSymbol.contains('NMB') ||
-        upperSymbol.contains('KCB') ||
-        upperSymbol.contains('DCB') ||
-        upperSymbol.contains('MKCB') ||
-        upperSymbol.contains('MUCOBA') ||
-        upperSymbol.contains('MCB') ||
-        upperSymbol.contains('MBP')) {
+    final s = symbol.toUpperCase();
+    if (s.contains('BANK') || s.contains('CRDB') || s.contains('NMB') ||
+        s.contains('KCB') || s.contains('DCB') || s.contains('MKCB') ||
+        s.contains('MUCOBA') || s.contains('MCB') || s.contains('MBP')) {
       return Icons.account_balance;
-    } else if (upperSymbol.contains('BREW') ||
-        upperSymbol.contains('TBL') ||
-        upperSymbol.contains('EABL')) {
+    } else if (s.contains('BREW') || s.contains('TBL') || s.contains('EABL')) {
       return Icons.local_drink;
-    } else if (upperSymbol.contains('AIR') ||
-        upperSymbol.contains('KA') ||
-        upperSymbol.contains('PAL')) {
+    } else if (s.contains('AIR') || s.contains('KA') || s.contains('PAL')) {
       return Icons.flight;
-    } else if (upperSymbol.contains('CEMENT') ||
-        upperSymbol.contains('TCCL') ||
-        upperSymbol.contains('TPCC')) {
+    } else if (s.contains('CEMENT') || s.contains('TCCL') || s.contains('TPCC')) {
       return Icons.construction;
-    } else if (upperSymbol.contains('VODA') ||
-        upperSymbol.contains('TELECOM')) {
+    } else if (s.contains('VODA') || s.contains('TELECOM')) {
       return Icons.phone_android;
-    } else if (upperSymbol.contains('MEDIA') ||
-        upperSymbol.contains('NMG')) {
+    } else if (s.contains('MEDIA') || s.contains('NMG')) {
       return Icons.newspaper;
-    } else if (upperSymbol.contains('INSURANCE') ||
-        upperSymbol.contains('JHL')) {
+    } else if (s.contains('INSURANCE') || s.contains('JHL')) {
       return Icons.security;
-    } else if (upperSymbol.contains('OIL') ||
-        upperSymbol.contains('GAS') ||
-        upperSymbol.contains('SWALA') ||
-        upperSymbol.contains('TOL')) {
+    } else if (s.contains('OIL') || s.contains('GAS') ||
+        s.contains('SWALA') || s.contains('TOL')) {
       return Icons.local_gas_station;
     }
     return Icons.business;
@@ -347,9 +409,7 @@ class _TradingPageState extends State<TradingPage> {
       const Color(0xFF2F4A3F),
       const Color(0xFF3F2F4A),
     ];
-
-    final index = symbol.hashCode.abs() % colors.length;
-    return colors[index];
+    return colors[symbol.hashCode.abs() % colors.length];
   }
 
   @override
@@ -360,71 +420,62 @@ class _TradingPageState extends State<TradingPage> {
     super.dispose();
   }
 
+  // ─── Calculations ─────────────────────────────────────────────────────────
+
   double get grossTotal {
     final quantity = double.tryParse(quantityController.text) ?? 0;
     final price = double.tryParse(priceController.text) ?? 0;
     return quantity * price;
   }
 
-  double get custodialFee {
-    return grossTotal * 0.01; // 1%
-  }
+  double get custodialFee => grossTotal * 0.01;
 
-  double get charges {
-    return double.tryParse(chargesController.text) ?? 0;
-  }
+  double get charges => double.tryParse(chargesController.text) ?? 0;
 
-  double get netTotal {
-    return grossTotal + custodialFee + charges;
-  }
+  double get netTotal => grossTotal + custodialFee + charges;
 
-  void updateCalculations() {
-    setState(() {});
-  }
+  void updateCalculations() => setState(() {});
 
   void _onCompanyChanged(String? uniqueId) {
     if (uniqueId == null) return;
-
     setState(() {
       selectedCompany = uniqueId;
-
-      // Extract the index from the uniqueId
       final parts = uniqueId.split('-');
       final index = int.tryParse(parts.last);
-
       if (index != null && index < _allStocks.length) {
-        final stockData = _allStocks[index];
-
-        // Update price
-        priceController.text = stockData['closingPriceValue']?.toString() ?? '0.00';
+        priceController.text =
+            _allStocks[index]['closingPriceValue']?.toString() ?? '0.00';
         updateCalculations();
       }
     });
   }
+
+  // ─── Place Order ──────────────────────────────────────────────────────────
 
   Future<void> placeOrder() async {
     if (_token == null) {
       _showError('No authentication token available');
       return;
     }
-
     if (selectedCompany == null || selectedCompany!.isEmpty) {
       _showError('Please select a company');
       return;
     }
+    if (selectedBroker == null || selectedBroker!.isEmpty) {
+      _showError('Please select a broker');
+      return;
+    }
 
-    setState(() {
-      isLoading = true;
-    });
+    setState(() => isLoading = true);
 
     try {
-      // Extract the index from the uniqueId
       final parts = selectedCompany!.split('-');
       final index = int.tryParse(parts.last);
 
       String companyName = '';
       if (index != null && index < _allStocks.length) {
-        companyName = _allStocks[index]['ticker'] ?? _allStocks[index]['name'] ?? '';
+        companyName =
+            _allStocks[index]['ticker'] ?? _allStocks[index]['name'] ?? '';
       }
 
       final settlementDate = DateTime.now().add(const Duration(days: 2));
@@ -437,7 +488,7 @@ class _TradingPageState extends State<TradingPage> {
         "Quantity": double.tryParse(quantityController.text) ?? 0,
         "BasePrice": double.tryParse(priceController.text) ?? 0,
         "TimeInForce": selectedTimeInForce,
-        "BrokerCode": selectedBroker,
+        "BrokerCode": selectedBroker, // sends broker_code
         "CdsAcNo": _cdsNumber ?? '',
         "Shareholder": "SHR7891011",
         "LiNumber": "LI998877",
@@ -463,17 +514,14 @@ class _TradingPageState extends State<TradingPage> {
 
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body);
-
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Order #${responseData[0]['ordernumber']} placed successfully!',
-              ),
+                  'Order #${responseData[0]['ordernumber']} placed successfully!'),
               backgroundColor: Colors.green,
             ),
           );
-
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const DashboardScreen()),
@@ -488,28 +536,22 @@ class _TradingPageState extends State<TradingPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
+              content: Text('Error: ${e.toString()}'),
+              backgroundColor: Colors.red),
         );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          isLoading = false;
-        });
-      }
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
+
+  // ─── Build ────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -520,25 +562,20 @@ class _TradingPageState extends State<TradingPage> {
         ? const LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
-      colors: [
-        Color(0xFF2C1810),
-        Color(0xFF1A1A1A),
-        Color(0xFF0D0D0D),
-      ],
+      colors: [Color(0xFF2C1810), Color(0xFF1A1A1A), Color(0xFF0D0D0D)],
     )
         : const LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
-      colors: [
-        Color(0xFFFFF8E7),
-        Color(0xFFF5F5F5),
-        Color(0xFFFFFFFF),
-      ],
+      colors: [Color(0xFFFFF8E7), Color(0xFFF5F5F5), Color(0xFFFFFFFF)],
     );
 
-    final accentColor = isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855);
-    final toggleBgColor = isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF0F0F0);
-    final fieldBorderColor = isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855);
+    final accentColor =
+    isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855);
+    final toggleBgColor =
+    isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF0F0F0);
+    final fieldBorderColor =
+    isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855);
     final textColor = isDark ? Colors.white : Colors.black87;
     final subtextColor = isDark ? Colors.grey : Colors.grey.shade600;
     final cardColor = isDark ? const Color(0xFF3A3530) : Colors.white;
@@ -557,7 +594,7 @@ class _TradingPageState extends State<TradingPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Column(
                       children: [
-                        // BUY/SELL Toggle
+                        // ── BUY / SELL Toggle ──────────────────────────────
                         Container(
                           decoration: BoxDecoration(
                             color: toggleBgColor,
@@ -569,7 +606,7 @@ class _TradingPageState extends State<TradingPage> {
                                 color: Colors.black.withOpacity(0.05),
                                 blurRadius: 10,
                                 offset: const Offset(0, 2),
-                              ),
+                              )
                             ],
                           ),
                           padding: const EdgeInsets.all(4),
@@ -577,30 +614,27 @@ class _TradingPageState extends State<TradingPage> {
                             children: [
                               Expanded(
                                 child: GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      isBuy = true;
-                                    });
-                                  },
+                                  onTap: () => setState(() => isBuy = true),
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 12),
                                     decoration: isBuy
                                         ? BoxDecoration(
                                       gradient: const LinearGradient(
-                                        begin: Alignment.centerLeft,
-                                        end: Alignment.centerRight,
                                         colors: [
                                           Colors.green,
-                                          Colors.black,
+                                          Colors.black
                                         ],
                                       ),
-                                      borderRadius: BorderRadius.circular(28),
+                                      borderRadius:
+                                      BorderRadius.circular(28),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.green.withOpacity(0.3),
+                                          color: Colors.green
+                                              .withOpacity(0.3),
                                           blurRadius: 8,
                                           offset: const Offset(0, 2),
-                                        ),
+                                        )
                                       ],
                                     )
                                         : null,
@@ -608,9 +642,13 @@ class _TradingPageState extends State<TradingPage> {
                                       child: Text(
                                         'BUY',
                                         style: TextStyle(
-                                          color: isBuy ? Colors.white : subtextColor,
+                                          color: isBuy
+                                              ? Colors.white
+                                              : subtextColor,
                                           fontSize: 18,
-                                          fontWeight: isBuy ? FontWeight.bold : FontWeight.w400,
+                                          fontWeight: isBuy
+                                              ? FontWeight.bold
+                                              : FontWeight.w400,
                                         ),
                                       ),
                                     ),
@@ -619,30 +657,27 @@ class _TradingPageState extends State<TradingPage> {
                               ),
                               Expanded(
                                 child: GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      isBuy = false;
-                                    });
-                                  },
+                                  onTap: () => setState(() => isBuy = false),
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 12),
                                     decoration: !isBuy
                                         ? BoxDecoration(
                                       gradient: const LinearGradient(
-                                        begin: Alignment.centerLeft,
-                                        end: Alignment.centerRight,
                                         colors: [
                                           Colors.black,
-                                          Colors.red,
+                                          Colors.red
                                         ],
                                       ),
-                                      borderRadius: BorderRadius.circular(28),
+                                      borderRadius:
+                                      BorderRadius.circular(28),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.red.withOpacity(0.3),
+                                          color:
+                                          Colors.red.withOpacity(0.3),
                                           blurRadius: 8,
                                           offset: const Offset(0, 2),
-                                        ),
+                                        )
                                       ],
                                     )
                                         : null,
@@ -650,9 +685,13 @@ class _TradingPageState extends State<TradingPage> {
                                       child: Text(
                                         'SELL',
                                         style: TextStyle(
-                                          color: !isBuy ? Colors.white : subtextColor,
+                                          color: !isBuy
+                                              ? Colors.white
+                                              : subtextColor,
                                           fontSize: 18,
-                                          fontWeight: !isBuy ? FontWeight.bold : FontWeight.w400,
+                                          fontWeight: !isBuy
+                                              ? FontWeight.bold
+                                              : FontWeight.w400,
                                         ),
                                       ),
                                     ),
@@ -664,39 +703,13 @@ class _TradingPageState extends State<TradingPage> {
                         ),
                         const SizedBox(height: 24),
 
-                        // Company Dropdown with loading state
+                        // ── Company Dropdown ───────────────────────────────
                         if (isFetchingStocks)
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Company',
-                                style: TextStyle(
-                                  color: textColor,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                decoration: BoxDecoration(
-                                  color: fieldBgColor,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: fieldBorderColor,
-                                    width: 1,
-                                  ),
-                                ),
-                                child: Center(
-                                  child: CircularProgressIndicator(
-                                    color: accentColor,
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          )
+                          _buildLoadingField('Company',
+                              textColor: textColor,
+                              fieldBorderColor: fieldBorderColor,
+                              fieldBgColor: fieldBgColor,
+                              accentColor: accentColor)
                         else
                           _buildCompanyDropdown(
                             textColor: textColor,
@@ -707,16 +720,13 @@ class _TradingPageState extends State<TradingPage> {
                           ),
                         const SizedBox(height: 16),
 
-                        // Time In Force Dropdown
+                        // ── Time In Force Dropdown ─────────────────────────
                         _buildDropdownField(
                           'Time In Force',
                           selectedTimeInForce,
                           timeInForceOptions,
-                              (value) {
-                            setState(() {
-                              selectedTimeInForce = value;
-                            });
-                          },
+                              (value) =>
+                              setState(() => selectedTimeInForce = value),
                           textColor: textColor,
                           fieldBorderColor: fieldBorderColor,
                           dropdownBgColor: dropdownBgColor,
@@ -725,25 +735,24 @@ class _TradingPageState extends State<TradingPage> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Broker Dropdown
-                        _buildDropdownField(
-                          'Broker',
-                          selectedBroker,
-                          brokerOptions,
-                              (value) {
-                            setState(() {
-                              selectedBroker = value;
-                            });
-                          },
-                          textColor: textColor,
-                          fieldBorderColor: fieldBorderColor,
-                          dropdownBgColor: dropdownBgColor,
-                          accentColor: accentColor,
-                          fieldBgColor: fieldBgColor,
-                        ),
+                        // ── Broker Dropdown (dynamic) ──────────────────────
+                        if (isFetchingBrokers)
+                          _buildLoadingField('Broker',
+                              textColor: textColor,
+                              fieldBorderColor: fieldBorderColor,
+                              fieldBgColor: fieldBgColor,
+                              accentColor: accentColor)
+                        else
+                          _buildBrokerDropdown(
+                            textColor: textColor,
+                            fieldBorderColor: fieldBorderColor,
+                            dropdownBgColor: dropdownBgColor,
+                            accentColor: accentColor,
+                            fieldBgColor: fieldBgColor,
+                          ),
                         const SizedBox(height: 16),
 
-                        // Quantity Field
+                        // ── Quantity ───────────────────────────────────────
                         _buildTextField(
                           'Quantity',
                           quantityController,
@@ -754,18 +763,19 @@ class _TradingPageState extends State<TradingPage> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Price Field
+                        // ── Price ──────────────────────────────────────────
                         _buildTextField(
                           'Price',
                           priceController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
                           textColor: textColor,
                           fieldBorderColor: fieldBorderColor,
                           fieldBgColor: fieldBgColor,
                         ),
                         const SizedBox(height: 16),
 
-                        // Phone Number Display (Read-only)
+                        // ── Phone Number (read-only) ───────────────────────
                         _buildReadOnlyField(
                           'Phone Number',
                           _phoneNumber ?? 'N/A',
@@ -775,7 +785,7 @@ class _TradingPageState extends State<TradingPage> {
                         ),
                         const SizedBox(height: 16),
 
-                        // CDS Number Display (Read-only)
+                        // ── CDS Number (read-only) ─────────────────────────
                         _buildReadOnlyField(
                           'CDS Number',
                           _cdsNumber ?? 'N/A',
@@ -785,7 +795,7 @@ class _TradingPageState extends State<TradingPage> {
                         ),
                         const SizedBox(height: 24),
 
-                        // Order Summary
+                        // ── Order Summary ──────────────────────────────────
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
@@ -798,92 +808,40 @@ class _TradingPageState extends State<TradingPage> {
                                 color: Colors.black.withOpacity(0.05),
                                 blurRadius: 10,
                                 offset: const Offset(0, 4),
-                              ),
+                              )
                             ],
                           ),
                           child: Column(
                             children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'GROSS TOTAL:',
-                                    style: TextStyle(
-                                      color: subtextColor,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  Text(
-                                    'BWP ${grossTotal.toStringAsFixed(2)}',
-                                    style: TextStyle(
-                                      color: subtextColor,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              _summaryRow('GROSS TOTAL:',
+                                  'BWP ${grossTotal.toStringAsFixed(2)}',
+                                  subtextColor),
                               const SizedBox(height: 8),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'CUSTODIAL FEE (1%):',
-                                    style: TextStyle(
-                                      color: subtextColor,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  Text(
-                                    'BWP ${custodialFee.toStringAsFixed(2)}',
-                                    style: TextStyle(
-                                      color: subtextColor,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              _summaryRow('CUSTODIAL FEE (1%):',
+                                  'BWP ${custodialFee.toStringAsFixed(2)}',
+                                  subtextColor),
                               const SizedBox(height: 8),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'CHARGES:',
-                                    style: TextStyle(
-                                      color: subtextColor,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  Text(
-                                    'BWP ${charges.toStringAsFixed(2)}',
-                                    style: TextStyle(
-                                      color: subtextColor,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              _summaryRow('CHARGES:',
+                                  'BWP ${charges.toStringAsFixed(2)}',
+                                  subtextColor),
                               const SizedBox(height: 12),
                               Divider(color: subtextColor),
                               const SizedBox(height: 12),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                MainAxisAlignment.spaceBetween,
                                 children: [
+                                  Text('NET TOTAL:',
+                                      style: TextStyle(
+                                          color: textColor,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold)),
                                   Text(
-                                    'NET TOTAL:',
-                                    style: TextStyle(
-                                      color: textColor,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  Text(
-                                    'BWP ${netTotal.toStringAsFixed(2)}',
-                                    style: TextStyle(
-                                      color: accentColor,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
+                                      'BWP ${netTotal.toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                          color: accentColor,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold)),
                                 ],
                               ),
                             ],
@@ -891,7 +849,7 @@ class _TradingPageState extends State<TradingPage> {
                         ),
                         const SizedBox(height: 32),
 
-                        // Action Buttons
+                        // ── Action Buttons ─────────────────────────────────
                         Row(
                           children: [
                             Expanded(
@@ -900,21 +858,22 @@ class _TradingPageState extends State<TradingPage> {
                                   backgroundColor: isDark
                                       ? const Color(0xFF4A4540)
                                       : Colors.grey.shade300,
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 16),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
+                                      borderRadius:
+                                      BorderRadius.circular(12)),
                                 ),
-                                onPressed: isLoading ? null : () {
-                                  Navigator.pop(context);
-                                },
+                                onPressed:
+                                isLoading ? null : () => Navigator.pop(context),
                                 child: Text(
                                   'CLOSE',
                                   style: TextStyle(
-                                    color: isDark ? Colors.white : Colors.black87,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                      color: isDark
+                                          ? Colors.white
+                                          : Colors.black87,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold),
                                 ),
                               ),
                             ),
@@ -923,28 +882,33 @@ class _TradingPageState extends State<TradingPage> {
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: accentColor,
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 16),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
+                                      borderRadius:
+                                      BorderRadius.circular(12)),
                                 ),
-                                onPressed: (isLoading || isFetchingStocks || _allStocks.isEmpty) ? null : placeOrder,
+                                onPressed: (isLoading ||
+                                    isFetchingStocks ||
+                                    isFetchingBrokers ||
+                                    _allStocks.isEmpty ||
+                                    _brokers.isEmpty)
+                                    ? null
+                                    : placeOrder,
                                 child: isLoading
                                     ? const SizedBox(
                                   height: 20,
                                   width: 20,
                                   child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
+                                      color: Colors.white,
+                                      strokeWidth: 2),
                                 )
                                     : const Text(
                                   'PLACE ORDER',
                                   style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold),
                                 ),
                               ),
                             ),
@@ -963,6 +927,51 @@ class _TradingPageState extends State<TradingPage> {
     );
   }
 
+  // ─── Helper Widgets ───────────────────────────────────────────────────────
+
+  Row _summaryRow(String label, String value, Color color) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: TextStyle(color: color, fontSize: 14)),
+        Text(value, style: TextStyle(color: color, fontSize: 14)),
+      ],
+    );
+  }
+
+  /// Generic loading placeholder shown while a dropdown's data is fetching.
+  Widget _buildLoadingField(
+      String label, {
+        required Color textColor,
+        required Color fieldBorderColor,
+        required Color fieldBgColor,
+        required Color accentColor,
+      }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: TextStyle(
+                color: textColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            color: fieldBgColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: fieldBorderColor, width: 1),
+          ),
+          child: Center(
+            child: CircularProgressIndicator(
+                color: accentColor, strokeWidth: 2),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildCompanyDropdown({
     required Color textColor,
     required Color fieldBorderColor,
@@ -973,33 +982,25 @@ class _TradingPageState extends State<TradingPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Company',
-          style: TextStyle(
-            color: textColor,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+        Text('Company',
+            style: TextStyle(
+                color: textColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
             color: fieldBgColor,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: fieldBorderColor,
-              width: 1,
-            ),
+            border: Border.all(color: fieldBorderColor, width: 1),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: selectedCompany,
               hint: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  'Select Company',
-                  style: TextStyle(color: textColor.withOpacity(0.5)),
-                ),
+                child: Text('Select Company',
+                    style: TextStyle(color: textColor.withOpacity(0.5))),
               ),
               isExpanded: true,
               dropdownColor: dropdownBgColor,
@@ -1007,20 +1008,14 @@ class _TradingPageState extends State<TradingPage> {
                 padding: const EdgeInsets.only(right: 16),
                 child: Icon(Icons.arrow_drop_down, color: accentColor),
               ),
-              style: TextStyle(
-                color: textColor,
-                fontSize: 14,
-              ),
+              style: TextStyle(color: textColor, fontSize: 14),
               items: _allStocks.asMap().entries.map((entry) {
                 final index = entry.key;
                 final stock = entry.value;
                 final companyName = stock['name'] ?? 'Unknown Company';
                 final ticker = stock['ticker'] ?? companyName;
                 final code = stock['code'] ?? '';
-
-                // Create a unique identifier
                 final uniqueId = '$ticker-$code-$index';
-
                 final priceValue = stock['closingPriceValue'] ?? 0.0;
                 final priceString = priceValue is double
                     ? priceValue.toStringAsFixed(2)
@@ -1029,29 +1024,24 @@ class _TradingPageState extends State<TradingPage> {
                 return DropdownMenuItem<String>(
                   value: uniqueId,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(
-                          child: Text(
-                            companyName,
+                          child: Text(companyName,
+                              style: TextStyle(
+                                  color: textColor,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500),
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                        Text('(BWP $priceString)',
                             style: TextStyle(
-                              color: textColor,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Text(
-                          '(BWP $priceString)',
-                          style: TextStyle(
-                            color: accentColor,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
+                                color: accentColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500)),
                       ],
                     ),
                   ),
@@ -1066,10 +1056,88 @@ class _TradingPageState extends State<TradingPage> {
             padding: EdgeInsets.only(top: 8.0),
             child: Text(
               'No companies available. Please check your connection or contact support.',
-              style: TextStyle(
-                color: Colors.red,
-                fontSize: 12,
+              style: TextStyle(color: Colors.red, fontSize: 12),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Dynamic broker dropdown — displays fnam, submits broker_code.
+  Widget _buildBrokerDropdown({
+    required Color textColor,
+    required Color fieldBorderColor,
+    required Color dropdownBgColor,
+    required Color accentColor,
+    required Color fieldBgColor,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Broker',
+            style: TextStyle(
+                color: textColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: fieldBgColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: fieldBorderColor, width: 1),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              // value is broker_code
+              value: selectedBroker,
+              hint: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text('Select Broker',
+                    style: TextStyle(color: textColor.withOpacity(0.5))),
               ),
+              isExpanded: true,
+              dropdownColor: dropdownBgColor,
+              icon: Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: Icon(Icons.arrow_drop_down, color: accentColor),
+              ),
+              style: TextStyle(color: textColor, fontSize: 14),
+              items: _brokers.map((broker) {
+                return DropdownMenuItem<String>(
+                  value: broker['broker_code'], // key used internally
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    child: Text(
+                      broker['fnam']!, // shown to user
+                      style: TextStyle(
+                          color: textColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                );
+              }).toList(),
+              onChanged: _brokers.isEmpty
+                  ? null
+                  : (value) {
+                setState(() {
+                  selectedBroker = value; // broker_code
+                  selectedBrokerName = _brokers.firstWhere(
+                        (b) => b['broker_code'] == value,
+                    orElse: () => {'fnam': ''},
+                  )['fnam'];
+                });
+              },
+            ),
+          ),
+        ),
+        if (_brokers.isEmpty && !isFetchingBrokers)
+          const Padding(
+            padding: EdgeInsets.only(top: 8.0),
+            child: Text(
+              'No brokers available. Please check your connection.',
+              style: TextStyle(color: Colors.red, fontSize: 12),
             ),
           ),
       ],
@@ -1090,23 +1158,17 @@ class _TradingPageState extends State<TradingPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: textColor,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+        Text(label,
+            style: TextStyle(
+                color: textColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
             color: fieldBgColor,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: fieldBorderColor,
-              width: 1,
-            ),
+            border: Border.all(color: fieldBorderColor, width: 1),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
@@ -1117,23 +1179,18 @@ class _TradingPageState extends State<TradingPage> {
                 padding: const EdgeInsets.only(right: 16),
                 child: Icon(Icons.arrow_drop_down, color: accentColor),
               ),
-              style: TextStyle(
-                color: textColor,
-                fontSize: 14,
-              ),
+              style: TextStyle(color: textColor, fontSize: 14),
               items: options.map((option) {
                 return DropdownMenuItem<String>(
                   value: option,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: Text(
-                      option,
-                      style: TextStyle(
-                        color: textColor,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    child: Text(option,
+                        style: TextStyle(
+                            color: textColor,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500)),
                   ),
                 );
               }).toList(),
@@ -1156,14 +1213,11 @@ class _TradingPageState extends State<TradingPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: textColor,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+        Text(label,
+            style: TextStyle(
+                color: textColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
         TextField(
           controller: controller,
@@ -1172,31 +1226,20 @@ class _TradingPageState extends State<TradingPage> {
           decoration: InputDecoration(
             filled: true,
             fillColor: fieldBgColor,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 14,
-            ),
+            contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: fieldBorderColor,
-                width: 1,
-              ),
-            ),
+                borderRadius: BorderRadius.circular(12),
+                borderSide:
+                BorderSide(color: fieldBorderColor, width: 1)),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: fieldBorderColor,
-                width: 1,
-              ),
-            ),
+                borderRadius: BorderRadius.circular(12),
+                borderSide:
+                BorderSide(color: fieldBorderColor, width: 1)),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: fieldBorderColor,
-                width: 2,
-              ),
-            ),
+                borderRadius: BorderRadius.circular(12),
+                borderSide:
+                BorderSide(color: fieldBorderColor, width: 2)),
           ),
         ),
       ],
@@ -1213,36 +1256,23 @@ class _TradingPageState extends State<TradingPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: textColor,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+        Text(label,
+            style: TextStyle(
+                color: textColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
-          ),
+          padding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             color: fieldBgColor,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: fieldBorderColor,
-              width: 1,
-            ),
+            border: Border.all(color: fieldBorderColor, width: 1),
           ),
-          child: Text(
-            value,
-            style: TextStyle(
-              color: textColor,
-              fontSize: 14,
-            ),
-          ),
+          child: Text(value,
+              style: TextStyle(color: textColor, fontSize: 14)),
         ),
       ],
     );

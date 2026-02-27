@@ -230,18 +230,6 @@ class _AppDrawerState extends State<AppDrawer> {
             ),
             _buildDrawerItem(
               context: context,
-              icon: Icons.bar_chart_outlined,
-              title: 'Market Analysis',
-              onTap: () {
-                widget.onMenuItemTapped(1);
-                Navigator.pop(context);
-              },
-              textColor: textColor,
-              iconColor: iconColor,
-              trailingIconColor: trailingIconColor,
-            ),
-            _buildDrawerItem(
-              context: context,
               icon: Icons.attach_money,
               title: 'Transactions',
               onTap: () {
@@ -258,30 +246,6 @@ class _AppDrawerState extends State<AppDrawer> {
               title: 'Portfolio',
               onTap: () {
                 widget.onMenuItemTapped(4);
-                Navigator.pop(context);
-              },
-              textColor: textColor,
-              iconColor: iconColor,
-              trailingIconColor: trailingIconColor,
-            ),
-            _buildDrawerItem(
-              context: context,
-              icon: Icons.trending_up,
-              title: 'Market Watch',
-              onTap: () {
-                widget.onMarketWatchTapped();
-                Navigator.pop(context);
-              },
-              textColor: textColor,
-              iconColor: iconColor,
-              trailingIconColor: trailingIconColor,
-            ),
-            _buildDrawerItem(
-              context: context,
-              icon: Icons.swap_horiz,
-              title: 'Buy/Sell',
-              onTap: () {
-                widget.onBuySellTapped();
                 Navigator.pop(context);
               },
               textColor: textColor,
