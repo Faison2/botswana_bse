@@ -456,7 +456,7 @@ class _DepositsTabState extends State<DepositsTab> {
               onPressed: () {
                 Navigator.of(context).pop();
                 _amountController.clear();
-                _phoneController.clear();
+                // Don't clear phone controller - it's locked and auto-populated
                 // Refresh balance after successful transaction
                 widget.onTransactionComplete?.call();
                 // Reload recent deposits

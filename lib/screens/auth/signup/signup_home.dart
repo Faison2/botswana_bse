@@ -1,3 +1,4 @@
+import 'package:bse/contants/constants.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -540,7 +541,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       );
 
       final response = await http.post(
-        Uri.parse('http://192.168.3.201/MainAPI/Home/AccountOpening'),
+        Uri.parse('$baseUrl/Home/AccountOpening'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode(payload),
       ).timeout(const Duration(seconds: 30));
