@@ -15,12 +15,12 @@ class PortfolioScreen extends StatefulWidget {
 class _PortfolioScreenState extends State<PortfolioScreen> {
   String _selectedTab = 'PORTFOLIO';
 
-  // ── Portfolio (Transactions) state ──
+  // ── Portfolio state ──
   List<Map<String, dynamic>> _portfolioData = [];
   bool _isLoadingPortfolio = false;
   String? _portfolioError;
-  double _totalBalance = 0.0;
-  String _currency = '';
+  double _totalPortfolioValue = 0.0;
+  double _totalShares = 0.0;
 
   // ── Orders state ──
   List<Map<String, dynamic>> _ordersData = [];
@@ -33,8 +33,52 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
   @override
   void initState() {
     super.initState();
-    _loadPortfolioFromApi();
+    _loadFromCacheThenRefresh();
     _loadOrdersFromApi();
+  }
+
+  /// Instantly populate the UI from the cache the Dashboard wrote,
+  /// then silently refresh from the API in the background.
+  Future<void> _loadFromCacheThenRefresh() async {
+    await _loadPortfolioFromCache();
+    await _loadPortfolioFromApi();
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  SharedPreferences cache (written by DashboardScreen)
+  // ─────────────────────────────────────────────────────────────
+
+  static const _kHoldingsKey      = 'cachedPortfolioHoldings';
+  static const _kTotalValueKey    = 'cachedPortfolioValue';
+  static const _kTotalSharesKey   = 'cachedTotalShares';
+
+  Future<void> _loadPortfolioFromCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kHoldingsKey);
+      if (raw == null || raw.isEmpty) return;
+
+      final List<dynamic> decoded = jsonDecode(raw);
+      final holdings = decoded
+          .whereType<Map>()
+          .map((item) => <String, dynamic>{
+        'company':      item['company']?.toString() ?? '-',
+        'cdsNumber':    item['cdsNumber']?.toString() ?? '-',
+        'totalShares':  (item['totalShares'] as num?)?.toDouble() ?? 0.0,
+        'currentValue': (item['currentValue'] as num?)?.toDouble() ?? 0.0,
+      })
+          .toList();
+
+      if (!mounted) return;
+      setState(() {
+        _portfolioData       = holdings;
+        _totalPortfolioValue = prefs.getDouble(_kTotalValueKey)  ?? 0.0;
+        _totalShares         = prefs.getDouble(_kTotalSharesKey) ?? 0.0;
+        _cdsNumber           = prefs.getString('cdsNumber');
+      });
+    } catch (e) {
+      debugPrint('Cache load error: $e');
+    }
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -46,6 +90,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
     if (decoded is Map) {
       const wrapperKeys = [
         'data', 'Data',
+        'portfolio', 'Portfolio',
         'transactions', 'Transactions',
         'orders', 'Orders',
         'result', 'Result',
@@ -76,18 +121,11 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
     return [];
   }
 
-  String _formatDate(String rawDate) {
-    try {
-      final parts = rawDate.split(' ');
-      final dateParts = parts[0].split('/');
-      if (dateParts.length == 3) {
-        final month = dateParts[0].padLeft(2, '0');
-        final day   = dateParts[1].padLeft(2, '0');
-        final year  = dateParts[2];
-        return '$year-$month-$day';
-      }
-    } catch (_) {}
-    return rawDate;
+  String _formatAmount(double amount) {
+    return amount.toStringAsFixed(2).replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+\.)'),
+          (m) => '${m[1]},',
+    );
   }
 
   String _formatDatetime(String rawDate) {
@@ -96,32 +134,29 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
       final dateParts = parts[0].split('/');
       if (dateParts.length == 3) {
         final month = dateParts[0].padLeft(2, '0');
-        final day   = dateParts[1].padLeft(2, '0');
-        final year  = dateParts[2];
-        final time  = parts.length >= 3 ? ' ${parts[1]} ${parts[2]}' : '';
+        final day = dateParts[1].padLeft(2, '0');
+        final year = dateParts[2];
+        final time = parts.length >= 3 ? ' ${parts[1]} ${parts[2]}' : '';
         return '$year-$month-$day$time';
       }
     } catch (_) {}
     return rawDate;
   }
 
-  String _formatAmount(double amount) {
-    return amount.toStringAsFixed(2).replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+\.)'),
-          (m) => '${m[1]},',
-    );
-  }
-
-
   Color _statusColor(String status) {
     switch (status.toUpperCase()) {
-      case 'CAPTURED':  return const Color(0xFF4CAF50);
-      case 'PENDING':   return const Color(0xFFFFC107);
+      case 'CAPTURED':
+        return const Color(0xFF4CAF50);
+      case 'PENDING':
+        return const Color(0xFFFFC107);
       case 'CANCELLED':
-      case 'REJECTED':  return const Color(0xFFF44336);
+      case 'REJECTED':
+        return const Color(0xFFF44336);
       case 'EXECUTED':
-      case 'FILLED':    return const Color(0xFF2196F3);
-      default:          return const Color(0xFF9E9E9E);
+      case 'FILLED':
+        return const Color(0xFF2196F3);
+      default:
+        return const Color(0xFF9E9E9E);
     }
   }
 
@@ -149,9 +184,20 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
 
       _cdsNumber = cdsNumber;
 
+      final token = prefs.getString('token');
+
+      final portfolioHeaders = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+
+      if (token != null && token.isNotEmpty) {
+        portfolioHeaders['Authorization'] = 'Bearer $token';
+      }
+
       final response = await http.post(
-        Uri.parse('https://zamagm.escrowagm.com/MainAPI/home/Transactions'),
-        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        Uri.parse('https://zamagm.escrowagm.com/MainAPI/Home/GetMyPortfolio'),
+        headers: portfolioHeaders,
         body: jsonEncode({'CDSNumber': cdsNumber}),
       );
 
@@ -167,37 +213,43 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
         if (data.isEmpty) {
           setState(() {
             _portfolioData = [];
-            _totalBalance = 0.0;
-            _currency = '';
+            _totalPortfolioValue = 0.0;
+            _totalShares = 0.0;
             _isLoadingPortfolio = false;
           });
           return;
         }
 
-        double total = 0.0;
-        String currency = '';
+        double totalValue = 0.0;
+        double totalShares = 0.0;
 
         final parsed = data.where((item) => item is Map).map((item) {
-          final amount = double.tryParse(item['Amount']?.toString() ?? '0') ?? 0.0;
-          total += amount;
-          if (item['Currency'] != null) currency = item['Currency'].toString();
+          final currentValue =
+              double.tryParse(item['CurrentValue']?.toString() ?? '0') ?? 0.0;
+          final shares =
+              double.tryParse(item['Total_Shares']?.toString() ?? '0') ?? 0.0;
+
+          totalValue += currentValue;
+          totalShares += shares;
+
           return <String, dynamic>{
-            'date':        _formatDate(item['DateCreated']?.toString() ?? ''),
-            'description': item['Description']?.toString() ?? '-',
-            'reference':   item['Reference']?.toString() ?? '-',
-            'amount':      _formatAmount(amount),
+            'company': item['Company']?.toString() ?? '-',
+            'cdsNumber': item['CDS_Number']?.toString() ?? '-',
+            'totalShares': shares,
+            'currentValue': currentValue,
           };
         }).toList();
 
         setState(() {
           _portfolioData = parsed;
-          _totalBalance = total;
-          _currency = currency;
+          _totalPortfolioValue = totalValue;
+          _totalShares = totalShares;
           _isLoadingPortfolio = false;
         });
       } else {
         setState(() {
-          _portfolioError = 'Server error: ${response.statusCode}\n${response.body}';
+          _portfolioError =
+          'Server error: ${response.statusCode}\n${response.body}';
           _isLoadingPortfolio = false;
         });
       }
@@ -263,13 +315,13 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
           return;
         }
 
-        // ── Display OrderType, Broker_Code, OrderStatus, Create_date ──
         final parsed = data.where((item) => item is Map).map((item) {
           return <String, dynamic>{
-            'orderType':   item['OrderType']?.toString() ?? '-',
-            'brokerCode':  item['Broker_Code']?.toString() ?? '-',
-            'status':      item['OrderStatus']?.toString() ?? '-',
-            'createDate':  _formatDatetime(item['Create_date']?.toString() ?? ''),
+            'orderType': item['OrderType']?.toString() ?? '-',
+            'brokerCode': item['Broker_Code']?.toString() ?? '-',
+            'status': item['OrderStatus']?.toString() ?? '-',
+            'createDate':
+            _formatDatetime(item['Create_date']?.toString() ?? ''),
           };
         }).toList();
 
@@ -279,7 +331,8 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
         });
       } else {
         setState(() {
-          _ordersError = 'Server error: ${response.statusCode}\n${response.body}';
+          _ordersError =
+          'Server error: ${response.statusCode}\n${response.body}';
           _isLoadingOrders = false;
         });
       }
@@ -333,7 +386,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
               const SizedBox(height: 20),
               Expanded(
                 child: _selectedTab == 'PORTFOLIO'
-                    ? _buildPortfolioTable(isDark)
+                    ? _buildPortfolioList(isDark)
                     : _buildOrdersList(isDark),
               ),
             ],
@@ -348,19 +401,26 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildTabSelector(bool isDark) {
-    final accentColor   = isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855);
+    final accentColor = isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855);
     final inactiveColor = isDark ? Colors.white54 : Colors.black45;
-    final bgColor       = isDark ? Colors.transparent : Colors.white.withOpacity(0.3);
+    final bgColor = isDark ? Colors.transparent : Colors.white.withOpacity(0.3);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Container(
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1A1A1A) : Colors.white.withOpacity(0.5),
+          color: isDark
+              ? const Color(0xFF1A1A1A)
+              : Colors.white.withOpacity(0.5),
           borderRadius: BorderRadius.circular(25),
           boxShadow: isDark
               ? []
-              : [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 2))],
+              : [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2))
+          ],
         ),
         padding: const EdgeInsets.all(4),
         child: Row(
@@ -375,7 +435,12 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                     color: isSelected ? accentColor : bgColor,
                     borderRadius: BorderRadius.circular(25),
                     boxShadow: isSelected
-                        ? [BoxShadow(color: accentColor.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 2))]
+                        ? [
+                      BoxShadow(
+                          color: accentColor.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2))
+                    ]
                         : [],
                   ),
                   child: Text(
@@ -422,17 +487,13 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
   }
 
   Widget _buildPortfolioCard(bool isDark, LinearGradient gradient) {
-    final isLoading    = _isLoadingPortfolio;
-    final hasError     = _portfolioError != null;
+    final isLoading = _isLoadingPortfolio;
+    final hasError = _portfolioError != null;
     final subtextColor = Colors.white.withOpacity(0.85);
 
-    final balanceText = isLoading
+    final valueText = isLoading
         ? 'Loading...'
-        : (hasError
-        ? '—'
-        : _currency.isEmpty
-        ? _formatAmount(_totalBalance)
-        : '$_currency ${_formatAmount(_totalBalance)}');
+        : (hasError ? '—' : _formatAmount(_totalPortfolioValue));
 
     return Container(
       key: const ValueKey('portfolio_card'),
@@ -443,7 +504,9 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.15),
+            color: isDark
+                ? Colors.black.withOpacity(0.3)
+                : Colors.black.withOpacity(0.15),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -456,11 +519,16 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'Total Portfolio Balance',
-                style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                'Total Portfolio Value',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500),
               ),
               if (_cdsNumber != null)
-                Text(_cdsNumber!, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12)),
+                Text(_cdsNumber!,
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.7), fontSize: 12)),
             ],
           ),
           const SizedBox(height: 15),
@@ -469,24 +537,36 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
             children: [
               Expanded(
                 child: Text(
-                  balanceText,
-                  style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w300, letterSpacing: 0.5),
+                  valueText,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 30,
+                      fontWeight: FontWeight.w300,
+                      letterSpacing: 0.5),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               GestureDetector(
                 onTap: _refreshCurrentTab,
-                child: const Icon(Icons.refresh, color: Colors.white, size: 28),
+                child:
+                const Icon(Icons.refresh, color: Colors.white, size: 28),
               ),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.receipt_long, color: Colors.white70, size: 14),
+              const Icon(Icons.pie_chart_outline, color: Colors.white70, size: 14),
               const SizedBox(width: 6),
               Text(
-                '${_portfolioData.length} transaction${_portfolioData.length == 1 ? '' : 's'}',
+                '${_portfolioData.length} holding${_portfolioData.length == 1 ? '' : 's'}',
+                style: TextStyle(color: subtextColor, fontSize: 13),
+              ),
+              const SizedBox(width: 16),
+              const Icon(Icons.bar_chart, color: Colors.white70, size: 14),
+              const SizedBox(width: 6),
+              Text(
+                '${_formatAmount(_totalShares)} total shares',
                 style: TextStyle(color: subtextColor, fontSize: 13),
               ),
             ],
@@ -510,7 +590,9 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.15),
+            color: isDark
+                ? Colors.black.withOpacity(0.3)
+                : Colors.black.withOpacity(0.15),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -537,7 +619,9 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
           Expanded(
             child: _summaryTile(
               label: 'Other',
-              value: _isLoadingOrders ? '—' : '${_ordersData.length - capturedCount}',
+              value: _isLoadingOrders
+                  ? '—'
+                  : '${_ordersData.length - capturedCount}',
               icon: Icons.pending_outlined,
             ),
           ),
@@ -546,149 +630,311 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
     );
   }
 
-  Widget _summaryTile({required String label, required String value, required IconData icon}) {
+  Widget _summaryTile(
+      {required String label,
+        required String value,
+        required IconData icon}) {
     return Column(
       children: [
         Icon(icon, color: Colors.white70, size: 18),
         const SizedBox(height: 6),
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
+        Text(value,
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w600)),
         const SizedBox(height: 2),
-        Text(label, style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 11)),
+        Text(label,
+            style:
+            TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 11)),
       ],
     );
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  Portfolio table
+  //  Portfolio holdings list
   // ─────────────────────────────────────────────────────────────
 
-  Widget _buildPortfolioTable(bool isDark) {
-    final tableBgColor    = isDark ? const Color(0xFF2A2A2A).withOpacity(0.5) : Colors.white.withOpacity(0.7);
-    final headerBgColor   = isDark ? Colors.black.withOpacity(0.2) : Colors.grey.shade200.withOpacity(0.5);
-    final textColor       = isDark ? Colors.white : Colors.black87;
-    final headerTextColor = isDark ? Colors.white.withOpacity(0.7) : Colors.black54;
-    final borderColor     = isDark ? Colors.white.withOpacity(0.1) : Colors.grey.withOpacity(0.2);
+  Widget _buildPortfolioList(bool isDark) {
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final cardBg = isDark
+        ? const Color(0xFF2A2A2A).withOpacity(0.6)
+        : Colors.white.withOpacity(0.85);
+    final borderColor = isDark
+        ? Colors.white.withOpacity(0.07)
+        : Colors.grey.withOpacity(0.15);
+    final subtleColor = isDark ? Colors.white54 : Colors.black45;
+    final accentColor =
+    isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855);
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        color: tableBgColor,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: isDark
-            ? []
-            : [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-            decoration: BoxDecoration(
-              color: headerBgColor,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(12),
-                topRight: Radius.circular(12),
+    if (_isLoadingPortfolio) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_portfolioError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline, color: Colors.red.shade300, size: 44),
+              const SizedBox(height: 12),
+              Text(_portfolioError!,
+                  style: TextStyle(color: textColor),
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _loadPortfolioFromApi,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
               ),
-            ),
-            child: Row(
-              children: [
-                _headerCell('Date',        flex: 2, color: headerTextColor, align: TextAlign.left),
-                _headerCell('Description', flex: 4, color: headerTextColor, align: TextAlign.left),
-                _headerCell('Reference',   flex: 4, color: headerTextColor, align: TextAlign.left),
-                _headerCell('Amount',      flex: 3, color: headerTextColor, align: TextAlign.right),
-              ],
-            ),
+            ],
           ),
+        ),
+      );
+    }
 
-          // Body
-          Expanded(
-            child: _isLoadingPortfolio
-                ? const Center(child: CircularProgressIndicator())
-                : _portfolioError != null
-                ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+    if (_portfolioData.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.inbox_outlined,
+                color: isDark ? Colors.white30 : Colors.black26, size: 52),
+            const SizedBox(height: 12),
+            Text('No holdings found.',
+                style: TextStyle(color: subtleColor, fontSize: 15)),
+          ],
+        ),
+      );
+    }
+
+    // Compute max value for the relative bar
+    final maxValue = _portfolioData
+        .map((h) => h['currentValue'] as double)
+        .reduce((a, b) => a > b ? a : b);
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+      itemCount: _portfolioData.length,
+      itemBuilder: (context, index) {
+        final holding = _portfolioData[index];
+        final company = holding['company'] as String;
+        final shares = holding['totalShares'] as double;
+        final value = holding['currentValue'] as double;
+        final cds = holding['cdsNumber'] as String;
+        final barFraction = maxValue > 0 ? value / maxValue : 0.0;
+
+        // Pick a color per index for the company avatar
+        final avatarColors = [
+          const Color(0xFFD4A855),
+          const Color(0xFF4CAF50),
+          const Color(0xFF2196F3),
+          const Color(0xFF9C27B0),
+          const Color(0xFFFF5722),
+          const Color(0xFF00BCD4),
+        ];
+        final avatarColor = avatarColors[index % avatarColors.length];
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor),
+            boxShadow: isDark
+                ? []
+                : [
+              BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3))
+            ],
+          ),
+          child: Padding(
+            padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Row 1: Avatar + Company name + Value ──
+                Row(
                   children: [
-                    Icon(Icons.error_outline, color: Colors.red.shade300, size: 40),
-                    const SizedBox(height: 12),
-                    Text(_portfolioError!, style: TextStyle(color: textColor), textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: _loadPortfolioFromApi,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Retry'),
+                    // Company initial avatar
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: avatarColor.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: avatarColor.withOpacity(0.4), width: 1.5),
+                      ),
+                      child: Center(
+                        child: Text(
+                          company.isNotEmpty
+                              ? company.substring(0, 1).toUpperCase()
+                              : '?',
+                          style: TextStyle(
+                            color: avatarColor,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+
+                    // Company name + CDS
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            company,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            cds,
+                            style: TextStyle(
+                                color: subtleColor, fontSize: 10),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Current Value
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          _formatAmount(value),
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Current Value',
+                          style:
+                          TextStyle(color: subtleColor, fontSize: 9),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ),
-            )
-                : _portfolioData.isEmpty
-                ? Center(child: Text('No transactions found.', style: TextStyle(color: textColor)))
-                : ListView.builder(
-              padding: const EdgeInsets.only(bottom: 20),
-              itemCount: _portfolioData.length,
-              itemBuilder: (context, index) {
-                final item = _portfolioData[index];
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                  decoration: BoxDecoration(
-                    border: Border(bottom: BorderSide(color: borderColor, width: 1)),
+
+                const SizedBox(height: 14),
+
+                // ── Row 2: Shares stat ──
+                Row(
+                  children: [
+                    _holdingStatChip(
+                      icon: Icons.layers_outlined,
+                      label: 'Total Shares',
+                      value: _formatAmount(shares),
+                      isDark: isDark,
+                      textColor: textColor,
+                      subtleColor: subtleColor,
+                    ),
+                    const Spacer(),
+                    // Percentage of total portfolio
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: accentColor.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: accentColor.withOpacity(0.3), width: 1),
+                      ),
+                      child: Text(
+                        _totalPortfolioValue > 0
+                            ? '${(value / _totalPortfolioValue * 100).toStringAsFixed(1)}% of portfolio'
+                            : '0.0% of portfolio',
+                        style: TextStyle(
+                          color: accentColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 12),
+
+                // ── Relative value bar ──
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: barFraction.toDouble(),
+                    minHeight: 5,
+                    backgroundColor: isDark
+                        ? Colors.white.withOpacity(0.08)
+                        : Colors.grey.withOpacity(0.15),
+                    valueColor:
+                    AlwaysStoppedAnimation<Color>(avatarColor),
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 2,
-                        child: Text(item['date'] ?? '-', style: TextStyle(color: textColor, fontSize: 10)),
-                      ),
-                      Expanded(
-                        flex: 4,
-                        child: Text(item['description'] ?? '-',
-                            style: TextStyle(color: textColor, fontSize: 10, height: 1.3),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis),
-                      ),
-                      Expanded(
-                        flex: 4,
-                        child: Text(item['reference'] ?? '-',
-                            style: TextStyle(color: textColor, fontSize: 10, height: 1.3),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis),
-                      ),
-                      Expanded(
-                        flex: 3,
-                        child: Text(item['amount'] ?? '0.00',
-                            style: TextStyle(color: textColor, fontSize: 10, fontWeight: FontWeight.w600),
-                            textAlign: TextAlign.right),
-                      ),
-                    ],
-                  ),
-                );
-              },
+                ),
+              ],
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _headerCell(String label, {required int flex, required Color color, required TextAlign align}) {
-    return Expanded(
-      flex: flex,
-      child: Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600), textAlign: align),
+  Widget _holdingStatChip({
+    required IconData icon,
+    required String label,
+    required String value,
+    required bool isDark,
+    required Color textColor,
+    required Color subtleColor,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: subtleColor),
+        const SizedBox(width: 4),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: TextStyle(color: subtleColor, fontSize: 9)),
+            Text(value,
+                style: TextStyle(
+                    color: textColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ],
     );
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  Orders list — shows Company, Status, Create Date only
+  //  Orders list
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildOrdersList(bool isDark) {
-    final textColor   = isDark ? Colors.white : Colors.black87;
-    final cardBg      = isDark ? const Color(0xFF2A2A2A).withOpacity(0.6) : Colors.white.withOpacity(0.85);
-    final borderColor = isDark ? Colors.white.withOpacity(0.07) : Colors.grey.withOpacity(0.15);
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final cardBg = isDark
+        ? const Color(0xFF2A2A2A).withOpacity(0.6)
+        : Colors.white.withOpacity(0.85);
+    final borderColor = isDark
+        ? Colors.white.withOpacity(0.07)
+        : Colors.grey.withOpacity(0.15);
     final subtleColor = isDark ? Colors.white54 : Colors.black45;
 
     if (_isLoadingOrders) {
@@ -704,7 +950,9 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
             children: [
               Icon(Icons.error_outline, color: Colors.red.shade300, size: 44),
               const SizedBox(height: 12),
-              Text(_ordersError!, style: TextStyle(color: textColor), textAlign: TextAlign.center),
+              Text(_ordersError!,
+                  style: TextStyle(color: textColor),
+                  textAlign: TextAlign.center),
               const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: _loadOrdersFromApi,
@@ -722,9 +970,11 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.inbox_outlined, color: isDark ? Colors.white30 : Colors.black26, size: 52),
+            Icon(Icons.inbox_outlined,
+                color: isDark ? Colors.white30 : Colors.black26, size: 52),
             const SizedBox(height: 12),
-            Text('No orders found.', style: TextStyle(color: subtleColor, fontSize: 15)),
+            Text('No orders found.',
+                style: TextStyle(color: subtleColor, fontSize: 15)),
           ],
         ),
       );
@@ -734,7 +984,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
       itemCount: _ordersData.length,
       itemBuilder: (context, index) {
-        final order       = _ordersData[index];
+        final order = _ordersData[index];
         final statusColor = _statusColor(order['status'] as String);
 
         return Container(
@@ -745,14 +995,19 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
             border: Border.all(color: borderColor),
             boxShadow: isDark
                 ? []
-                : [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 3))],
+                : [
+              BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3))
+            ],
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Order Type and Broker Code on first row
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -760,19 +1015,17 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Order Type',
-                            style: TextStyle(color: subtleColor, fontSize: 9, fontWeight: FontWeight.w500),
-                          ),
+                          Text('Order Type',
+                              style: TextStyle(
+                                  color: subtleColor,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w500)),
                           const SizedBox(height: 2),
-                          Text(
-                            order['orderType'] as String,
-                            style: TextStyle(
-                              color: textColor,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                          Text(order['orderType'] as String,
+                              style: TextStyle(
+                                  color: textColor,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
@@ -780,27 +1033,23 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Broker Code',
-                            style: TextStyle(color: subtleColor, fontSize: 9, fontWeight: FontWeight.w500),
-                          ),
+                          Text('Broker Code',
+                              style: TextStyle(
+                                  color: subtleColor,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w500)),
                           const SizedBox(height: 2),
-                          Text(
-                            order['brokerCode'] as String,
-                            style: TextStyle(
-                              color: textColor,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                          Text(order['brokerCode'] as String,
+                              style: TextStyle(
+                                  color: textColor,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
-
-                // Create date and Status on second row
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -808,27 +1057,27 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Create Date',
-                            style: TextStyle(color: subtleColor, fontSize: 9, fontWeight: FontWeight.w500),
-                          ),
+                          Text('Create Date',
+                              style: TextStyle(
+                                  color: subtleColor,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w500)),
                           const SizedBox(height: 2),
-                          Text(
-                            order['createDate'] as String,
-                            style: TextStyle(color: subtleColor, fontSize: 10),
-                          ),
+                          Text(order['createDate'] as String,
+                              style:
+                              TextStyle(color: subtleColor, fontSize: 10)),
                         ],
                       ),
                     ),
                     const SizedBox(width: 10),
-
-                    // Status badge
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: statusColor.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: statusColor.withOpacity(0.4), width: 1),
+                        border: Border.all(
+                            color: statusColor.withOpacity(0.4), width: 1),
                       ),
                       child: Text(
                         order['status'] as String,
