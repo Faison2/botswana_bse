@@ -323,11 +323,15 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
 
         final parsed = data.where((item) => item is Map).map((item) {
           return <String, dynamic>{
+            'orderNo':   item['OrderNo']?.toString() ?? '-',
             'orderType': item['OrderType']?.toString() ?? '-',
+            'company':   item['Company']?.toString() ?? '-',
             'brokerCode': item['Broker_Code']?.toString() ?? '-',
-            'status': item['OrderStatus']?.toString() ?? '-',
-            'createDate':
-            _formatDatetime(item['Create_date']?.toString() ?? ''),
+            'status':    item['OrderStatus']?.toString() ?? '-',
+            'createDate': _formatDatetime(item['Create_date']?.toString() ?? ''),
+            'quantity':  item['Quantity']?.toString() ?? '-',
+            'basePrice': double.tryParse(item['BasePrice']?.toString() ?? '0') ?? 0.0,
+            'total':     double.tryParse(item['Total']?.toString() ?? '0') ?? 0.0,
           };
         }).toList();
 
@@ -588,6 +592,8 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
     final capturedCount = _ordersData
         .where((o) => (o['status'] as String).toUpperCase() == 'CAPTURED')
         .length;
+    final totalOrderValue = _ordersData.fold<double>(
+        0.0, (sum, o) => sum + (o['total'] as double? ?? 0.0));
 
     return Container(
       key: const ValueKey('orders_card'),
@@ -606,33 +612,64 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: _summaryTile(
-              label: 'Total Orders',
-              value: _isLoadingOrders ? '—' : '${_ordersData.length}',
-              icon: Icons.list_alt_rounded,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: _summaryTile(
+                  label: 'Total Orders',
+                  value: _isLoadingOrders ? '—' : '${_ordersData.length}',
+                  icon: Icons.list_alt_rounded,
+                ),
+              ),
+              Container(width: 1, height: 40, color: Colors.white24),
+              Expanded(
+                child: _summaryTile(
+                  label: 'Captured',
+                  value: _isLoadingOrders ? '—' : '$capturedCount',
+                  icon: Icons.check_circle_outline,
+                ),
+              ),
+              Container(width: 1, height: 40, color: Colors.white24),
+              Expanded(
+                child: _summaryTile(
+                  label: 'Other',
+                  value: _isLoadingOrders
+                      ? '—'
+                      : '${_ordersData.length - capturedCount}',
+                  icon: Icons.pending_outlined,
+                ),
+              ),
+            ],
           ),
-          Container(width: 1, height: 40, color: Colors.white24),
-          Expanded(
-            child: _summaryTile(
-              label: 'Captured',
-              value: _isLoadingOrders ? '—' : '$capturedCount',
-              icon: Icons.check_circle_outline,
+          if (!_isLoadingOrders && _ordersData.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Total Orders Value',
+                      style: TextStyle(
+                          color: Colors.white.withOpacity(0.8), fontSize: 12)),
+                  Text(
+                    _formatAmount(totalOrderValue),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
             ),
-          ),
-          Container(width: 1, height: 40, color: Colors.white24),
-          Expanded(
-            child: _summaryTile(
-              label: 'Other',
-              value: _isLoadingOrders
-                  ? '—'
-                  : '${_ordersData.length - capturedCount}',
-              icon: Icons.pending_outlined,
-            ),
-          ),
+          ],
         ],
       ),
     );
@@ -992,14 +1029,16 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
       itemCount: _ordersData.length,
       itemBuilder: (context, index) {
-        final order = _ordersData[index];
+        final order       = _ordersData[index];
         final statusColor = _statusColor(order['status'] as String);
+        final total       = order['total'] as double? ?? 0.0;
+        final basePrice   = order['basePrice'] as double? ?? 0.0;
 
         return Container(
-          margin: const EdgeInsets.only(bottom: 12),
+          margin: const EdgeInsets.only(bottom: 14),
           decoration: BoxDecoration(
             color: cardBg,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(color: borderColor),
             boxShadow: isDark
                 ? []
@@ -1011,69 +1050,33 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
             ],
           ),
           child: Padding(
-            padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ── Row 1: Company name + Status badge ──
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Order Type',
-                              style: TextStyle(
-                                  color: subtleColor,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w500)),
-                          const SizedBox(height: 2),
-                          Text(order['orderType'] as String,
-                              style: TextStyle(
-                                  color: textColor,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Broker Code',
-                              style: TextStyle(
-                                  color: subtleColor,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w500)),
-                          const SizedBox(height: 2),
-                          Text(order['brokerCode'] as String,
-                              style: TextStyle(
-                                  color: textColor,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Create Date',
-                              style: TextStyle(
-                                  color: subtleColor,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w500)),
-                          const SizedBox(height: 2),
-                          Text(order['createDate'] as String,
-                              style:
-                              TextStyle(color: subtleColor, fontSize: 10)),
+                          Text(
+                            order['company'] as String,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Order #${order['orderNo']}',
+                            style: TextStyle(color: subtleColor, fontSize: 10),
+                          ),
                         ],
                       ),
                     ),
@@ -1099,11 +1102,97 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                     ),
                   ],
                 ),
+
+                const SizedBox(height: 12),
+                Divider(color: borderColor, height: 1),
+                const SizedBox(height: 12),
+
+                // ── Row 2: Order Type + Broker Code ──
+                Row(
+                  children: [
+                    Expanded(
+                      child: _orderField(
+                          label: 'Order Type',
+                          value: order['orderType'] as String,
+                          textColor: textColor,
+                          subtleColor: subtleColor),
+                    ),
+                    Expanded(
+                      child: _orderField(
+                          label: 'Broker',
+                          value: order['brokerCode'] as String,
+                          textColor: textColor,
+                          subtleColor: subtleColor),
+                    ),
+                    Expanded(
+                      child: _orderField(
+                          label: 'Quantity',
+                          value: order['quantity'] as String,
+                          textColor: textColor,
+                          subtleColor: subtleColor),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 10),
+
+                // ── Row 3: Base Price + Total + Date ──
+                Row(
+                  children: [
+                    Expanded(
+                      child: _orderField(
+                          label: 'Base Price',
+                          value: _formatAmount(basePrice),
+                          textColor: textColor,
+                          subtleColor: subtleColor),
+                    ),
+                    Expanded(
+                      child: _orderField(
+                          label: 'Total',
+                          value: _formatAmount(total),
+                          textColor: const Color(0xFF4CAF50),
+                          subtleColor: subtleColor,
+                          bold: true),
+                    ),
+                    Expanded(
+                      child: _orderField(
+                          label: 'Date',
+                          value: order['createDate'] as String,
+                          textColor: subtleColor,
+                          subtleColor: subtleColor),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _orderField({
+    required String label,
+    required String value,
+    required Color textColor,
+    required Color subtleColor,
+    bool bold = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: TextStyle(
+                color: subtleColor, fontSize: 9, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 2),
+        Text(value,
+            style: TextStyle(
+                color: textColor,
+                fontSize: 11,
+                fontWeight: bold ? FontWeight.w700 : FontWeight.w600),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis),
+      ],
     );
   }
 }
