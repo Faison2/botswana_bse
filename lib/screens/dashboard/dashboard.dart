@@ -173,7 +173,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         : (prefs.getString('cdsNumber') ?? '');
 
     if (cds.isEmpty) {
-      debugPrint('Portfolio: skipping – no CDS number');
+      debugPrint('Portfolio: skipping – no Acc number');
       return;
     }
 
@@ -646,7 +646,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('CDS: ${_cdsNumber.isNotEmpty ? _cdsNumber : '—'}',
+              Text('ACC: ${_cdsNumber.isNotEmpty ? _cdsNumber : '—'}',
                   style: TextStyle(
                       color: Colors.white.withOpacity(0.9), fontSize: 12)),
               Text(

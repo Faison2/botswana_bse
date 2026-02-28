@@ -664,7 +664,7 @@ class _DepositsTabState extends State<DepositsTab> {
             if (_cdsNumber != null) ...[
               const SizedBox(height: 12),
               Text(
-                'CDS Number: $_cdsNumber',
+                'ACC Number: $_cdsNumber',
                 style: TextStyle(
                   color: widget.isDark ? Colors.white60 : Colors.black45,
                   fontSize: 12,

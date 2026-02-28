@@ -608,7 +608,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _buildDetailRow("Phone Number",
                 _phoneNumber.isEmpty ? 'Not provided' : _phoneNumber, isDark),
             _spacer(),
-            _buildDetailRow("CDS Number",
+            _buildDetailRow("ACC Number",
                 _cdsNumber.isEmpty ? 'Not provided' : _cdsNumber, isDark),
           ]),
 

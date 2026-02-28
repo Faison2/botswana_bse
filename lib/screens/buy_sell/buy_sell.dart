@@ -827,7 +827,7 @@ class _TradingPageState extends State<TradingPage> {
 
                         // ── CDS Number (read-only) ─────────────────────────
                         _buildReadOnlyField(
-                          'CDS Number',
+                          'ACC Number',
                           _cdsNumber ?? 'N/A',
                           textColor: textColor,
                           fieldBorderColor: fieldBorderColor,
