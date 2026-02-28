@@ -33,14 +33,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double _currentX = 0;
 
   // ── User / profile ──
-  String _fullName = 'Loading...';
-  String _email = 'Loading...';
-  String _username = '';
-  String _token = '';
+  String _fullName = '';
+  String _email = '';
   String _cdsNumber = '';
   bool _isLoadingProfile = true;
 
-  // ── Portfolio (from API) ──
+  // ── Portfolio ──
   List<Map<String, dynamic>> _portfolioHoldings = [];
   double _totalPortfolioValue = 0.0;
   double _totalShares = 0.0;
@@ -52,97 +50,104 @@ class _DashboardScreenState extends State<DashboardScreen> {
   DateTime? _lastNavigationTime;
   static const _navigationDebounceMs = 500;
 
-  late final List<Widget> _widgetOptions;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  // SharedPreferences cache keys
+  static const _kHoldingsKey    = 'cachedPortfolioHoldings';
+  static const _kTotalValueKey  = 'cachedPortfolioValue';
+  static const _kTotalSharesKey = 'cachedTotalShares';
 
   @override
   void initState() {
     super.initState();
-
-    _widgetOptions = <Widget>[
-      _buildDashboardContent(),
-      const TradingPage(),
-      Container(),
-      const TransactionsScreen(),
-      const PortfolioScreen(),
-    ];
-
     _startLiveDataUpdate();
-    _loadUserData();
+    _bootstrap();
+  }
+
+  /// 1. Load cached data instantly
+  /// 2. Fetch fresh profile (gets latest CDS number)
+  /// 3. Fetch portfolio with that CDS
+  Future<void> _bootstrap() async {
+    await _loadCachedUserData();
+    await _fetchProfileData();
+    await _loadPortfolioFromApi();
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  Navigation
+  //  Load cached data (instant, no network)
   // ─────────────────────────────────────────────────────────────
 
-  Future<void> _navigateWithDebounce(Widget destination) async {
-    if (_isNavigating) return;
-    final now = DateTime.now();
-    if (_lastNavigationTime != null &&
-        now.difference(_lastNavigationTime!).inMilliseconds <
-            _navigationDebounceMs) {
-      return;
-    }
-    setState(() => _isNavigating = true);
-    _lastNavigationTime = now;
-    try {
-      await Navigator.push(
-          context, MaterialPageRoute(builder: (_) => destination));
-    } finally {
-      if (mounted) setState(() => _isNavigating = false);
+  Future<void> _loadCachedUserData() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _fullName  = prefs.getString('fullName')  ?? '';
+      _email     = prefs.getString('email')     ?? '';
+      _cdsNumber = prefs.getString('cdsNumber') ?? '';
+      _totalPortfolioValue = prefs.getDouble(_kTotalValueKey)  ?? 0.0;
+      _totalShares         = prefs.getDouble(_kTotalSharesKey) ?? 0.0;
+    });
+
+    final raw = prefs.getString(_kHoldingsKey);
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final List<dynamic> decoded = jsonDecode(raw);
+        final holdings = decoded.whereType<Map>().map((item) => <String, dynamic>{
+          'company':      item['company']?.toString()  ?? '-',
+          'cdsNumber':    item['cdsNumber']?.toString() ?? '-',
+          'totalShares':  (item['totalShares']  as num?)?.toDouble() ?? 0.0,
+          'currentValue': (item['currentValue'] as num?)?.toDouble() ?? 0.0,
+        }).toList();
+
+        if (!mounted) return;
+        setState(() {
+          _portfolioHoldings = holdings;
+          _holdingChartData  = _buildInitialCharts(holdings.length);
+        });
+      } catch (e) {
+        debugPrint('Cache restore error: $e');
+      }
     }
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  Load user + portfolio
+  //  Fetch profile
   // ─────────────────────────────────────────────────────────────
 
-  Future<void> _loadUserData() async {
+  Future<void> _fetchProfileData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? '';
-      setState(() {
-        _fullName = prefs.getString('fullName') ?? 'User';
-        _email = prefs.getString('email') ?? 'No email';
-        _username = prefs.getString('username') ?? '';
-        _token = token;
-        _cdsNumber = prefs.getString('cdsNumber') ?? '';
-      });
-      if (token.isNotEmpty) {
-        await _fetchProfileData(token);
+      if (token.isEmpty) {
+        if (mounted) setState(() => _isLoadingProfile = false);
+        return;
       }
-      // Load portfolio after we have the CDS number
-      await _loadPortfolioFromApi();
-    } catch (e) {
-      debugPrint('Error loading user data: $e');
-      setState(() => _isLoadingProfile = false);
-    }
-  }
 
-  Future<void> _fetchProfileData(String token) async {
-    try {
-      final response = await http
-          .post(
+      final response = await http.post(
         Uri.parse('$baseUrl/Authentication/GetProfile'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'Token': token}),
-      )
-          .timeout(const Duration(seconds: 30));
+      ).timeout(const Duration(seconds: 30));
+
+      if (!mounted) return;
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['responseCode'] == 200) {
+          final fullName  = (data['fullName']  as String?) ?? _fullName;
+          final email     = (data['email']     as String?) ?? _email;
+          final cdsNumber = (data['cdsNumber'] as String?) ?? _cdsNumber;
+
           setState(() {
-            _fullName = data['fullName'] ?? 'User';
-            _email = data['email'] ?? 'No email';
-            _username = data['username'] ?? '';
-            _cdsNumber = data['cdsNumber'] ?? '';
+            _fullName        = fullName;
+            _email           = email;
+            _cdsNumber       = cdsNumber;
             _isLoadingProfile = false;
           });
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('fullName', _fullName);
-          await prefs.setString('email', _email);
-          await prefs.setString('cdsNumber', _cdsNumber);
+
+          await prefs.setString('fullName',  fullName);
+          await prefs.setString('email',     email);
+          await prefs.setString('cdsNumber', cdsNumber);
         } else {
           setState(() => _isLoadingProfile = false);
         }
@@ -150,149 +155,149 @@ class _DashboardScreenState extends State<DashboardScreen> {
         setState(() => _isLoadingProfile = false);
       }
     } catch (e) {
-      debugPrint('Error fetching profile: $e');
-      setState(() => _isLoadingProfile = false);
+      debugPrint('Profile error: $e');
+      if (mounted) setState(() => _isLoadingProfile = false);
     }
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  Portfolio API
+  //  Portfolio API – GetMyPortfolio
+  //  Response: [ { "Company":"BIHL", "CDS_Number":"...",
+  //               "Total_Shares":"300.50", "CurrentValue":"6917.51" } ]
   // ─────────────────────────────────────────────────────────────
 
   Future<void> _loadPortfolioFromApi() async {
-    if (_cdsNumber.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final cds   = _cdsNumber.isNotEmpty
+        ? _cdsNumber
+        : (prefs.getString('cdsNumber') ?? '');
 
+    if (cds.isEmpty) {
+      debugPrint('Portfolio: skipping – no CDS number');
+      return;
+    }
+
+    final token = prefs.getString('token') ?? '';
+
+    if (!mounted) return;
     setState(() {
       _isLoadingPortfolio = true;
-      _portfolioError = null;
+      _portfolioError     = null;
     });
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token') ?? '';
-
-      final headers = {
+      final headers = <String, String>{
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
+        'Accept':       'application/json',
       };
       if (token.isNotEmpty) {
         headers['Authorization'] = 'Bearer $token';
       }
 
-      final response = await http
-          .post(
-        Uri.parse(
-            'https://zamagm.escrowagm.com/MainAPI/Home/GetMyPortfolio'),
-        headers: headers,
-        body: jsonEncode({'CDSNumber': _cdsNumber}),
-      )
-          .timeout(const Duration(seconds: 30));
+      debugPrint('▶ GetMyPortfolio  CDSNumber=$cds');
 
-      debugPrint('=== Dashboard Portfolio API ===');
-      debugPrint('Status: ${response.statusCode}');
-      debugPrint('Body: ${response.body}');
+      final response = await http.post(
+        Uri.parse('https://zamagm.escrowagm.com/MainAPI/Home/GetMyPortfolio'),
+        headers: headers,
+        body:    jsonEncode({'CDSNumber': cds}),
+      ).timeout(const Duration(seconds: 30));
+
+      debugPrint('◀ status: ${response.statusCode}');
+      debugPrint('◀ body:   ${response.body}');
+
+      if (!mounted) return;
 
       if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
-        final List<dynamic> raw = decoded is List
-            ? decoded
-            : (decoded is Map && decoded['data'] is List
-            ? decoded['data']
-            : [decoded]);
+        final dynamic decoded = jsonDecode(response.body);
 
-        double totalValue = 0.0;
+        // Handle both plain array and any envelope wrapper
+        List<dynamic> raw;
+        if (decoded is List) {
+          raw = decoded;
+        } else if (decoded is Map) {
+          raw = decoded.values.firstWhere(
+                (v) => v is List,
+            orElse: () => [decoded],
+          ) as List<dynamic>;
+        } else {
+          raw = [];
+        }
+
+        double totalValue  = 0.0;
         double totalShares = 0.0;
 
-        final holdings = raw
-            .where((item) => item is Map)
-            .map((item) {
-          final value =
-              double.tryParse(item['CurrentValue']?.toString() ?? '0') ??
-                  0.0;
-          final shares =
-              double.tryParse(item['Total_Shares']?.toString() ?? '0') ??
-                  0.0;
-          totalValue += value;
+        final holdings = raw.whereType<Map>().map((item) {
+          final value  = double.tryParse(item['CurrentValue']?.toString()  ?? '0') ?? 0.0;
+          final shares = double.tryParse(item['Total_Shares']?.toString()  ?? '0') ?? 0.0;
+          totalValue  += value;
           totalShares += shares;
           return <String, dynamic>{
-            'company': item['Company']?.toString() ?? '-',
-            'cdsNumber': item['CDS_Number']?.toString() ?? '-',
-            'totalShares': shares,
+            'company':      item['Company']?.toString()    ?? '-',
+            'cdsNumber':    item['CDS_Number']?.toString() ?? cds,
+            'totalShares':  shares,
             'currentValue': value,
           };
-        })
-            .toList();
+        }).toList();
 
-        // Build initial chart data for each holding
-        final charts = List.generate(
-          holdings.length,
-              (_) => List.generate(
-            20,
-                (i) => FlSpot(
-              i.toDouble(),
-              50 + math.Random().nextDouble() * 20,
-            ),
-          ),
-        );
+        // ── Persist to SharedPreferences (shared with PortfolioScreen) ──
+        await prefs.setDouble(_kTotalValueKey,  totalValue);
+        await prefs.setDouble(_kTotalSharesKey, totalShares);
+        await prefs.setString(_kHoldingsKey,    jsonEncode(holdings));
 
-        // Cache totals to SharedPreferences so they survive a restart
-        final prefs2 = await SharedPreferences.getInstance();
-        await prefs2.setDouble('cachedPortfolioValue', totalValue);
-        await prefs2.setDouble('cachedTotalShares', totalShares);
-        // Save full holdings list so PortfolioScreen can read the same data
-        await prefs2.setString(
-          'cachedPortfolioHoldings',
-          jsonEncode(holdings),
-        );
+        // Preserve existing chart series if count unchanged
+        final charts = holdings.length != _portfolioHoldings.length
+            ? _buildInitialCharts(holdings.length)
+            : _holdingChartData;
 
         setState(() {
-          _portfolioHoldings = holdings;
+          _portfolioHoldings   = holdings;
           _totalPortfolioValue = totalValue;
-          _totalShares = totalShares;
-          _holdingChartData = charts;
-          _currentX = 20;
-          _isLoadingPortfolio = false;
+          _totalShares         = totalShares;
+          _holdingChartData    = charts;
+          _currentX            = 20;
+          _isLoadingPortfolio  = false;
         });
       } else {
-        // Fall back to cached values if available
-        final prefs2 = await SharedPreferences.getInstance();
         setState(() {
-          _totalPortfolioValue =
-              prefs2.getDouble('cachedPortfolioValue') ?? 0.0;
-          _totalShares = prefs2.getDouble('cachedTotalShares') ?? 0.0;
-          _portfolioError =
-          'Could not refresh (${response.statusCode})';
+          _portfolioError     = 'Server error ${response.statusCode}';
           _isLoadingPortfolio = false;
         });
       }
-    } catch (e) {
-      debugPrint('Dashboard portfolio error: $e');
-      final prefs2 = await SharedPreferences.getInstance();
-      setState(() {
-        _totalPortfolioValue =
-            prefs2.getDouble('cachedPortfolioValue') ?? 0.0;
-        _totalShares = prefs2.getDouble('cachedTotalShares') ?? 0.0;
-        _isLoadingPortfolio = false;
-      });
+    } catch (e, st) {
+      debugPrint('Portfolio fetch error: $e\n$st');
+      if (mounted) {
+        setState(() {
+          _portfolioError     = 'Could not load portfolio';
+          _isLoadingPortfolio = false;
+        });
+      }
     }
   }
 
+  List<List<FlSpot>> _buildInitialCharts(int count) {
+    return List.generate(
+      count,
+          (_) => List.generate(
+        20,
+            (i) => FlSpot(i.toDouble(), 50 + math.Random().nextDouble() * 20),
+      ),
+    );
+  }
+
   // ─────────────────────────────────────────────────────────────
-  //  Live chart updates
+  //  Live chart animation
   // ─────────────────────────────────────────────────────────────
 
   void _startLiveDataUpdate() {
-    _timer = Timer.periodic(const Duration(milliseconds: 600), (timer) {
+    _timer = Timer.periodic(const Duration(milliseconds: 600), (_) {
       if (!mounted || _holdingChartData.isEmpty) return;
       setState(() {
         for (int hi = 0; hi < _holdingChartData.length; hi++) {
           final data = _holdingChartData[hi];
-          final isPositive = hi % 2 == 0;
+          final dir  = hi % 2 == 0 ? 1.0 : -1.0;
           data.add(FlSpot(
             _currentX,
-            50 +
-                (isPositive ? 1 : -1) *
-                    (math.Random().nextDouble() * 20 + _currentX * 0.15),
+            (50 + dir * math.Random().nextDouble() * 20).clamp(5.0, 95.0),
           ));
           if (data.length > 20) {
             data.removeAt(0);
@@ -301,12 +306,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             }
           }
         }
-        if (_holdingChartData.isNotEmpty &&
-            _holdingChartData[0].length >= 20) {
-          _currentX = 20;
-        } else {
-          _currentX++;
-        }
+        _currentX = (_holdingChartData.isNotEmpty &&
+            _holdingChartData[0].length >= 20)
+            ? 20
+            : _currentX + 1;
       });
     });
   }
@@ -318,99 +321,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  Build
+  //  Navigation
   // ─────────────────────────────────────────────────────────────
 
-  Widget _buildDashboardContent() {
-    return Consumer<ThemeProvider>(
-      builder: (context, themeProvider, child) {
-        final isDark = themeProvider.isDarkMode;
-        return SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 20),
-              _buildPortfolioCard(isDark),
-              const SizedBox(height: 30),
-              _buildSectionHeader(
-                'My Portfolio',
-                _isLoadingPortfolio ? '' : 'View Details',
-                isDark,
-                null,
-              ),
-              const SizedBox(height: 15),
-              // ── Holdings cards (horizontal scroll) ──
-              if (_isLoadingPortfolio)
-                const SizedBox(
-                  height: 195,
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_portfolioHoldings.isEmpty)
-                const SizedBox(
-                  height: 195,
-                  child: Center(
-                    child: Text('No holdings found',
-                        style: TextStyle(color: Colors.white54)),
-                  ),
-                )
-              else
-                PortfolioWidget(
-                  holdings: _portfolioHoldings,
-                  chartDataList: _holdingChartData,
-                ),
-              const SizedBox(height: 30),
-              _buildSectionHeader(
-                'Market Watch',
-                'See All',
-                isDark,
-                    () => _navigateWithDebounce(const MarketWatchScreen()),
-              ),
-              const SizedBox(height: 15),
-              MarketWatchWidget(isDark: isDark, showLimited: true),
-              const SizedBox(height: 100),
-            ],
-          ),
-        );
-      },
-    );
+  Future<void> _navigateWithDebounce(Widget destination) async {
+    if (_isNavigating) return;
+    final now = DateTime.now();
+    if (_lastNavigationTime != null &&
+        now.difference(_lastNavigationTime!).inMilliseconds <
+            _navigationDebounceMs) return;
+    setState(() => _isNavigating = true);
+    _lastNavigationTime = now;
+    try {
+      await Navigator.push(
+          context, MaterialPageRoute(builder: (_) => destination));
+    } finally {
+      if (mounted) setState(() => _isNavigating = false);
+    }
   }
+
+  // ─────────────────────────────────────────────────────────────
+  //  Build
+  // ─────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Consumer<ThemeProvider>(
-      builder: (context, themeProvider, child) {
+      builder: (context, themeProvider, _) {
         final isDark = themeProvider.isDarkMode;
 
         final bgGradient = isDark
             ? const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF2C1810),
-            Color(0xFF1A1A1A),
-            Color(0xFF0D0D0D),
-          ],
+          colors: [Color(0xFF2C1810), Color(0xFF1A1A1A), Color(0xFF0D0D0D)],
         )
             : const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFFFF8E7),
-            Color(0xFFF5F5F5),
-            Color(0xFFFFFFFF),
-          ],
+          colors: [Color(0xFFFFF8E7), Color(0xFFF5F5F5), Color(0xFFFFFFFF)],
         );
 
         return Scaffold(
           key: _scaffoldKey,
           backgroundColor: Colors.transparent,
           drawer: AppDrawer(
-            onMenuItemTapped: (int index) =>
-                setState(() => _selectedIndex = index),
-            onMarketWatchTapped: () =>
-                _navigateWithDebounce(const MarketWatchScreen()),
-            onBuySellTapped: () =>
-                _navigateWithDebounce(const TradingPage()),
+            onMenuItemTapped:    (i) => setState(() => _selectedIndex = i),
+            onMarketWatchTapped: () => _navigateWithDebounce(const MarketWatchScreen()),
+            onBuySellTapped:     () => _navigateWithDebounce(const TradingPage()),
           ),
           body: Container(
             decoration: BoxDecoration(gradient: bgGradient),
@@ -421,7 +379,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Expanded(
                     child: IndexedStack(
                       index: _selectedIndex,
-                      children: _widgetOptions,
+                      children: [
+                        _buildDashboardTab(isDark),   // 0 – home
+                        const TradingPage(),           // 1
+                        Container(),                   // 2 – FAB
+                        const TransactionsScreen(),    // 3
+                        const PortfolioScreen(),       // 4
+                      ],
                     ),
                   ),
                 ],
@@ -430,10 +394,89 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           bottomNavigationBar: _buildBottomNavBar(isDark),
           floatingActionButton: _buildFloatingActionButton(),
-          floatingActionButtonLocation:
-          FloatingActionButtonLocation.centerDocked,
+          floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
         );
       },
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  Dashboard tab  (part of build() tree → always up-to-date)
+  // ─────────────────────────────────────────────────────────────
+
+  Widget _buildDashboardTab(bool isDark) {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 20),
+          _buildPortfolioCard(isDark),
+          const SizedBox(height: 30),
+          _buildSectionHeader('My Portfolio', 'View Details', isDark, null),
+          const SizedBox(height: 15),
+          _buildHoldingsSection(),
+          const SizedBox(height: 30),
+          _buildSectionHeader(
+            'Market Watch', 'See All', isDark,
+                () => _navigateWithDebounce(const MarketWatchScreen()),
+          ),
+          const SizedBox(height: 15),
+          MarketWatchWidget(isDark: isDark, showLimited: true),
+          const SizedBox(height: 100),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHoldingsSection() {
+    // Still loading and nothing cached yet
+    if (_isLoadingPortfolio && _portfolioHoldings.isEmpty) {
+      return const SizedBox(
+        height: 195,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // Error and nothing to show
+    if (_portfolioError != null && _portfolioHoldings.isEmpty) {
+      return SizedBox(
+        height: 195,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline, color: Colors.red.shade300, size: 36),
+              const SizedBox(height: 8),
+              Text(_portfolioError!,
+                  style: const TextStyle(color: Colors.white54, fontSize: 13),
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: _loadPortfolioFromApi,
+                icon: const Icon(Icons.refresh, color: Colors.amber),
+                label: const Text('Retry',
+                    style: TextStyle(color: Colors.amber)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Empty after load
+    if (_portfolioHoldings.isEmpty) {
+      return const SizedBox(
+        height: 195,
+        child: Center(
+          child: Text('No holdings found',
+              style: TextStyle(color: Colors.white54, fontSize: 14)),
+        ),
+      );
+    }
+
+    return PortfolioWidget(
+      holdings:      _portfolioHoldings,
+      chartDataList: _holdingChartData,
     );
   }
 
@@ -442,6 +485,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildHeader(bool isDark) {
+    final displayName = _fullName.isNotEmpty ? _fullName.toUpperCase() : 'WELCOME';
+    final displaySub  = _cdsNumber.isNotEmpty ? _cdsNumber : _email;
+
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Row(
@@ -456,25 +502,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  _fullName.toUpperCase(),
-                  style: TextStyle(
-                    color: isDark ? Colors.white : Colors.black87,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                Text(displayName,
+                    style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black87,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 4),
-                Text(
-                  _cdsNumber.isNotEmpty ? _cdsNumber : _email,
-                  style: TextStyle(
-                      color: isDark ? Colors.white70 : Colors.black54,
-                      fontSize: 12),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                Text(displaySub,
+                    style: TextStyle(
+                        color: isDark ? Colors.white70 : Colors.black54,
+                        fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
@@ -495,7 +536,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 top: 0,
                 right: 0,
                 child: Container(
-                  padding: const EdgeInsets.all(4),
+                  width: 8, height: 8,
                   decoration: const BoxDecoration(
                       color: Colors.red, shape: BoxShape.circle),
                 ),
@@ -508,13 +549,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  Portfolio balance card (real data)
+  //  Portfolio balance card
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildPortfolioCard(bool isDark) {
-    final formattedTotal = _formatAmount(_totalPortfolioValue);
+    final formattedTotal  = _formatAmount(_totalPortfolioValue);
     final formattedShares = _formatAmount(_totalShares);
-    final holdingsCount = _portfolioHoldings.length;
+    final holdingsCount   = _portfolioHoldings.length;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -528,37 +569,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 15,
+              offset: const Offset(0, 5)),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Title row ──
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Total Portfolio Balance',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500),
-              ),
+              const Text('Total Portfolio Balance',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500)),
               Row(
                 children: [
                   GestureDetector(
-                    onTap: () =>
-                        setState(() => _isBalanceVisible = !_isBalanceVisible),
+                    onTap: () => setState(
+                            () => _isBalanceVisible = !_isBalanceVisible),
                     child: Icon(
                       _isBalanceVisible
                           ? Icons.visibility_outlined
                           : Icons.visibility_off_outlined,
-                      color: Colors.white,
-                      size: 22,
+                      color: Colors.white, size: 22,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -566,14 +602,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     onTap: _loadPortfolioFromApi,
                     child: _isLoadingPortfolio
                         ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor:
-                        AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
+                        width: 22, height: 22,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
                         : const Icon(Icons.refresh,
                         color: Colors.white, size: 22),
                   ),
@@ -584,28 +615,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           const SizedBox(height: 15),
 
-          // ── Balance ──
-          _isLoadingPortfolio
-              ? const Text(
-            '...',
-            style: TextStyle(
+          Text(
+            _isLoadingPortfolio && _totalPortfolioValue == 0
+                ? '...'
+                : (_isBalanceVisible ? formattedTotal : '••••••••'),
+            style: const TextStyle(
                 color: Colors.white,
                 fontSize: 38,
-                fontWeight: FontWeight.w300),
-          )
-              : Text(
-            _isBalanceVisible ? formattedTotal : '••••••••',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 38,
-              fontWeight: FontWeight.w300,
-              letterSpacing: 1,
-            ),
+                fontWeight: FontWeight.w300,
+                letterSpacing: 1),
           ),
 
           const SizedBox(height: 12),
 
-          // ── Holdings count ──
           Row(
             children: [
               const Icon(Icons.pie_chart_outline,
@@ -621,15 +643,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           const SizedBox(height: 20),
 
-          // ── Bottom row ──
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'CDS: ${_cdsNumber.isNotEmpty ? _cdsNumber : '—'}',
-                style: TextStyle(
-                    color: Colors.white.withOpacity(0.9), fontSize: 12),
-              ),
+              Text('CDS: ${_cdsNumber.isNotEmpty ? _cdsNumber : '—'}',
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.9), fontSize: 12)),
               Text(
                 'Total Shares: ${_isBalanceVisible ? formattedShares : '••••'}',
                 style: TextStyle(
@@ -647,35 +666,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildSectionHeader(
-      String title,
-      String action,
-      bool isDark,
-      VoidCallback? onActionTap,
-      ) {
+      String title, String action, bool isDark, VoidCallback? onActionTap) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            title,
-            style: TextStyle(
-              color: isDark ? Colors.white : Colors.black87,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          Text(title,
+              style: TextStyle(
+                  color: isDark ? Colors.white : Colors.black87,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold)),
           if (action.isNotEmpty)
             GestureDetector(
               onTap: onActionTap,
-              child: Text(
-                action,
-                style: TextStyle(
-                  color: isDark ? Colors.amber : const Color(0xFFB8860B),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              child: Text(action,
+                  style: TextStyle(
+                      color: isDark ? Colors.amber : const Color(0xFFB8860B),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600)),
             ),
         ],
       ),
@@ -690,8 +699,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
-        borderRadius:
-        const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
+        borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(20), topRight: Radius.circular(20)),
         boxShadow: [
           BoxShadow(
               color: Colors.black.withOpacity(0.3),
@@ -705,10 +714,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildNavItem(Icons.home_outlined, 0, isDark),
-            _buildNavItem(Icons.bar_chart_outlined, 1, isDark),
+            _buildNavItem(Icons.home_outlined,        0, isDark),
+            _buildNavItem(Icons.bar_chart_outlined,   1, isDark),
             const SizedBox(width: 50),
-            _buildNavItem(Icons.attach_money, 3, isDark),
+            _buildNavItem(Icons.attach_money,         3, isDark),
             _buildNavItem(Icons.shopping_bag_outlined, 4, isDark),
           ],
         ),
@@ -719,26 +728,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildNavItem(IconData icon, int index, bool isDark) {
     final isSelected = _selectedIndex == index;
     return GestureDetector(
-      onTap: () {
-        if (index != 2) setState(() => _selectedIndex = index);
-      },
+      onTap: () { if (index != 2) setState(() => _selectedIndex = index); },
       child: Container(
         padding: const EdgeInsets.all(12),
-        child: Icon(
-          icon,
-          color: isSelected
-              ? Colors.amber
-              : (isDark ? Colors.white54 : Colors.black45),
-          size: 28,
-        ),
+        child: Icon(icon,
+            color: isSelected
+                ? Colors.amber
+                : (isDark ? Colors.white54 : Colors.black45),
+            size: 28),
       ),
     );
   }
 
   Widget _buildFloatingActionButton() {
     return Container(
-      width: 65,
-      height: 65,
+      width: 65, height: 65,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
@@ -768,8 +772,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String _formatAmount(double amount) {
     return amount.toStringAsFixed(2).replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+\.)'),
-          (m) => '${m[1]},',
-    );
+        RegExp(r'(\d)(?=(\d{3})+\.)'), (m) => '${m[1]},');
   }
 }

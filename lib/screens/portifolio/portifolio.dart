@@ -165,20 +165,26 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
   // ─────────────────────────────────────────────────────────────
 
   Future<void> _loadPortfolioFromApi() async {
-    setState(() {
-      _isLoadingPortfolio = true;
-      _portfolioError = null;
-    });
+    // Only show spinner if we have nothing cached to display yet
+    if (_portfolioData.isEmpty) {
+      setState(() => _isLoadingPortfolio = true);
+    }
+    setState(() => _portfolioError = null);
 
     try {
       final prefs = await SharedPreferences.getInstance();
       final cdsNumber = prefs.getString('cdsNumber');
 
       if (cdsNumber == null || cdsNumber.isEmpty) {
-        setState(() {
-          _portfolioError = 'CDS number not found. Please log in again.';
-          _isLoadingPortfolio = false;
-        });
+        // Only show the error if we have no cached data to fall back on
+        if (_portfolioData.isEmpty) {
+          setState(() {
+            _portfolioError = 'CDS number not found. Please log in again.';
+            _isLoadingPortfolio = false;
+          });
+        } else {
+          setState(() => _isLoadingPortfolio = false);
+        }
         return;
       }
 
@@ -491,9 +497,11 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
     final hasError = _portfolioError != null;
     final subtextColor = Colors.white.withOpacity(0.85);
 
-    final valueText = isLoading
+    final valueText = (isLoading && _totalPortfolioValue == 0)
         ? 'Loading...'
-        : (hasError ? '—' : _formatAmount(_totalPortfolioValue));
+        : (hasError && _totalPortfolioValue == 0
+        ? '—'
+        : _formatAmount(_totalPortfolioValue));
 
     return Container(
       key: const ValueKey('portfolio_card'),
@@ -667,11 +675,11 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
     final accentColor =
     isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855);
 
-    if (_isLoadingPortfolio) {
+    if (_isLoadingPortfolio && _portfolioData.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_portfolioError != null) {
+    if (_portfolioError != null && _portfolioData.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
