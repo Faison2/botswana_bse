@@ -41,7 +41,37 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
   /// then silently refresh from the API in the background.
   Future<void> _loadFromCacheThenRefresh() async {
     await _loadPortfolioFromCache();
-    await _loadPortfolioFromApi();
+    await _loadPortfolioFromApiWithRetry();
+  }
+
+  /// Retries up to 5 times (every 800ms) if CDS number isn't ready yet.
+  Future<void> _loadPortfolioFromApiWithRetry() async {
+    const maxAttempts = 5;
+    const retryDelay  = Duration(milliseconds: 800);
+
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      final prefs = await SharedPreferences.getInstance();
+      final cds   = prefs.getString('cdsNumber') ?? '';
+
+      if (cds.isNotEmpty) {
+        await _loadPortfolioFromApi();
+        return;
+      }
+
+      // CDS not ready yet – wait and try again silently
+      debugPrint('Portfolio: CDS not ready, attempt $attempt/$maxAttempts – retrying...');
+      if (!mounted) return;
+      await Future.delayed(retryDelay);
+    }
+
+    // All retries exhausted and still no CDS
+    if (!mounted) return;
+    if (_portfolioData.isEmpty) {
+      setState(() {
+        _portfolioError     = 'CDS number not found. Please log in again.';
+        _isLoadingPortfolio = false;
+      });
+    }
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -269,25 +299,39 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
   }
 
   Future<void> _loadOrdersFromApi() async {
+    // Retry up to 5 times if CDS not ready yet
+    const maxAttempts = 5;
+    const retryDelay  = Duration(milliseconds: 800);
+    String cdsNumber  = '';
+
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      final prefs = await SharedPreferences.getInstance();
+      cdsNumber = prefs.getString('cdsNumber') ?? '';
+      if (cdsNumber.isNotEmpty) break;
+      debugPrint('Orders: CDS not ready, attempt $attempt/$maxAttempts – retrying...');
+      if (!mounted) return;
+      await Future.delayed(retryDelay);
+    }
+
+    if (!mounted) return;
+
     setState(() {
       _isLoadingOrders = true;
-      _ordersError = null;
+      _ordersError     = null;
     });
+
+    if (cdsNumber.isEmpty) {
+      setState(() {
+        _ordersError     = 'CDS number not found. Please log in again.';
+        _isLoadingOrders = false;
+      });
+      return;
+    }
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cdsNumber = prefs.getString('cdsNumber');
       final token = prefs.getString('token');
-
-      if (cdsNumber == null || cdsNumber.isEmpty) {
-        setState(() {
-          _ordersError = 'CDS number not found. Please log in again.';
-          _isLoadingOrders = false;
-        });
-        return;
-      }
-
-      _cdsNumber = cdsNumber;
+      _cdsNumber  = cdsNumber;
 
       final headers = {
         'Content-Type': 'application/json',
@@ -303,8 +347,6 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
         headers: headers,
         body: jsonEncode({'CDSNumber': cdsNumber}),
       );
-
-      debugPrint('=== Orders API Response ===');
       debugPrint('Status: ${response.statusCode}');
       debugPrint('Body: ${response.body}');
       debugPrint('===========================');
