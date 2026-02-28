@@ -38,11 +38,114 @@ class PortfolioWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (holdings.isEmpty) {
-      return const SizedBox(
-        height: 180,
-        child: Center(
-          child: Text('No holdings', style: TextStyle(color: Colors.white54)),
+    // Filter out placeholder / zero-value entries
+    final validHoldings = holdings.where((h) {
+      final company = h['company']?.toString() ?? '';
+      final value   = (h['currentValue'] as num?)?.toDouble() ?? 0.0;
+      final shares  = (h['totalShares']  as num?)?.toDouble() ?? 0.0;
+      return company.isNotEmpty &&
+          company != '-' &&
+          (value > 0 || shares > 0);
+    }).toList();
+
+    if (validHoldings.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Container(
+          width: double.infinity,
+          height: 195,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF2D4A2B).withOpacity(0.7),
+                const Color(0xFF1A2E1A).withOpacity(0.9),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.08),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              // ── Decorative background circles ──
+              Positioned(
+                top: -20, right: -20,
+                child: Container(
+                  width: 100, height: 100,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.04),
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: -30, left: -15,
+                child: Container(
+                  width: 120, height: 120,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF4CAF50).withOpacity(0.06),
+                  ),
+                ),
+              ),
+
+              // ── Content ──
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 52, height: 52,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                            color: Colors.white.withOpacity(0.12), width: 1),
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.pie_chart_outline_rounded,
+                          color: Color(0xFFD4A855),
+                          size: 26,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'No Portfolio to Display',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      'Your holdings will appear here\nonce you make your first trade.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 11,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -52,10 +155,10 @@ class PortfolioWidget extends StatelessWidget {
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
-        itemCount: holdings.length,
+        itemCount: validHoldings.length,
         separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
-          final h = holdings[index];
+          final h = validHoldings[index];
           final company = h['company'] as String? ?? '-';
           final shares = h['totalShares'] as double? ?? 0.0;
           final value = h['currentValue'] as double? ?? 0.0;
