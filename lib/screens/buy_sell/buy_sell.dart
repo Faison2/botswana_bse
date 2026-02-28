@@ -31,12 +31,9 @@ class _TradingPageState extends State<TradingPage> {
   String? _cdsNumber;
   String? _phoneNumber;
 
-  // Controllers
   String? selectedCompany;
   String? selectedTimeInForce = 'Day Order';
 
-  // Broker: selectedBroker holds broker_code (sent to API),
-  //         selectedBrokerName holds fnam (displayed to user)
   String? selectedBroker;
   String? selectedBrokerName;
 
@@ -47,7 +44,6 @@ class _TradingPageState extends State<TradingPage> {
   List<Map<String, dynamic>> _allStocks = [];
   List<Map<String, dynamic>> _brokers = [];
 
-  // Dropdown options
   final List<String> timeInForceOptions = ['Day Order', 'Good Till Cancelled'];
 
   static const String apiUrl = '$baseUrl/Home/OrderPosting';
@@ -106,9 +102,9 @@ class _TradingPageState extends State<TradingPage> {
 
       setState(() => _token = token);
 
-      // Fetch current user profile from API
       final response = await http.post(
-        Uri.parse('https://zamagm.escrowagm.com/MainAPI/Authentication/GetProfile'),
+        Uri.parse(
+            'https://zamagm.escrowagm.com/MainAPI/Authentication/GetProfile'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -124,7 +120,6 @@ class _TradingPageState extends State<TradingPage> {
           final phoneNumber = responseData['phoneNumber'] ?? '';
           final cdsNumber = responseData['cdsNumber'] ?? '';
 
-          // Update SharedPreferences with current data
           await prefs.setString('fullName', fullName);
           await prefs.setString('phoneNumber', phoneNumber);
           await prefs.setString('cdsNumber', cdsNumber);
@@ -134,11 +129,7 @@ class _TradingPageState extends State<TradingPage> {
             _phoneNumber = phoneNumber;
             _cdsNumber = cdsNumber;
           });
-
-          print('User data loaded successfully: $_userName, $_phoneNumber, $_cdsNumber');
         } else {
-          print('Failed to load profile: ${responseData['responseMessage']}');
-          // Fallback to cached data if API fails
           setState(() {
             _userName = prefs.getString('fullName') ?? 'N/A';
             _phoneNumber = prefs.getString('phoneNumber') ?? '';
@@ -146,8 +137,6 @@ class _TradingPageState extends State<TradingPage> {
           });
         }
       } else {
-        print('Failed to fetch profile. Status: ${response.statusCode}');
-        // Fallback to cached data if API fails
         setState(() {
           _userName = prefs.getString('fullName') ?? 'N/A';
           _phoneNumber = prefs.getString('phoneNumber') ?? '';
@@ -156,7 +145,6 @@ class _TradingPageState extends State<TradingPage> {
       }
     } catch (e) {
       print('Error loading user data: $e');
-      // Fallback to cached data if exception occurs
       try {
         final prefs = await SharedPreferences.getInstance();
         setState(() {
@@ -184,8 +172,6 @@ class _TradingPageState extends State<TradingPage> {
         },
       );
 
-      print('Brokers API status: ${response.statusCode}');
-
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
 
@@ -197,7 +183,6 @@ class _TradingPageState extends State<TradingPage> {
           })
               .toList();
 
-          // Auto-select first broker
           if (_brokers.isNotEmpty && selectedBroker == null) {
             selectedBroker = _brokers[0]['broker_code'];
             selectedBrokerName = _brokers[0]['fnam'];
@@ -242,8 +227,6 @@ class _TradingPageState extends State<TradingPage> {
         },
       );
 
-      print('Stocks API Response status: ${response.statusCode}');
-
       if (response.statusCode == 200) {
         final List<dynamic> jsonData = json.decode(response.body);
 
@@ -255,8 +238,6 @@ class _TradingPageState extends State<TradingPage> {
             stocks.add(_mapApiDataToStock(item));
           }
         }
-
-        print('Parsed ${stocks.length} stocks in TradingPage');
 
         setState(() {
           _allStocks = stocks;
@@ -296,7 +277,7 @@ class _TradingPageState extends State<TradingPage> {
           updateCalculations();
         });
       } else {
-        print('Failed to fetch stocks in TradingPage: ${response.statusCode}');
+        print('Failed to fetch stocks: ${response.statusCode}');
         if (widget.prefilledStockData != null) {
           setState(() {
             _allStocks = [widget.prefilledStockData!];
@@ -307,7 +288,7 @@ class _TradingPageState extends State<TradingPage> {
         }
       }
     } catch (e) {
-      print('Error fetching stocks in TradingPage: $e');
+      print('Error fetching stocks: $e');
       if (widget.prefilledStockData != null) {
         setState(() {
           _allStocks = [widget.prefilledStockData!];
@@ -322,8 +303,13 @@ class _TradingPageState extends State<TradingPage> {
   }
 
   Map<String, dynamic> _mapApiDataToStock(dynamic item) {
-    String name = item['Company']?.toString() ?? 'Unknown';
-    String ticker = item['Symbol']?.toString() ?? 'N/A';
+    // ── FIX 1: Guard empty string for ticker/symbol ──────────────────────────
+    final rawSymbol = item['Symbol']?.toString() ?? '';
+    final rawName = item['Company']?.toString() ?? 'Unknown';
+
+    // Use Symbol if non-empty, otherwise derive from Company name
+    String ticker = rawSymbol.isNotEmpty ? rawSymbol : rawName;
+    String name = rawName.isNotEmpty ? rawName : rawSymbol;
     String code = item['Code']?.toString() ?? '';
 
     String closingPrice = item['ClosingPrice']?.toString() ?? '0';
@@ -377,15 +363,23 @@ class _TradingPageState extends State<TradingPage> {
 
   IconData _getIconForStock(String symbol) {
     final s = symbol.toUpperCase();
-    if (s.contains('BANK') || s.contains('CRDB') || s.contains('NMB') ||
-        s.contains('KCB') || s.contains('DCB') || s.contains('MKCB') ||
-        s.contains('MUCOBA') || s.contains('MCB') || s.contains('MBP')) {
+    if (s.contains('BANK') ||
+        s.contains('CRDB') ||
+        s.contains('NMB') ||
+        s.contains('KCB') ||
+        s.contains('DCB') ||
+        s.contains('MKCB') ||
+        s.contains('MUCOBA') ||
+        s.contains('MCB') ||
+        s.contains('MBP')) {
       return Icons.account_balance;
     } else if (s.contains('BREW') || s.contains('TBL') || s.contains('EABL')) {
       return Icons.local_drink;
     } else if (s.contains('AIR') || s.contains('KA') || s.contains('PAL')) {
       return Icons.flight;
-    } else if (s.contains('CEMENT') || s.contains('TCCL') || s.contains('TPCC')) {
+    } else if (s.contains('CEMENT') ||
+        s.contains('TCCL') ||
+        s.contains('TPCC')) {
       return Icons.construction;
     } else if (s.contains('VODA') || s.contains('TELECOM')) {
       return Icons.phone_android;
@@ -393,8 +387,10 @@ class _TradingPageState extends State<TradingPage> {
       return Icons.newspaper;
     } else if (s.contains('INSURANCE') || s.contains('JHL')) {
       return Icons.security;
-    } else if (s.contains('OIL') || s.contains('GAS') ||
-        s.contains('SWALA') || s.contains('TOL')) {
+    } else if (s.contains('OIL') ||
+        s.contains('GAS') ||
+        s.contains('SWALA') ||
+        s.contains('TOL')) {
       return Icons.local_gas_station;
     }
     return Icons.business;
@@ -472,28 +468,51 @@ class _TradingPageState extends State<TradingPage> {
       final parts = selectedCompany!.split('-');
       final index = int.tryParse(parts.last);
 
+      // ── FIX 2: Robust company name resolution ────────────────────────────
       String companyName = '';
+
       if (index != null && index < _allStocks.length) {
-        companyName =
-            _allStocks[index]['ticker'] ?? _allStocks[index]['name'] ?? '';
+        final stock = _allStocks[index];
+        final ticker = stock['ticker']?.toString() ?? '';
+        final name = stock['name']?.toString() ?? '';
+
+        // Prefer ticker (Symbol); fall back to name
+        companyName = ticker.isNotEmpty ? ticker : name;
       }
 
-      final settlementDate = DateTime.now().add(const Duration(days: 2));
-      final maturityDate = DateTime.now().add(const Duration(days: 365));
+      // Final fallback: pull ticker straight from composite key
+      // e.g. "FNBB-BW0001-3" → first segment is always the ticker
+      if (companyName.isEmpty && parts.length >= 2) {
+        companyName = parts[0];
+      }
+
+      // Hard guard — should never reach here, but be safe
+      if (companyName.isEmpty) {
+        _showError(
+            'Could not determine company symbol. Please re-select the company.');
+        setState(() => isLoading = false);
+        return;
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
+      // ── FIX 3: Use UTC so toIso8601String() includes the Z suffix ────────
+      final now = DateTime.now().toUtc();
+      final settlementDate = now.add(const Duration(days: 2));
+      final maturityDate = now.add(const Duration(days: 365));
 
       final orderData = {
         "OrderType": isBuy ? "BUY" : "SELL",
-        "ReferenceNumber": "ORD${DateTime.now().millisecondsSinceEpoch}",
+        "ReferenceNumber": "ORD${now.millisecondsSinceEpoch}",
         "Company": companyName,
         "Quantity": double.tryParse(quantityController.text) ?? 0,
         "BasePrice": double.tryParse(priceController.text) ?? 0,
         "TimeInForce": selectedTimeInForce,
-        "BrokerCode": selectedBroker, // sends broker_code
+        "BrokerCode": selectedBroker,
         "CdsAcNo": _cdsNumber ?? '',
         "Shareholder": "SHR7891011",
         "LiNumber": "LI998877",
         "ClientName": _userName ?? 'N/A',
-        "BrokerRef": "BRREF${DateTime.now().millisecondsSinceEpoch}",
+        "BrokerRef": "BRREF${now.millisecondsSinceEpoch}",
         "SettlementDate": settlementDate.toIso8601String(),
         "SettlementAmount": netTotal,
         "Charges": charges,
@@ -503,36 +522,57 @@ class _TradingPageState extends State<TradingPage> {
         "Source": "MOBILE",
       };
 
+      final requestBody = json.encode(orderData);
+      print('=== ORDER REQUEST BODY ===');
+      print(requestBody);
+
       final response = await http.post(
         Uri.parse(apiUrl),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $_token',
         },
-        body: json.encode(orderData),
+        body: requestBody,
       );
 
+      print('=== ORDER RESPONSE STATUS: ${response.statusCode} ===');
+      print('=== ORDER RESPONSE BODY: ${response.body} ===');
+
       if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                  'Order #${responseData[0]['ordernumber']} placed successfully!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const DashboardScreen()),
-          );
+        final List<dynamic> responseData = json.decode(response.body);
+
+        // ── FIX 4: Check business-level responseCode ──────────────────────
+        final responseCode = responseData[0]['responseCode'];
+        final responseMessage =
+            responseData[0]['responseMessage'] ?? 'Unknown error';
+
+        if (responseCode == 200) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                    'Order #${responseData[0]['ordernumber']} placed successfully!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => const DashboardScreen()),
+            );
+          }
+        } else {
+          throw Exception(
+              'Order rejected: $responseMessage (code $responseCode)');
         }
       } else if (response.statusCode == 401) {
         throw Exception('Session expired. Please login again.');
       } else {
-        throw Exception('Failed to place order: ${response.statusCode}');
+        throw Exception(
+            'Failed to place order: ${response.statusCode}\n${response.body}');
       }
     } catch (e) {
+      print('=== ORDER ERROR: $e ===');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -735,7 +775,7 @@ class _TradingPageState extends State<TradingPage> {
                         ),
                         const SizedBox(height: 16),
 
-                        // ── Broker Dropdown (dynamic) ──────────────────────
+                        // ── Broker Dropdown ────────────────────────────────
                         if (isFetchingBrokers)
                           _buildLoadingField('Broker',
                               textColor: textColor,
@@ -813,11 +853,13 @@ class _TradingPageState extends State<TradingPage> {
                           ),
                           child: Column(
                             children: [
-                              _summaryRow('GROSS TOTAL:',
+                              _summaryRow(
+                                  'GROSS TOTAL:',
                                   'BWP ${grossTotal.toStringAsFixed(2)}',
                                   subtextColor),
                               const SizedBox(height: 8),
-                              _summaryRow('CUSTODIAL FEE (1%):',
+                              _summaryRow(
+                                  'CUSTODIAL FEE (1%):',
                                   'BWP ${custodialFee.toStringAsFixed(2)}',
                                   subtextColor),
                               const SizedBox(height: 8),
@@ -836,8 +878,7 @@ class _TradingPageState extends State<TradingPage> {
                                           color: textColor,
                                           fontSize: 16,
                                           fontWeight: FontWeight.bold)),
-                                  Text(
-                                      'BWP ${netTotal.toStringAsFixed(2)}',
+                                  Text('BWP ${netTotal.toStringAsFixed(2)}',
                                       style: TextStyle(
                                           color: accentColor,
                                           fontSize: 16,
@@ -864,8 +905,9 @@ class _TradingPageState extends State<TradingPage> {
                                       borderRadius:
                                       BorderRadius.circular(12)),
                                 ),
-                                onPressed:
-                                isLoading ? null : () => Navigator.pop(context),
+                                onPressed: isLoading
+                                    ? null
+                                    : () => Navigator.pop(context),
                                 child: Text(
                                   'CLOSE',
                                   style: TextStyle(
@@ -939,7 +981,6 @@ class _TradingPageState extends State<TradingPage> {
     );
   }
 
-  /// Generic loading placeholder shown while a dropdown's data is fetching.
   Widget _buildLoadingField(
       String label, {
         required Color textColor,
@@ -964,8 +1005,8 @@ class _TradingPageState extends State<TradingPage> {
             border: Border.all(color: fieldBorderColor, width: 1),
           ),
           child: Center(
-            child: CircularProgressIndicator(
-                color: accentColor, strokeWidth: 2),
+            child:
+            CircularProgressIndicator(color: accentColor, strokeWidth: 2),
           ),
         ),
       ],
@@ -1000,7 +1041,8 @@ class _TradingPageState extends State<TradingPage> {
               hint: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text('Select Company',
-                    style: TextStyle(color: textColor.withOpacity(0.5))),
+                    style:
+                    TextStyle(color: textColor.withOpacity(0.5))),
               ),
               isExpanded: true,
               dropdownColor: dropdownBgColor,
@@ -1063,7 +1105,6 @@ class _TradingPageState extends State<TradingPage> {
     );
   }
 
-  /// Dynamic broker dropdown — displays fnam, submits broker_code.
   Widget _buildBrokerDropdown({
     required Color textColor,
     required Color fieldBorderColor,
@@ -1088,12 +1129,12 @@ class _TradingPageState extends State<TradingPage> {
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
-              // value is broker_code
               value: selectedBroker,
               hint: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text('Select Broker',
-                    style: TextStyle(color: textColor.withOpacity(0.5))),
+                    style:
+                    TextStyle(color: textColor.withOpacity(0.5))),
               ),
               isExpanded: true,
               dropdownColor: dropdownBgColor,
@@ -1104,12 +1145,12 @@ class _TradingPageState extends State<TradingPage> {
               style: TextStyle(color: textColor, fontSize: 14),
               items: _brokers.map((broker) {
                 return DropdownMenuItem<String>(
-                  value: broker['broker_code'], // key used internally
+                  value: broker['broker_code'],
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 12),
                     child: Text(
-                      broker['fnam']!, // shown to user
+                      broker['fnam']!,
                       style: TextStyle(
                           color: textColor,
                           fontSize: 14,
@@ -1122,7 +1163,7 @@ class _TradingPageState extends State<TradingPage> {
                   ? null
                   : (value) {
                 setState(() {
-                  selectedBroker = value; // broker_code
+                  selectedBroker = value;
                   selectedBrokerName = _brokers.firstWhere(
                         (b) => b['broker_code'] == value,
                     orElse: () => {'fnam': ''},
@@ -1230,16 +1271,13 @@ class _TradingPageState extends State<TradingPage> {
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide:
-                BorderSide(color: fieldBorderColor, width: 1)),
+                borderSide: BorderSide(color: fieldBorderColor, width: 1)),
             enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide:
-                BorderSide(color: fieldBorderColor, width: 1)),
+                borderSide: BorderSide(color: fieldBorderColor, width: 1)),
             focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide:
-                BorderSide(color: fieldBorderColor, width: 2)),
+                borderSide: BorderSide(color: fieldBorderColor, width: 2)),
           ),
         ),
       ],
