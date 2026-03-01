@@ -1,3 +1,4 @@
+import 'package:bse/contants/constants.dart';
 import 'package:bse/screens/auth/login/login.dart';
 import 'package:bse/screens/splash_screen/spalsh_screen.dart';
 import 'package:bse/screens/dashboard/dashboard.dart';
@@ -61,7 +62,7 @@ class _BSEAppState extends State<BSEApp> with WidgetsBindingObserver {
       if (token.isNotEmpty) {
         // Call logout API
         await http.post(
-          Uri.parse('http://192.168.3.201/MainAPI/Authentication/Logout'),
+          Uri.parse('$baseUrl/Authentication/Logout'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({'Token': token}),
         ).timeout(const Duration(seconds: 10));

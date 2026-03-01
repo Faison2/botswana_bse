@@ -202,7 +202,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('http://192.168.3.201/MainAPI/Authentication/SetPassword'),
+        Uri.parse('$baseUrl/Authentication/SetPassword'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'Email': email,
