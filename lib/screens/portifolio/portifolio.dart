@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -27,6 +28,14 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
   bool _isLoadingOrders = false;
   String? _ordersError;
 
+  // ── Auto-retry timers ──
+  Timer? _portfolioRetryTimer;
+  Timer? _ordersRetryTimer;
+  int _portfolioRetryCount = 0;
+  int _ordersRetryCount = 0;
+  static const _maxAutoRetries = 10;
+  static const _autoRetryDelay = Duration(seconds: 5);
+
   // Shared
   String? _cdsNumber;
 
@@ -34,7 +43,14 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
   void initState() {
     super.initState();
     _loadFromCacheThenRefresh();
-    _loadOrdersFromApi();
+    _startAutoRetryOrders();
+  }
+
+  @override
+  void dispose() {
+    _portfolioRetryTimer?.cancel();
+    _ordersRetryTimer?.cancel();
+    super.dispose();
   }
 
   /// Instantly populate the UI from the cache the Dashboard wrote,
@@ -64,14 +80,41 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
       await Future.delayed(retryDelay);
     }
 
-    // All retries exhausted and still no CDS
+    // All retries exhausted and still no CDS - start auto-retry timer
     if (!mounted) return;
-    if (_portfolioData.isEmpty) {
-      setState(() {
-        _portfolioError     = 'CDS number not found. Please log in again.';
-        _isLoadingPortfolio = false;
-      });
+    _startAutoRetryPortfolio();
+  }
+
+  /// Automatically retry portfolio loading with exponential backoff
+  void _startAutoRetryPortfolio() {
+    _portfolioRetryTimer?.cancel();
+
+    if (_portfolioRetryCount >= _maxAutoRetries) {
+      if (_portfolioData.isEmpty) {
+        setState(() {
+          _portfolioError = 'CDS number not found. Please log in again.';
+          _isLoadingPortfolio = false;
+        });
+      }
+      return;
     }
+
+    _portfolioRetryTimer = Timer(_autoRetryDelay, () async {
+      if (!mounted) return;
+
+      _portfolioRetryCount++;
+      debugPrint('Portfolio auto-retry attempt ${_portfolioRetryCount}/$_maxAutoRetries');
+
+      // Try to load from API
+      await _loadPortfolioFromApi();
+
+      // If still has error, schedule another retry
+      if (_portfolioError != null && mounted) {
+        _startAutoRetryPortfolio();
+      } else {
+        _portfolioRetryCount = 0; // Reset on success
+      }
+    });
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -288,6 +331,10 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
           'Server error: ${response.statusCode}\n${response.body}';
           _isLoadingPortfolio = false;
         });
+        // Schedule automatic retry
+        if (_portfolioRetryCount < _maxAutoRetries && mounted) {
+          _startAutoRetryPortfolio();
+        }
       }
     } catch (e, stack) {
       debugPrint('Portfolio error: $e\n$stack');
@@ -295,6 +342,10 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
         _portfolioError = 'Failed to load data: $e';
         _isLoadingPortfolio = false;
       });
+      // Schedule automatic retry
+      if (_portfolioRetryCount < _maxAutoRetries && mounted) {
+        _startAutoRetryPortfolio();
+      }
     }
   }
 
@@ -315,16 +366,25 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
 
     if (!mounted) return;
 
-    setState(() {
-      _isLoadingOrders = true;
-      _ordersError     = null;
-    });
+    // Only show spinner if we have nothing cached to display yet
+    if (_ordersData.isEmpty) {
+      setState(() => _isLoadingOrders = true);
+    }
+    setState(() => _ordersError = null);
 
     if (cdsNumber.isEmpty) {
-      setState(() {
-        _ordersError     = 'CDS number not found. Please log in again.';
-        _isLoadingOrders = false;
-      });
+      if (_ordersData.isEmpty) {
+        setState(() {
+          _ordersError = 'CDS number not found. Please log in again.';
+          _isLoadingOrders = false;
+        });
+      } else {
+        setState(() => _isLoadingOrders = false);
+      }
+      // Start auto-retry since CDS is not available
+      if (mounted) {
+        _startAutoRetryOrders();
+      }
       return;
     }
 
@@ -347,8 +407,8 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
         headers: headers,
         body: jsonEncode({'CDSNumber': cdsNumber}),
       );
-      debugPrint('Status: ${response.statusCode}');
-      debugPrint('Body: ${response.body}');
+      debugPrint('Orders Status: ${response.statusCode}');
+      debugPrint('Orders Body: ${response.body}');
       debugPrint('===========================');
 
       if (response.statusCode == 200) {
@@ -360,6 +420,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
             _ordersData = [];
             _isLoadingOrders = false;
           });
+          _ordersRetryCount = 0; // Reset on success
           return;
         }
 
@@ -381,12 +442,17 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
           _ordersData = parsed;
           _isLoadingOrders = false;
         });
+        _ordersRetryCount = 0; // Reset on success
       } else {
         setState(() {
           _ordersError =
           'Server error: ${response.statusCode}\n${response.body}';
           _isLoadingOrders = false;
         });
+        // Schedule automatic retry
+        if (_ordersRetryCount < _maxAutoRetries && mounted) {
+          _startAutoRetryOrders();
+        }
       }
     } catch (e, stack) {
       debugPrint('Orders error: $e\n$stack');
@@ -394,7 +460,43 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
         _ordersError = 'Failed to load orders: $e';
         _isLoadingOrders = false;
       });
+      // Schedule automatic retry
+      if (_ordersRetryCount < _maxAutoRetries && mounted) {
+        _startAutoRetryOrders();
+      }
     }
+  }
+
+  /// Automatically retry orders loading
+  void _startAutoRetryOrders() {
+    _ordersRetryTimer?.cancel();
+
+    if (_ordersRetryCount >= _maxAutoRetries) {
+      if (_ordersData.isEmpty) {
+        setState(() {
+          _ordersError = 'Failed to load orders. Please check your connection.';
+          _isLoadingOrders = false;
+        });
+      }
+      return;
+    }
+
+    _ordersRetryTimer = Timer(_autoRetryDelay, () async {
+      if (!mounted) return;
+
+      _ordersRetryCount++;
+      debugPrint('Orders auto-retry attempt ${_ordersRetryCount}/$_maxAutoRetries');
+
+      // Try to load from API
+      await _loadOrdersFromApi();
+
+      // If still has error, schedule another retry
+      if (_ordersError != null && mounted) {
+        _startAutoRetryOrders();
+      } else {
+        _ordersRetryCount = 0; // Reset on success
+      }
+    });
   }
 
   void _refreshCurrentTab() {
