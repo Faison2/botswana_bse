@@ -30,6 +30,7 @@ class _TradingPageState extends State<TradingPage> {
   String? _userName;
   String? _cdsNumber;
   String? _phoneNumber;
+  String? _cdsAccount; // ← CDSAccount from login SharedPreferences
 
   String? selectedCompany;
   String? selectedTimeInForce = 'Day Order';
@@ -100,7 +101,11 @@ class _TradingPageState extends State<TradingPage> {
         return;
       }
 
-      setState(() => _token = token);
+      setState(() {
+        _token = token;
+        // Load CDSAccount saved at login
+        _cdsAccount = prefs.getString('CDSAccount') ?? '';
+      });
 
       final response = await http.post(
         Uri.parse(
@@ -151,6 +156,7 @@ class _TradingPageState extends State<TradingPage> {
           _userName = prefs.getString('fullName') ?? 'N/A';
           _phoneNumber = prefs.getString('phoneNumber') ?? '';
           _cdsNumber = prefs.getString('cdsNumber') ?? '';
+          _cdsAccount = prefs.getString('CDSAccount') ?? '';
         });
       } catch (e) {
         print('Error loading cached user data: $e');
@@ -303,11 +309,9 @@ class _TradingPageState extends State<TradingPage> {
   }
 
   Map<String, dynamic> _mapApiDataToStock(dynamic item) {
-    // ── FIX 1: Guard empty string for ticker/symbol ──────────────────────────
     final rawSymbol = item['Symbol']?.toString() ?? '';
     final rawName = item['Company']?.toString() ?? 'Unknown';
 
-    // Use Symbol if non-empty, otherwise derive from Company name
     String ticker = rawSymbol.isNotEmpty ? rawSymbol : rawName;
     String name = rawName.isNotEmpty ? rawName : rawSymbol;
     String code = item['Code']?.toString() ?? '';
@@ -468,34 +472,26 @@ class _TradingPageState extends State<TradingPage> {
       final parts = selectedCompany!.split('-');
       final index = int.tryParse(parts.last);
 
-      // ── FIX 2: Robust company name resolution ────────────────────────────
       String companyName = '';
 
       if (index != null && index < _allStocks.length) {
         final stock = _allStocks[index];
         final ticker = stock['ticker']?.toString() ?? '';
         final name = stock['name']?.toString() ?? '';
-
-        // Prefer ticker (Symbol); fall back to name
         companyName = ticker.isNotEmpty ? ticker : name;
       }
 
-      // Final fallback: pull ticker straight from composite key
-      // e.g. "FNBB-BW0001-3" → first segment is always the ticker
       if (companyName.isEmpty && parts.length >= 2) {
         companyName = parts[0];
       }
 
-      // Hard guard — should never reach here, but be safe
       if (companyName.isEmpty) {
         _showError(
             'Could not determine company symbol. Please re-select the company.');
         setState(() => isLoading = false);
         return;
       }
-      // ─────────────────────────────────────────────────────────────────────
 
-      // ── FIX 3: Use UTC so toIso8601String() includes the Z suffix ────────
       final now = DateTime.now().toUtc();
       final settlementDate = now.add(const Duration(days: 2));
       final maturityDate = now.add(const Duration(days: 365));
@@ -508,7 +504,7 @@ class _TradingPageState extends State<TradingPage> {
         "BasePrice": double.tryParse(priceController.text) ?? 0,
         "TimeInForce": selectedTimeInForce,
         "BrokerCode": selectedBroker,
-        "CdsAcNo": _cdsNumber ?? '',
+        "CdsAcNo": _cdsAccount ?? '', // ← uses CDSAccount from login
         "Shareholder": "SHR7891011",
         "LiNumber": "LI998877",
         "ClientName": _userName ?? 'N/A',
@@ -541,7 +537,6 @@ class _TradingPageState extends State<TradingPage> {
       if (response.statusCode == 200) {
         final List<dynamic> responseData = json.decode(response.body);
 
-        // ── FIX 4: Check business-level responseCode ──────────────────────
         final responseCode = responseData[0]['responseCode'];
         final responseMessage =
             responseData[0]['responseMessage'] ?? 'Unknown error';
