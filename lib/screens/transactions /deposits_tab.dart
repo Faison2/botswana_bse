@@ -4,6 +4,9 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'mascom.dart';
+
+
 class DepositsTab extends StatefulWidget {
   final bool isDark;
   final VoidCallback? onTransactionComplete;
@@ -47,69 +50,51 @@ class _DepositsTabState extends State<DepositsTab> {
     final prefs = await SharedPreferences.getInstance();
     final phoneNumber = prefs.getString('phoneNumber');
     setState(() {
-      _cdsNumber = prefs.getString('cdsNumber') ?? 'CSDsd723'; // Fallback if not found
-      _phoneController.text = phoneNumber ?? ''; // Auto-populate phone number
+      _cdsNumber = prefs.getString('cdsNumber') ?? 'CSDsd723';
+      _phoneController.text = phoneNumber ?? '';
     });
   }
 
   Future<void> _loadRecentDeposits() async {
-    setState(() {
-      _isLoadingDeposits = true;
-    });
+    setState(() => _isLoadingDeposits = true);
 
     try {
       final prefs = await SharedPreferences.getInstance();
       final cdsNumber = prefs.getString('cdsNumber');
-
       if (cdsNumber == null) {
-        setState(() {
-          _isLoadingDeposits = false;
-        });
+        setState(() => _isLoadingDeposits = false);
         return;
       }
 
       final response = await http
           .get(
-        Uri.parse('http://192.168.3.201:5000/api/Clients/$cdsNumber/transactions?page=1&pageSize=50'),
-        headers: {
-          'accept': 'application/json',
-        },
+        Uri.parse(
+            'http://192.168.3.201:5000/api/Clients/$cdsNumber/transactions?page=1&pageSize=50'),
+        headers: {'accept': 'application/json'},
       )
-          .timeout(const Duration(seconds: 10), onTimeout: () {
-        throw TimeoutException('Connection timeout - unable to fetch recent deposits');
-      });
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-
         if (data is Map && data.containsKey('data')) {
-          final allTransactions = List<Map<String, dynamic>>.from(data['data']);
-          // Filter only deposits and take last 3
+          final allTransactions =
+          List<Map<String, dynamic>>.from(data['data']);
           final deposits = allTransactions.where((t) {
-            final transType = t['transType']?.toString().toLowerCase() ?? '';
+            final transType =
+                t['transType']?.toString().toLowerCase() ?? '';
             return transType.contains('deposit');
           }).take(3).toList();
-
           setState(() {
             _recentDeposits = deposits;
             _isLoadingDeposits = false;
           });
-        } else {
-          setState(() {
-            _isLoadingDeposits = false;
-          });
+          return;
         }
-      } else {
-        setState(() {
-          _isLoadingDeposits = false;
-        });
       }
     } catch (e) {
       print('Error loading deposits: $e');
-      setState(() {
-        _isLoadingDeposits = false;
-      });
     }
+    setState(() => _isLoadingDeposits = false);
   }
 
   String _formatDate(String? dateString) {
@@ -117,7 +102,7 @@ class _DepositsTabState extends State<DepositsTab> {
     try {
       final date = DateTime.parse(dateString);
       return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
-    } catch (e) {
+    } catch (_) {
       return dateString;
     }
   }
@@ -125,9 +110,9 @@ class _DepositsTabState extends State<DepositsTab> {
   String _formatAmount(dynamic amount) {
     if (amount == null) return 'BWP 0.00';
     try {
-      final numAmount = amount is String ? double.parse(amount) : amount.toDouble();
-      return 'BWP ${numAmount.toStringAsFixed(2)}';
-    } catch (e) {
+      final num = amount is String ? double.parse(amount) : amount.toDouble();
+      return 'BWP ${num.toStringAsFixed(2)}';
+    } catch (_) {
       return 'BWP ${amount.toString()}';
     }
   }
@@ -139,21 +124,69 @@ class _DepositsTabState extends State<DepositsTab> {
     super.dispose();
   }
 
+  // -------------------------------------------------------------------------
+  // Deposit entry point — routes to Mascom or existing API
+  // -------------------------------------------------------------------------
+
   Future<void> _initiateDeposit() async {
     if (_amountController.text.isEmpty || _phoneController.text.isEmpty) {
       _showErrorDialog('Please fill in all fields');
       return;
     }
-
     if (_cdsNumber == null) {
       _showErrorDialog('CDS Number not found. Please login again.');
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    final double? amount = double.tryParse(_amountController.text);
+    if (amount == null || amount <= 0) {
+      _showErrorDialog('Please enter a valid amount');
+      return;
+    }
 
+    setState(() => _isLoading = true);
+
+    if (_selectedProvider == 'MASCOM') {
+      await _initiateDepositMascom(amount);
+    } else {
+      await _initiateDepositExisting(amount);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Mascom deposit
+  // -------------------------------------------------------------------------
+
+  Future<void> _initiateDepositMascom(double amount) async {
+    final result = await MascomService.deposit(
+      cdsNumber: _cdsNumber!,
+      mobileNumber: _phoneController.text.trim(),
+      amount: amount,
+    );
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (result.success) {
+      _showMascomSuccessDialog(
+        title: 'Deposit Successful!',
+        amount: amount,
+        referenceId: result.referenceId,
+        message: result.message,
+      );
+      widget.onBalanceUpdate?.call(amount);
+    } else {
+      _showErrorDialog(
+        'Mascom Error (${result.responseCode}): ${result.message}\n\nReference: ${result.referenceId}',
+      );
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Existing API deposit (BTC / ORANGE) — unchanged countdown flow
+  // -------------------------------------------------------------------------
+
+  Future<void> _initiateDepositExisting(double amount) async {
     try {
       final response = await http.post(
         Uri.parse('http://192.168.3.201:5000/api/Payments/deposit'),
@@ -164,18 +197,16 @@ class _DepositsTabState extends State<DepositsTab> {
         body: jsonEncode({
           'provider': _selectedProvider,
           'cdsNumber': _cdsNumber,
-          'amount': double.parse(_amountController.text),
+          'amount': amount,
           'subscriberMsisdn': _phoneController.text,
         }),
       );
 
-      setState(() {
-        _isLoading = false;
-      });
+      if (!mounted) return;
+      setState(() => _isLoading = false);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-
         if (data['success'] == true) {
           _showCountdownDialog(
             data['transactionReference'],
@@ -188,12 +219,153 @@ class _DepositsTabState extends State<DepositsTab> {
         _showErrorDialog('Failed to initiate deposit. Please try again.');
       }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
+      if (!mounted) return;
+      setState(() => _isLoading = false);
       _showErrorDialog('Network error: ${e.toString()}');
     }
   }
+
+  // -------------------------------------------------------------------------
+  // Mascom success dialog
+  // -------------------------------------------------------------------------
+
+  void _showMascomSuccessDialog({
+    required String title,
+    required double amount,
+    required String referenceId,
+    required String message,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor:
+        widget.isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        shape:
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Column(
+          children: [
+            Container(
+              width: 60,
+              height: 60,
+              decoration: const BoxDecoration(
+                  shape: BoxShape.circle, color: Colors.green),
+              child:
+              const Icon(Icons.check, color: Colors.white, size: 40),
+            ),
+            const SizedBox(height: 16),
+            Text(title,
+                style: TextStyle(
+                    color: widget.isDark ? Colors.white : Colors.black87,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color:
+                  const Color(0xFF8B6914).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                      color: const Color(0xFF8B6914)
+                          .withValues(alpha: 0.4)),
+                ),
+                child: const Text('MASCOM',
+                    style: TextStyle(
+                        color: Color(0xFF8B6914),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        letterSpacing: 1)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: Colors.green.withValues(alpha: 0.3)),
+              ),
+              child: Text(message,
+                  style: TextStyle(
+                      color:
+                      widget.isDark ? Colors.white70 : Colors.black87,
+                      fontSize: 14,
+                      height: 1.5)),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Amount:',
+                    style: TextStyle(
+                        color: widget.isDark
+                            ? Colors.white60
+                            : Colors.black54,
+                        fontSize: 14)),
+                Text('BWP ${amount.toStringAsFixed(2)}',
+                    style: TextStyle(
+                        color:
+                        widget.isDark ? Colors.white : Colors.black87,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Divider(),
+            const SizedBox(height: 8),
+            Text('Reference ID:',
+                style: TextStyle(
+                    color: widget.isDark ? Colors.white60 : Colors.black54,
+                    fontSize: 12)),
+            const SizedBox(height: 4),
+            SelectableText(referenceId,
+                style: TextStyle(
+                    color: widget.isDark ? Colors.white : Colors.black87,
+                    fontSize: 13,
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.w600)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _amountController.clear();
+              widget.onTransactionComplete?.call();
+              _loadRecentDeposits();
+            },
+            style: TextButton.styleFrom(
+              backgroundColor: widget.isDark
+                  ? const Color(0xFF8B6914)
+                  : const Color(0xFFB8860B),
+              padding:
+              const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('DONE',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16)),
+          ),
+        ],
+        actionsAlignment: MainAxisAlignment.center,
+      ),
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Existing countdown + status check dialogs (BTC / ORANGE) — unchanged
+  // -------------------------------------------------------------------------
 
   void _showCountdownDialog(String transactionRef, String message) {
     int countdown = 30;
@@ -208,42 +380,35 @@ class _DepositsTabState extends State<DepositsTab> {
           child: StatefulBuilder(
             builder: (context, setDialogState) {
               if (timer == null || !timer!.isActive) {
-                timer = Timer.periodic(const Duration(seconds: 1), (Timer t) {
-                  if (!mounted) {
-                    t.cancel();
-                    return;
-                  }
-
-                  setDialogState(() {
-                    countdown--;
-                  });
-
-                  if (countdown <= 0) {
-                    t.cancel();
-                    // Use Navigator.of with root context to ensure proper cleanup
-                    Navigator.of(dialogContext, rootNavigator: false).pop();
-                    // Check transaction status after dialog is closed
-                    Future.delayed(const Duration(milliseconds: 100), () {
-                      if (mounted) {
-                        _checkTransactionStatus(transactionRef);
+                timer =
+                    Timer.periodic(const Duration(seconds: 1), (Timer t) {
+                      if (!mounted) {
+                        t.cancel();
+                        return;
+                      }
+                      setDialogState(() => countdown--);
+                      if (countdown <= 0) {
+                        t.cancel();
+                        Navigator.of(dialogContext,
+                            rootNavigator: false)
+                            .pop();
+                        Future.delayed(const Duration(milliseconds: 100), () {
+                          if (mounted) _checkTransactionStatus(transactionRef);
+                        });
                       }
                     });
-                  }
-                });
               }
 
               return AlertDialog(
-                backgroundColor: widget.isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                backgroundColor: widget.isDark
+                    ? const Color(0xFF1E1E1E)
+                    : Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                title: Text(
-                  'Waiting for Confirmation',
-                  style: TextStyle(
-                    color: widget.isDark ? Colors.white : Colors.black87,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                    borderRadius: BorderRadius.circular(16)),
+                title: Text('Waiting for Confirmation',
+                    style: TextStyle(
+                        color: widget.isDark ? Colors.white : Colors.black87,
+                        fontWeight: FontWeight.bold)),
                 content: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -251,45 +416,42 @@ class _DepositsTabState extends State<DepositsTab> {
                       width: 60,
                       height: 60,
                       child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFB8860B)),
-                      ),
+                          strokeWidth: 3,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                              Color(0xFFB8860B))),
                     ),
                     const SizedBox(height: 24),
-                    Text(
-                      message,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: widget.isDark ? Colors.white70 : Colors.black54,
-                        fontSize: 14,
-                      ),
-                    ),
+                    Text(message,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: widget.isDark
+                                ? Colors.white70
+                                : Colors.black54,
+                            fontSize: 14)),
                     const SizedBox(height: 16),
-                    Text(
-                      'Please complete the payment on your phone',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: widget.isDark ? Colors.white70 : Colors.black54,
-                        fontSize: 12,
-                      ),
-                    ),
+                    Text('Please complete the payment on your phone',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: widget.isDark
+                                ? Colors.white70
+                                : Colors.black54,
+                            fontSize: 12)),
                     const SizedBox(height: 24),
                     Container(
                       width: 80,
                       height: 80,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
+                        color: widget.isDark
+                            ? const Color(0xFF8B6914)
+                            : const Color(0xFFB8860B),
                       ),
                       child: Center(
-                        child: Text(
-                          '$countdown',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        child: Text('$countdown',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 32,
+                                fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
@@ -299,52 +461,42 @@ class _DepositsTabState extends State<DepositsTab> {
           ),
         );
       },
-    ).then((_) {
-      timer?.cancel();
-    });
+    ).then((_) => timer?.cancel());
   }
 
   Future<void> _checkTransactionStatus(String transactionRef) async {
-    // Add a small delay before showing the checking dialog
     await Future.delayed(const Duration(milliseconds: 300));
-
     if (!mounted) return;
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: widget.isDark ? const Color(0xFF1E1E1E) : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: 60,
-                height: 60,
-                child: CircularProgressIndicator(
+      builder: (ctx) => AlertDialog(
+        backgroundColor:
+        widget.isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        shape:
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 60,
+              height: 60,
+              child: CircularProgressIndicator(
                   strokeWidth: 3,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Checking transaction status...',
+                  valueColor: AlwaysStoppedAnimation<Color>(widget.isDark
+                      ? const Color(0xFF8B6914)
+                      : const Color(0xFFB8860B))),
+            ),
+            const SizedBox(height: 24),
+            Text('Checking transaction status...',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: widget.isDark ? Colors.white : Colors.black87,
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+                    color: widget.isDark ? Colors.white : Colors.black87,
+                    fontSize: 16)),
+          ],
+        ),
+      ),
     );
 
     try {
@@ -362,24 +514,19 @@ class _DepositsTabState extends State<DepositsTab> {
       );
 
       if (!mounted) return;
-
-      // Close checking dialog
       Navigator.of(context).pop();
-
-      // Add a small delay before showing result dialog
       await Future.delayed(const Duration(milliseconds: 200));
-
       if (!mounted) return;
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-
         if (data['success'] == true && data['status'] == 'SUCCESS') {
-          _showSuccessDialog(data['amount'], transactionRef);
-          // Update balance immediately
+          _showExistingSuccessDialog(data['amount'], transactionRef);
           widget.onBalanceUpdate?.call(data['amount'].toDouble());
-        } else if (data['status'] == 'PAUSED' || data['status'] == 'PENDING') {
-          _showErrorDialog('Transaction is still pending. Please check back later.');
+        } else if (data['status'] == 'PAUSED' ||
+            data['status'] == 'PENDING') {
+          _showErrorDialog(
+              'Transaction is still pending. Please check back later.');
         } else {
           _showErrorDialog(data['message'] ?? 'Transaction failed');
         }
@@ -388,136 +535,113 @@ class _DepositsTabState extends State<DepositsTab> {
       }
     } catch (e) {
       if (!mounted) return;
-      Navigator.of(context).pop(); // Close checking dialog
+      Navigator.of(context).pop();
       await Future.delayed(const Duration(milliseconds: 200));
       if (!mounted) return;
       _showErrorDialog('Network error: ${e.toString()}');
     }
   }
 
-  void _showSuccessDialog(double amount, String transactionRef) {
+  void _showExistingSuccessDialog(double amount, String transactionRef) {
     showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: widget.isDark ? const Color(0xFF1E1E1E) : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Column(
-            children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.green,
-                ),
-                child: const Icon(
-                  Icons.check,
-                  color: Colors.white,
-                  size: 40,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Deposit Successful!',
+      builder: (ctx) => AlertDialog(
+        backgroundColor:
+        widget.isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        shape:
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Column(
+          children: [
+            Container(
+              width: 60,
+              height: 60,
+              decoration: const BoxDecoration(
+                  shape: BoxShape.circle, color: Colors.green),
+              child:
+              const Icon(Icons.check, color: Colors.white, size: 40),
+            ),
+            const SizedBox(height: 16),
+            Text('Deposit Successful!',
                 style: TextStyle(
-                  color: widget.isDark ? Colors.white : Colors.black87,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Amount: BWP ${amount.toStringAsFixed(2)}',
+                    color: widget.isDark ? Colors.white : Colors.black87,
+                    fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Amount: BWP ${amount.toStringAsFixed(2)}',
                 style: TextStyle(
-                  color: widget.isDark ? Colors.white : Colors.black87,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Reference: $transactionRef',
+                    color: widget.isDark ? Colors.white : Colors.black87,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Text('Reference: $transactionRef',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: widget.isDark ? Colors.white70 : Colors.black54,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _amountController.clear();
-                // Don't clear phone controller - it's locked and auto-populated
-                // Refresh balance after successful transaction
-                widget.onTransactionComplete?.call();
-                // Reload recent deposits
-                _loadRecentDeposits();
-              },
-              child: Text(
-                'OK',
-                style: TextStyle(
-                  color: widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
+                    color:
+                    widget.isDark ? Colors.white70 : Colors.black54,
+                    fontSize: 12)),
           ],
-        );
-      },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _amountController.clear();
+              widget.onTransactionComplete?.call();
+              _loadRecentDeposits();
+            },
+            child: Text('OK',
+                style: TextStyle(
+                    color: widget.isDark
+                        ? const Color(0xFF8B6914)
+                        : const Color(0xFFB8860B),
+                    fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
     );
   }
 
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: widget.isDark ? const Color(0xFF1E1E1E) : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Row(
-            children: [
-              const Icon(Icons.error_outline, color: Colors.red),
-              const SizedBox(width: 8),
-              Text(
-                'Error',
+      builder: (ctx) => AlertDialog(
+        backgroundColor:
+        widget.isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        shape:
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red),
+            const SizedBox(width: 8),
+            Text('Error',
                 style: TextStyle(
-                  color: widget.isDark ? Colors.white : Colors.black87,
-                ),
-              ),
-            ],
-          ),
-          content: Text(
-            message,
-            style: TextStyle(
-              color: widget.isDark ? Colors.white70 : Colors.black54,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(
-                'OK',
-                style: TextStyle(
-                  color: widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
-                ),
-              ),
-            ),
+                    color:
+                    widget.isDark ? Colors.white : Colors.black87)),
           ],
-        );
-      },
+        ),
+        content: Text(message,
+            style: TextStyle(
+                color: widget.isDark ? Colors.white70 : Colors.black54)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('OK',
+                style: TextStyle(
+                    color: widget.isDark
+                        ? const Color(0xFF8B6914)
+                        : const Color(0xFFB8860B))),
+          ),
+        ],
+      ),
     );
   }
+
+  // -------------------------------------------------------------------------
+  // Build
+  // -------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -527,100 +651,151 @@ class _DepositsTabState extends State<DepositsTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Select Provider',
-              style: TextStyle(
-                color: widget.isDark ? Colors.white : Colors.black87,
-                fontSize: 16,
-              ),
-            ),
+            Text('Select Provider',
+                style: TextStyle(
+                    color: widget.isDark ? Colors.white : Colors.black87,
+                    fontSize: 16)),
             const SizedBox(height: 8),
             Container(
               decoration: BoxDecoration(
                 border: Border.all(
-                  color: widget.isDark ? Colors.white30 : Colors.black26,
-                ),
+                    color: widget.isDark
+                        ? Colors.white30
+                        : Colors.black26),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: _selectedProvider,
                   isExpanded: true,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  dropdownColor: widget.isDark ? const Color(0xFF2E2E2E) : Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 8),
+                  dropdownColor: widget.isDark
+                      ? const Color(0xFF2E2E2E)
+                      : Colors.white,
                   style: TextStyle(
-                    color: widget.isDark ? Colors.white : Colors.black87,
-                    fontSize: 18,
-                  ),
+                      color:
+                      widget.isDark ? Colors.white : Colors.black87,
+                      fontSize: 18),
                   items: _providers.map((provider) {
                     return DropdownMenuItem<String>(
                       value: provider['code'],
-                      child: Text(provider['name']!),
+                      child: Row(
+                        children: [
+                          Text(provider['name']!),
+                          if (provider['code'] == 'MASCOM') ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF8B6914)
+                                    .withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text('Direct',
+                                  style: TextStyle(
+                                      color: Color(0xFF8B6914),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold)),
+                            ),
+                          ]
+                        ],
+                      ),
                     );
                   }).toList(),
                   onChanged: (String? newValue) {
                     if (newValue != null) {
-                      setState(() {
-                        _selectedProvider = newValue;
-                      });
+                      setState(() => _selectedProvider = newValue);
                     }
                   },
                 ),
               ),
             ),
+
+            // Mascom info banner
+            if (_selectedProvider == 'MASCOM') ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color:
+                  const Color(0xFF8B6914).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color: const Color(0xFF8B6914)
+                          .withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline,
+                        color: Color(0xFF8B6914), size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Mascom deposits are processed directly via the Mascom network.',
+                        style: TextStyle(
+                            color: widget.isDark
+                                ? Colors.white70
+                                : Colors.black54,
+                            fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             const SizedBox(height: 30),
             TextField(
               controller: _phoneController,
               enabled: false,
               keyboardType: TextInputType.phone,
               style: TextStyle(
-                color: widget.isDark ? Colors.white60 : Colors.black54,
-                fontSize: 20,
-              ),
+                  color: widget.isDark ? Colors.white60 : Colors.black54,
+                  fontSize: 20),
               decoration: InputDecoration(
                 labelText: 'Phone Number',
                 labelStyle: TextStyle(
-                  color: widget.isDark ? Colors.white60 : Colors.black54,
-                  fontSize: 14,
-                ),
-                hintStyle: TextStyle(
-                  color: widget.isDark ? Colors.white30 : Colors.black26,
-                ),
+                    color: widget.isDark ? Colors.white60 : Colors.black54,
+                    fontSize: 14),
                 filled: true,
-                fillColor: widget.isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.02),
+                fillColor: widget.isDark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : Colors.black.withValues(alpha: 0.02),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: widget.isDark ? Colors.white30 : Colors.black26,
-                  ),
-                ),
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                        color: widget.isDark
+                            ? Colors.white30
+                            : Colors.black26)),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: widget.isDark ? Colors.white30 : Colors.black26,
-                  ),
-                ),
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                        color: widget.isDark
+                            ? Colors.white30
+                            : Colors.black26)),
                 disabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: widget.isDark ? Colors.white30 : Colors.black26,
-                  ),
-                ),
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                        color: widget.isDark
+                            ? Colors.white30
+                            : Colors.black26)),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: widget.isDark ? Colors.white30 : Colors.black26,
-                    width: 2,
-                  ),
-                ),
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                        color: widget.isDark
+                            ? Colors.white30
+                            : Colors.black26,
+                        width: 2)),
                 contentPadding: const EdgeInsets.all(16),
                 suffixIcon: Padding(
                   padding: const EdgeInsets.all(12.0),
-                  child: Icon(
-                    Icons.lock,
-                    color: widget.isDark ? Colors.white30 : Colors.black26,
-                    size: 20,
-                  ),
+                  child: Icon(Icons.lock,
+                      color: widget.isDark
+                          ? Colors.white30
+                          : Colors.black26,
+                      size: 20),
                 ),
               ),
             ),
@@ -629,78 +804,72 @@ class _DepositsTabState extends State<DepositsTab> {
               controller: _amountController,
               keyboardType: TextInputType.number,
               style: TextStyle(
-                color: widget.isDark ? Colors.white : Colors.black87,
-                fontSize: 20,
-              ),
+                  color: widget.isDark ? Colors.white : Colors.black87,
+                  fontSize: 20),
               decoration: InputDecoration(
                 hintText: 'Enter Amount',
                 hintStyle: TextStyle(
-                  color: widget.isDark ? Colors.white30 : Colors.black26,
-                ),
+                    color:
+                    widget.isDark ? Colors.white30 : Colors.black26),
                 filled: true,
                 fillColor: Colors.transparent,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: widget.isDark ? Colors.white30 : Colors.black26,
-                  ),
-                ),
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                        color: widget.isDark
+                            ? Colors.white30
+                            : Colors.black26)),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: widget.isDark ? Colors.white30 : Colors.black26,
-                  ),
-                ),
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                        color: widget.isDark
+                            ? Colors.white30
+                            : Colors.black26)),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
-                    width: 2,
-                  ),
-                ),
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                        color: widget.isDark
+                            ? const Color(0xFF8B6914)
+                            : const Color(0xFFB8860B),
+                        width: 2)),
                 contentPadding: const EdgeInsets.all(16),
               ),
             ),
             if (_cdsNumber != null) ...[
               const SizedBox(height: 12),
-              Text(
-                'ACC Number: $_cdsNumber',
-                style: TextStyle(
-                  color: widget.isDark ? Colors.white60 : Colors.black45,
-                  fontSize: 12,
-                ),
-              ),
+              Text('ACC Number: $_cdsNumber',
+                  style: TextStyle(
+                      color: widget.isDark ? Colors.white60 : Colors.black45,
+                      fontSize: 12)),
             ],
             const SizedBox(height: 24),
             Row(
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : () {
-                      // Reset form fields
-                      _phoneController.clear();
-                      _amountController.text = '';
-                      _selectedProvider = 'BTC';
-                      // Close the current bottom sheet or dialog
+                    onPressed: _isLoading
+                        ? null
+                        : () {
+                      _amountController.clear();
                       if (Navigator.canPop(context)) {
                         Navigator.pop(context);
                       }
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: widget.isDark ? Colors.black45 : Colors.grey[300],
+                      backgroundColor: widget.isDark
+                          ? Colors.black45
+                          : Colors.grey[300],
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                          borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: Text(
-                      'CLOSE',
-                      style: TextStyle(
-                        color: widget.isDark ? Colors.white : Colors.black87,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: Text('CLOSE',
+                        style: TextStyle(
+                            color: widget.isDark
+                                ? Colors.white
+                                : Colors.black87,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600)),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -708,29 +877,27 @@ class _DepositsTabState extends State<DepositsTab> {
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _initiateDeposit,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
+                      backgroundColor: widget.isDark
+                          ? const Color(0xFF8B6914)
+                          : const Color(0xFFB8860B),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                     child: _isLoading
                         ? const SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white)),
                     )
-                        : const Text(
-                      'DEPOSIT',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                        : const Text('DEPOSIT',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600)),
                   ),
                 ),
               ],
@@ -742,7 +909,9 @@ class _DepositsTabState extends State<DepositsTab> {
                   padding: const EdgeInsets.all(32.0),
                   child: CircularProgressIndicator(
                     valueColor: AlwaysStoppedAnimation<Color>(
-                      widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
+                      widget.isDark
+                          ? const Color(0xFF8B6914)
+                          : const Color(0xFFB8860B),
                     ),
                   ),
                 ),
@@ -753,19 +922,18 @@ class _DepositsTabState extends State<DepositsTab> {
                   padding: const EdgeInsets.all(32.0),
                   child: Column(
                     children: [
-                      Icon(
-                        Icons.receipt_long,
-                        size: 48,
-                        color: widget.isDark ? Colors.white30 : Colors.black26,
-                      ),
+                      Icon(Icons.receipt_long,
+                          size: 48,
+                          color: widget.isDark
+                              ? Colors.white30
+                              : Colors.black26),
                       const SizedBox(height: 12),
-                      Text(
-                        'No recent deposits',
-                        style: TextStyle(
-                          color: widget.isDark ? Colors.white54 : Colors.black38,
-                          fontSize: 14,
-                        ),
-                      ),
+                      Text('No recent deposits',
+                          style: TextStyle(
+                              color: widget.isDark
+                                  ? Colors.white54
+                                  : Colors.black38,
+                              fontSize: 14)),
                     ],
                   ),
                 ),
@@ -786,51 +954,41 @@ class _DepositsTabState extends State<DepositsTab> {
         2: FlexColumnWidth(1.5),
       },
       children: [
-        TableRow(
-          children: [
-            _buildTableHeader('Date'),
-            _buildTableHeader('Description'),
-            _buildTableHeader('Amount'),
-          ],
-        ),
-        for (var deposit in deposits)
-          TableRow(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  _formatDate(deposit['dateCreated']),
+        TableRow(children: [
+          _buildTableHeader('Date'),
+          _buildTableHeader('Description'),
+          _buildTableHeader('Amount'),
+        ]),
+        for (var d in deposits)
+          TableRow(children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(_formatDate(d['dateCreated']),
                   style: TextStyle(
-                    color: widget.isDark ? Colors.white : Colors.black87,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  deposit['description'] ?? 'Deposit',
+                      color:
+                      widget.isDark ? Colors.white : Colors.black87,
+                      fontSize: 14)),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(d['description'] ?? 'Deposit',
                   style: TextStyle(
-                    color: widget.isDark ? Colors.white : Colors.black87,
-                    fontSize: 14,
-                  ),
+                      color:
+                      widget.isDark ? Colors.white : Colors.black87,
+                      fontSize: 14),
                   maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  _formatAmount(deposit['amount']),
+                  overflow: TextOverflow.ellipsis),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(_formatAmount(d['amount']),
                   style: TextStyle(
-                    color: widget.isDark ? Colors.white : Colors.black87,
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.right,
-                ),
-              ),
-            ],
-          ),
+                      color:
+                      widget.isDark ? Colors.white : Colors.black87,
+                      fontSize: 14),
+                  textAlign: TextAlign.right),
+            ),
+          ]),
       ],
     );
   }
@@ -838,14 +996,11 @@ class _DepositsTabState extends State<DepositsTab> {
   Widget _buildTableHeader(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: widget.isDark ? Colors.white : Colors.black87,
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
+      child: Text(text,
+          style: TextStyle(
+              color: widget.isDark ? Colors.white : Colors.black87,
+              fontSize: 15,
+              fontWeight: FontWeight.w600)),
     );
   }
 }
