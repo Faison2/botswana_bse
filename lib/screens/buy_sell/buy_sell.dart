@@ -30,7 +30,7 @@ class _TradingPageState extends State<TradingPage> {
   String? _userName;
   String? _cdsNumber;
   String? _phoneNumber;
-  String? _cdsAccount; // ← CDSAccount from login SharedPreferences
+  String? _cdsAccount;
 
   String? selectedCompany;
   String? selectedTimeInForce = 'Day Order';
@@ -103,7 +103,6 @@ class _TradingPageState extends State<TradingPage> {
 
       setState(() {
         _token = token;
-        // Load CDSAccount saved at login
         _cdsAccount = prefs.getString('CDSAccount') ?? '';
       });
 
@@ -308,13 +307,24 @@ class _TradingPageState extends State<TradingPage> {
     }
   }
 
-  Map<String, dynamic> _mapApiDataToStock(dynamic item) {
-    final rawSymbol = item['Symbol']?.toString() ?? '';
-    final rawName = item['Company']?.toString() ?? 'Unknown';
+  // ─── FIX: Map API data — display Company name, use Code as ticker ─────────
 
-    String ticker = rawSymbol.isNotEmpty ? rawSymbol : rawName;
-    String name = rawName.isNotEmpty ? rawName : rawSymbol;
-    String code = item['Code']?.toString() ?? '';
+  Map<String, dynamic> _mapApiDataToStock(dynamic item) {
+    final rawCode = item['Code']?.toString() ?? '';
+    final rawName = item['Company']?.toString() ?? 'Unknown';
+    final rawSymbol = item['Symbol']?.toString() ?? '';
+
+    // Display name = Company name (full name shown in dropdown)
+    String name = rawName.isNotEmpty ? rawName : rawCode;
+
+    // ticker = Code (used as the identifier for order submission)
+    // Falls back to Symbol if Code is empty, then to name
+    String ticker = rawCode.isNotEmpty
+        ? rawCode
+        : (rawSymbol.isNotEmpty ? rawSymbol : rawName);
+
+    // code = Code field (explicitly stored for order submission)
+    String code = rawCode;
 
     String closingPrice = item['ClosingPrice']?.toString() ?? '0';
     String openingPrice = item['OpeningPrice']?.toString() ?? '0';
@@ -334,8 +344,8 @@ class _TradingPageState extends State<TradingPage> {
     Color color = _getColorForStock(ticker);
 
     return {
-      'name': name,
-      'ticker': ticker,
+      'name': name,       // Full company name — shown in dropdown
+      'ticker': ticker,   // Code value — used as identifier
       'price': price,
       'bestBid': bestBid,
       'bestAsk': bestAsk,
@@ -344,7 +354,7 @@ class _TradingPageState extends State<TradingPage> {
       'icon': icon,
       'color': color,
       'status': status,
-      'code': code,
+      'code': code,       // Explicit Code field — sent in order payload
       'closingPriceValue': double.tryParse(closingPrice) ?? 0.0,
       'openingPriceValue': double.tryParse(openingPrice) ?? 0.0,
       'maxPriceValue': double.tryParse(maxPrice) ?? 0.0,
@@ -472,22 +482,29 @@ class _TradingPageState extends State<TradingPage> {
       final parts = selectedCompany!.split('-');
       final index = int.tryParse(parts.last);
 
-      String companyName = '';
+      // ─── FIX: Send Code field, not ticker/name ─────────────────────────
+      String companyCode = '';
 
       if (index != null && index < _allStocks.length) {
         final stock = _allStocks[index];
+        final code = stock['code']?.toString() ?? '';
         final ticker = stock['ticker']?.toString() ?? '';
         final name = stock['name']?.toString() ?? '';
-        companyName = ticker.isNotEmpty ? ticker : name;
+
+        // Prefer Code → ticker (which is also Code after fix) → name
+        companyCode = code.isNotEmpty
+            ? code
+            : (ticker.isNotEmpty ? ticker : name);
       }
 
-      if (companyName.isEmpty && parts.length >= 2) {
-        companyName = parts[0];
+      // Fallback: parts[1] is the code segment in the uniqueId ('ticker-code-index')
+      if (companyCode.isEmpty && parts.length >= 2) {
+        companyCode = parts[1];
       }
 
-      if (companyName.isEmpty) {
+      if (companyCode.isEmpty) {
         _showError(
-            'Could not determine company symbol. Please re-select the company.');
+            'Could not determine company code. Please re-select the company.');
         setState(() => isLoading = false);
         return;
       }
@@ -499,12 +516,12 @@ class _TradingPageState extends State<TradingPage> {
       final orderData = {
         "OrderType": isBuy ? "BUY" : "SELL",
         "ReferenceNumber": "ORD${now.millisecondsSinceEpoch}",
-        "Company": companyName,
+        "Company": companyCode, // ← Sends Code (e.g. "ABSA"), not full name
         "Quantity": double.tryParse(quantityController.text) ?? 0,
         "BasePrice": double.tryParse(priceController.text) ?? 0,
         "TimeInForce": selectedTimeInForce,
         "BrokerCode": selectedBroker,
-        "CdsAcNo": _cdsAccount ?? '', // ← uses CDSAccount from login
+        "CdsAcNo": _cdsAccount ?? '',
         "Shareholder": "SHR7891011",
         "LiNumber": "LI998877",
         "ClientName": _userName ?? 'N/A',
@@ -1008,6 +1025,8 @@ class _TradingPageState extends State<TradingPage> {
     );
   }
 
+  // ─── FIX: Company dropdown shows full Company name, code shown as hint ────
+
   Widget _buildCompanyDropdown({
     required Color textColor,
     required Color fieldBorderColor,
@@ -1049,10 +1068,14 @@ class _TradingPageState extends State<TradingPage> {
               items: _allStocks.asMap().entries.map((entry) {
                 final index = entry.key;
                 final stock = entry.value;
+
+                // Display: full Company name
                 final companyName = stock['name'] ?? 'Unknown Company';
-                final ticker = stock['ticker'] ?? companyName;
+                // Sub-label: Code (short code shown in brackets)
                 final code = stock['code'] ?? '';
+                final ticker = stock['ticker'] ?? code;
                 final uniqueId = '$ticker-$code-$index';
+
                 final priceValue = stock['closingPriceValue'] ?? 0.0;
                 final priceString = priceValue is double
                     ? priceValue.toStringAsFixed(2)
@@ -1067,14 +1090,20 @@ class _TradingPageState extends State<TradingPage> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(
-                          child: Text(companyName,
-                              style: TextStyle(
-                                  color: textColor,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500),
-                              overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            code.isNotEmpty
+                                ? '$companyName ($code)'
+                                : companyName,
+                            style: TextStyle(
+                                color: textColor,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
                         ),
-                        Text('(BWP $priceString)',
+                        const SizedBox(width: 8),
+                        Text('BWP $priceString',
                             style: TextStyle(
                                 color: accentColor,
                                 fontSize: 12,
