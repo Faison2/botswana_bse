@@ -18,30 +18,15 @@ class _TransactionsTabState extends State<TransactionsTab> {
   bool _isLoading = true;
   String? _errorMessage;
   String? _cdsNumber;
-  int _currentPage = 1;
-  final int _pageSize = 20;
-  bool _hasMore = true;
-  final ScrollController _scrollController = ScrollController();
+  String? _token;
+
+  static const String _apiUrl =
+      'https://zamagm.escrowagm.com/MainAPI/Home/Transactions';
 
   @override
   void initState() {
     super.initState();
     _loadTransactions();
-    _scrollController.addListener(_onScroll);
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.8) {
-      if (!_isLoading && _hasMore) {
-        _loadMoreTransactions();
-      }
-    }
   }
 
   Future<void> _loadTransactions() async {
@@ -53,8 +38,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
     try {
       final prefs = await SharedPreferences.getInstance();
       _cdsNumber = prefs.getString('cdsNumber');
+      _token = prefs.getString('token');
 
-      if (_cdsNumber == null) {
+      if (_cdsNumber == null || _cdsNumber!.isEmpty) {
         setState(() {
           _errorMessage = 'CDS Number not found. Please login again.';
           _isLoading = false;
@@ -63,405 +49,415 @@ class _TransactionsTabState extends State<TransactionsTab> {
       }
 
       final response = await http
-          .get(
-        Uri.parse('http://192.168.3.201:5000/api/Clients/$_cdsNumber/transactions?page=$_currentPage&pageSize=$_pageSize'),
+          .post(
+        Uri.parse(_apiUrl),
         headers: {
+          'Content-Type': 'application/json',
           'accept': 'application/json',
+          if (_token != null) 'Authorization': 'Bearer $_token',
         },
+        body: json.encode({'CDSNumber': _cdsNumber}),
       )
-          .timeout(const Duration(seconds: 15), onTimeout: () {
-        throw TimeoutException('Connection timeout - unable to load transactions');
-      });
+          .timeout(
+        const Duration(seconds: 15),
+        onTimeout: () =>
+        throw TimeoutException('Connection timeout'),
+      );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final data = json.decode(response.body);
 
-        if (data is Map && data.containsKey('data')) {
-          final transactions = List<Map<String, dynamic>>.from(data['data']);
-          setState(() {
-            _transactions = transactions;
-            _hasMore = data['hasNextPage'] ?? false;
-            _isLoading = false;
-          });
-        } else if (data is List) {
-          setState(() {
-            _transactions = List<Map<String, dynamic>>.from(data);
-            _hasMore = data.length >= _pageSize;
-            _isLoading = false;
-          });
-        } else {
-          setState(() {
-            _errorMessage = 'Data Not Available - Unexpected response format';
-            _isLoading = false;
-          });
+        List<Map<String, dynamic>> transactions = [];
+
+        if (data is List) {
+          transactions = List<Map<String, dynamic>>.from(data);
+        } else if (data is Map && data.containsKey('data')) {
+          transactions = List<Map<String, dynamic>>.from(data['data']);
         }
+
+        // Sort by date descending (most recent first)
+        transactions.sort((a, b) {
+          final dateA = _parseDate(a['DateCreated']);
+          final dateB = _parseDate(b['DateCreated']);
+          if (dateA == null && dateB == null) return 0;
+          if (dateA == null) return 1;
+          if (dateB == null) return -1;
+          return dateB.compareTo(dateA);
+        });
+
+        setState(() {
+          _transactions = transactions;
+          _isLoading = false;
+          if (transactions.isEmpty) {
+            _errorMessage = null; // show empty state
+          }
+        });
       } else if (response.statusCode == 404) {
         setState(() {
-          _errorMessage = 'No transactions found';
-          _isLoading = false;
-        });
-      } else if (response.statusCode == 500) {
-        setState(() {
-          _errorMessage = 'Data Not Available - Server error. Please try again later.';
+          _errorMessage = 'No transactions found.';
           _isLoading = false;
         });
       } else {
         setState(() {
-          _errorMessage = 'Data Not Available - Failed to load transactions. Status: ${response.statusCode}';
+          _errorMessage =
+          'Failed to load transactions. Status: ${response.statusCode}';
           _isLoading = false;
         });
       }
-    } on TimeoutException catch (e) {
+    } on TimeoutException {
       setState(() {
-        _errorMessage = 'Data Not Available - Connection timeout. Please check your internet connection.';
+        _errorMessage =
+        'Connection timeout. Please check your internet connection.';
         _isLoading = false;
       });
-      print('Timeout loading transactions: $e');
     } catch (e) {
       setState(() {
-        _errorMessage = 'Data Not Available - Error: ${e.toString()}';
+        _errorMessage = 'Error: ${e.toString()}';
         _isLoading = false;
       });
       print('Error loading transactions: $e');
     }
   }
 
-  Future<void> _loadMoreTransactions() async {
-    if (_isLoading || !_hasMore) return;
+  // ─── Helpers ──────────────────────────────────────────────────────────────
 
-    setState(() {
-      _isLoading = true;
-    });
-
+  /// Parses a date string into a DateTime, returning null on failure.
+  /// Handles both ISO 8601 ("2026-02-28T...") and "M/d/yyyy h:mm:ss a" formats.
+  DateTime? _parseDate(String? dateString) {
+    if (dateString == null || dateString.isEmpty) return null;
+    // Try ISO 8601 first
+    final iso = DateTime.tryParse(dateString);
+    if (iso != null) return iso;
+    // Try "2/28/2026 4:03:20 PM"
     try {
-      final nextPage = _currentPage + 1;
-      final response = await http
-          .get(
-        Uri.parse('http://192.168.3.201:5000/api/Clients/$_cdsNumber/transactions?page=$nextPage&pageSize=$_pageSize'),
-        headers: {
-          'accept': 'application/json',
-        },
-      )
-          .timeout(const Duration(seconds: 15), onTimeout: () {
-        throw TimeoutException('Connection timeout - unable to load more transactions');
-      });
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        List<Map<String, dynamic>> newTransactions = [];
-        bool hasNext = false;
-
-        if (data is Map && data.containsKey('data')) {
-          newTransactions = List<Map<String, dynamic>>.from(data['data']);
-          hasNext = data['hasNextPage'] ?? false;
-        } else if (data is List) {
-          newTransactions = List<Map<String, dynamic>>.from(data);
-          hasNext = newTransactions.length >= _pageSize;
+      final parts = dateString.split(' ');
+      final dateParts = parts[0].split('/');
+      if (dateParts.length == 3) {
+        final month = int.parse(dateParts[0]);
+        final day = int.parse(dateParts[1]);
+        final year = int.parse(dateParts[2]);
+        int hour = 0, minute = 0, second = 0;
+        if (parts.length >= 2) {
+          final timeParts = parts[1].split(':');
+          hour = int.parse(timeParts[0]);
+          minute = int.parse(timeParts[1]);
+          second = timeParts.length > 2 ? int.parse(timeParts[2]) : 0;
+          if (parts.length >= 3 && parts[2].toUpperCase() == 'PM' && hour != 12) {
+            hour += 12;
+          } else if (parts.length >= 3 && parts[2].toUpperCase() == 'AM' && hour == 12) {
+            hour = 0;
+          }
         }
-
-        setState(() {
-          _transactions.addAll(newTransactions);
-          _currentPage = nextPage;
-          _hasMore = hasNext;
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _hasMore = false;
-          _isLoading = false;
-        });
+        return DateTime(year, month, day, hour, minute, second);
       }
-    } on TimeoutException catch (e) {
-      print('Timeout loading more transactions: $e');
-      setState(() {
-        _hasMore = false;
-        _isLoading = false;
-      });
-    } catch (e) {
-      print('Error loading more transactions: $e');
-      setState(() {
-        _isLoading = false;
-      });
-    }
+    } catch (_) {}
+    return null;
   }
 
   String _formatDate(String? dateString) {
-    if (dateString == null) return 'N/A';
-    try {
-      final date = DateTime.parse(dateString);
-      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
-    } catch (e) {
-      return dateString;
+    if (dateString == null || dateString.isEmpty) return 'N/A';
+    final date = _parseDate(dateString);
+    if (date != null) {
+      return '${date.day.toString().padLeft(2, '0')}/'
+          '${date.month.toString().padLeft(2, '0')}/'
+          '${date.year}';
     }
+    return dateString;
   }
 
   String _formatAmount(dynamic amount) {
     if (amount == null) return 'BWP 0.00';
     try {
-      final numAmount = amount is String ? double.parse(amount) : amount.toDouble();
-      return 'BWP ${numAmount.toStringAsFixed(2)}';
-    } catch (e) {
-      return 'BWP ${amount.toString()}';
+      double value;
+      if (amount is String) {
+        value = double.parse(amount);
+      } else if (amount is int) {
+        value = amount.toDouble();
+      } else if (amount is double) {
+        value = amount;
+      } else {
+        value = double.parse(amount.toString());
+      }
+      return 'BWP ${value.toStringAsFixed(2)}';
+    } catch (_) {
+      return 'BWP $amount';
     }
   }
 
-  String _getTransactionType(Map<String, dynamic> transaction) {
-    // Use transType field from API
-    if (transaction.containsKey('transType')) {
-      final transType = transaction['transType'].toString();
-      // Simplify the display
-      if (transType.toLowerCase().contains('deposit')) {
-        return 'Deposit';
-      } else if (transType.toLowerCase().contains('withdrawal')) {
-        return 'Withdrawal';
+  /// Determine credit/debit from Amount sign and Description
+  bool _isCredit(Map<String, dynamic> tx) {
+    final raw = tx['Amount'];
+    if (raw != null) {
+      double? n;
+      if (raw is String) {
+        n = double.tryParse(raw);
+      } else if (raw is int) {
+        n = raw.toDouble();
+      } else if (raw is double) {
+        n = raw;
+      } else {
+        n = double.tryParse(raw.toString());
       }
-      return transType;
+      if (n != null) return n >= 0;
     }
-    if (transaction.containsKey('type')) {
-      return transaction['type'].toString();
-    }
-    if (transaction.containsKey('transactionType')) {
-      return transaction['transactionType'].toString();
-    }
-    // Check if amount is positive or negative
-    final amount = transaction['amount'];
-    if (amount != null) {
-      final numAmount = amount is String ? double.tryParse(amount) : amount;
-      if (numAmount != null && numAmount < 0) {
-        return 'Withdrawal';
-      }
-    }
-    return 'Deposit';
+    final desc = (tx['Description'] ?? '').toString().toLowerCase();
+    return desc.contains('deposit') || desc.contains('credit');
   }
 
-  Color _getTypeColor(String type) {
-    if (type.toLowerCase().contains('withdrawal') || type.toLowerCase().contains('debit')) {
-      return Colors.red;
-    }
-    return Colors.green;
+  String _typeLabel(Map<String, dynamic> tx) {
+    final desc = (tx['Description'] ?? '').toString().toLowerCase();
+    if (desc.contains('deposit')) return 'Deposit';
+    if (desc.contains('withdrawal')) return 'Withdrawal';
+    if (desc.contains('buy')) return 'Buy';
+    if (desc.contains('sell')) return 'Sell';
+    return _isCredit(tx) ? 'Credit' : 'Debit';
   }
+
+  Color _typeColor(Map<String, dynamic> tx) {
+    if (_isCredit(tx)) return Colors.green;
+    return Colors.red;
+  }
+
+  // ─── Build ────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: () async {
-        _currentPage = 1;
-        await _loadTransactions();
-      },
-      color: widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
-      child: _isLoading && _transactions.isEmpty
-          ? Center(
+    final accentColor = widget.isDark
+        ? const Color(0xFF8B6914)
+        : const Color(0xFFB8860B);
+    final textColor =
+    widget.isDark ? Colors.white : Colors.black87;
+    final subColor =
+    widget.isDark ? Colors.white70 : Colors.black54;
+
+    if (_isLoading) {
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(
-                widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
-              ),
+              valueColor: AlwaysStoppedAnimation<Color>(accentColor),
             ),
             const SizedBox(height: 16),
-            Text(
-              'Loading transactions...',
-              style: TextStyle(
-                color: widget.isDark ? Colors.white70 : Colors.black54,
-              ),
-            ),
+            Text('Loading transactions...',
+                style: TextStyle(color: subColor)),
           ],
         ),
-      )
-          : _errorMessage != null
-          ? Center(
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: widget.isDark ? Colors.white30 : Colors.black26,
-            ),
+            Icon(Icons.error_outline,
+                size: 64,
+                color: widget.isDark ? Colors.white30 : Colors.black26),
             const SizedBox(height: 16),
-            Text(
-              _errorMessage!,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: widget.isDark ? Colors.white70 : Colors.black54,
-                fontSize: 16,
-              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(_errorMessage!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: subColor, fontSize: 15)),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _loadTransactions,
               style: ElevatedButton.styleFrom(
-                backgroundColor: widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                backgroundColor: accentColor,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 32, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
               ),
-              child: const Text(
-                'Retry',
-                style: TextStyle(color: Colors.white),
-              ),
+              child: const Text('Retry',
+                  style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
-      )
-          : _transactions.isEmpty
-          ? Center(
+      );
+    }
+
+    if (_transactions.isEmpty) {
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.receipt_long,
-              size: 64,
-              color: widget.isDark ? Colors.white30 : Colors.black26,
-            ),
+            Icon(Icons.receipt_long,
+                size: 64,
+                color: widget.isDark ? Colors.white30 : Colors.black26),
             const SizedBox(height: 16),
-            Text(
-              'No transactions yet',
-              style: TextStyle(
-                color: widget.isDark ? Colors.white70 : Colors.black54,
-                fontSize: 16,
-              ),
-            ),
+            Text('No transactions yet',
+                style: TextStyle(color: subColor, fontSize: 16)),
           ],
         ),
-      )
-          : ListView(
-        controller: _scrollController,
-        padding: const EdgeInsets.all(16.0),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadTransactions,
+      color: accentColor,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
         children: [
-          const SizedBox(height: 16),
-          Table(
-            columnWidths: const {
-              0: FlexColumnWidth(1.2),
-              1: FlexColumnWidth(2),
-              2: FlexColumnWidth(1),
-              3: FlexColumnWidth(1.5),
-            },
-            children: [
-              TableRow(
-                children: [
-                  _buildTableHeader('Date'),
-                  _buildTableHeader('Description'),
-                  _buildTableHeader('Type'),
-                  _buildTableHeader('Amount'),
-                ],
-              ),
-              ..._transactions.map((transaction) {
-                final type = _getTransactionType(transaction);
-                return _buildTableRow(
-                  _formatDate(transaction['date'] ?? transaction['transactionDate'] ?? transaction['createdAt']),
-                  transaction['description'] ?? transaction['narration'] ?? 'Transaction',
-                  type,
-                  _formatAmount(transaction['amount']),
-                  _getTypeColor(type),
-                );
-              }).toList(),
-            ],
+          // ── Header row ──────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              children: [
+                _headerCell('Date', flex: 2),
+                _headerCell('Description', flex: 3),
+                _headerCell('Type', flex: 2),
+                _headerCell('Amount', flex: 2, align: TextAlign.right),
+              ],
+            ),
           ),
-          if (_isLoading && _transactions.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B),
-                    ),
+
+          Divider(
+              color: widget.isDark
+                  ? Colors.white12
+                  : Colors.black12),
+
+          // ── Transaction rows ─────────────────────────────────────────
+          ..._transactions.map((tx) {
+            final color = _typeColor(tx);
+            final label = _typeLabel(tx);
+            final amount = tx['Amount'];
+            final isNegative = () {
+              try {
+                double n;
+                if (amount is String) {
+                  n = double.parse(amount);
+                } else if (amount is int) {
+                  n = amount.toDouble();
+                } else if (amount is double) {
+                  n = amount;
+                } else {
+                  n = double.parse(amount.toString());
+                }
+                return n < 0;
+              } catch (_) {
+                return false;
+              }
+            }();
+
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Date
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          _formatDate(tx['DateCreated']),
+                          style:
+                          TextStyle(color: textColor, fontSize: 12),
+                        ),
+                      ),
+                      // Description + Reference
+                      Expanded(
+                        flex: 3,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              tx['Description'] ?? '-',
+                              style: TextStyle(
+                                  color: textColor,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (tx['Reference'] != null &&
+                                tx['Reference'].toString().isNotEmpty)
+                              Text(
+                                tx['Reference'],
+                                style: TextStyle(
+                                    color: subColor, fontSize: 10),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
+                        ),
+                      ),
+                      // Type badge
+                      Expanded(
+                        flex: 2,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                  color: color,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Amount
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          _formatAmount(amount),
+                          style: TextStyle(
+                            color: isNegative ? Colors.red : Colors.green,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
+                Divider(
+                    height: 1,
+                    color: widget.isDark
+                        ? Colors.white10
+                        : Colors.black38),
+              ],
+            );
+          }).toList(),
+
+          const SizedBox(height: 24),
+          Center(
+            child: Text(
+              '${_transactions.length} transaction${_transactions.length == 1 ? '' : 's'}',
+              style: TextStyle(color: subColor, fontSize: 12),
             ),
-          if (!_hasMore && _transactions.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Center(
-                child: Text(
-                  'No more transactions',
-                  style: TextStyle(
-                    color: widget.isDark ? Colors.white54 : Colors.black38,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ),
+          ),
+          const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  Widget _buildTableHeader(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+  Widget _headerCell(String text,
+      {int flex = 1, TextAlign align = TextAlign.left}) {
+    return Expanded(
+      flex: flex,
       child: Text(
         text,
+        textAlign: align,
         style: TextStyle(
           color: widget.isDark ? Colors.white : Colors.black87,
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
         ),
       ),
-    );
-  }
-
-  TableRow _buildTableRow(String date, String description, String type, String amount, Color typeColor) {
-    return TableRow(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Text(
-            date,
-            style: TextStyle(
-              color: widget.isDark ? Colors.white : Colors.black87,
-              fontSize: 14,
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Text(
-            description,
-            style: TextStyle(
-              color: widget.isDark ? Colors.white : Colors.black87,
-              fontSize: 14,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: typeColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              type,
-              style: TextStyle(
-                color: typeColor,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Text(
-            amount,
-            style: TextStyle(
-              color: widget.isDark ? Colors.white : Colors.black87,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.right,
-          ),
-        ),
-      ],
     );
   }
 }
