@@ -32,6 +32,11 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
   List<Map<String, dynamic>> _recentWithdrawals = [];
   bool _isLoadingWithdrawals = true;
 
+  // Broker state
+  List<Map<String, dynamic>> _brokers = [];
+  String? _selectedBrokerCode;
+  bool _isLoadingBrokers = false;
+
   final List<Map<String, String>> _providers = [
     {'name': 'Botswana Telecommunications', 'code': 'BTC'},
     {'name': 'Orange Botswana', 'code': 'ORANGE'},
@@ -43,6 +48,7 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
     super.initState();
     _loadCdsNumber();
     _loadRecentWithdrawals();
+    _loadBrokers();
   }
 
   Future<void> _loadCdsNumber() async {
@@ -52,6 +58,31 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
       _cdsNumber = prefs.getString('cdsNumber') ?? 'CSDsd723';
       _phoneController.text = phoneNumber ?? '';
     });
+  }
+
+  Future<void> _loadBrokers() async {
+    setState(() => _isLoadingBrokers = true);
+    try {
+      final response = await http
+          .get(
+        Uri.parse('https://zamagm.escrowagm.com/MainAPI/Home/getAllBrokers'),
+        headers: {'accept': 'application/json'},
+      )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = List<Map<String, dynamic>>.from(jsonDecode(response.body));
+        setState(() {
+          _brokers = data;
+          if (data.isNotEmpty) {
+            _selectedBrokerCode = data.first['broker_code'] as String;
+          }
+        });
+      }
+    } catch (e) {
+      print('Error loading brokers: $e');
+    }
+    setState(() => _isLoadingBrokers = false);
   }
 
   Future<void> _loadRecentWithdrawals() async {
@@ -134,6 +165,10 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
       _showErrorDialog('CDS Number not found. Please login again.');
       return;
     }
+    if (_selectedBrokerCode == null) {
+      _showErrorDialog('Please select a broker');
+      return;
+    }
 
     final double? amount = double.tryParse(_amountController.text);
     if (amount == null || amount <= 0) {
@@ -159,6 +194,7 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
       cdsNumber: _cdsNumber!,
       mobileNumber: _phoneController.text.trim(),
       amount: amount,
+      brokerCode: _selectedBrokerCode!,
     );
 
     if (!mounted) return;
@@ -197,6 +233,7 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
           'cdsNumber': _cdsNumber,
           'amount': amount,
           'subscriberMsisdn': _phoneController.text,
+          'brokerCode': _selectedBrokerCode,
         }),
       );
 
@@ -226,7 +263,7 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
   }
 
   // -------------------------------------------------------------------------
-  // Mascom result dialog (shared for deposit & withdrawal)
+  // Mascom result dialog
   // -------------------------------------------------------------------------
 
   void _showMascomSuccessDialog({
@@ -268,7 +305,6 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Provider badge
             Center(
               child: Container(
                 padding:
@@ -291,7 +327,6 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
               ),
             ),
             const SizedBox(height: 16),
-            // Message box
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -533,6 +568,8 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+
+            // ── Provider dropdown ──────────────────────────────────────────
             Text('Select Provider',
                 style: TextStyle(
                     color: widget.isDark ? Colors.white : Colors.black87,
@@ -625,6 +662,78 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
               ),
             ],
 
+            // ── Broker dropdown ────────────────────────────────────────────
+            const SizedBox(height: 20),
+            Text('Select Broker',
+                style: TextStyle(
+                    color: widget.isDark ? Colors.white : Colors.black87,
+                    fontSize: 16)),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                    color: widget.isDark ? Colors.white30 : Colors.black26),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: _isLoadingBrokers
+                  ? Padding(
+                padding: const EdgeInsets.all(16),
+                child: Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        widget.isDark
+                            ? const Color(0xFF8B6914)
+                            : const Color(0xFFB8860B),
+                      ),
+                    ),
+                  ),
+                ),
+              )
+                  : DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedBrokerCode,
+                  isExpanded: true,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 8),
+                  dropdownColor: widget.isDark
+                      ? const Color(0xFF2E2E2E)
+                      : Colors.white,
+                  style: TextStyle(
+                      color: widget.isDark
+                          ? Colors.white
+                          : Colors.black87,
+                      fontSize: 16),
+                  hint: Text(
+                    _brokers.isEmpty
+                        ? 'No brokers available'
+                        : 'Select a broker',
+                    style: TextStyle(
+                        color: widget.isDark
+                            ? Colors.white54
+                            : Colors.black45),
+                  ),
+                  items: _brokers.map((broker) {
+                    return DropdownMenuItem<String>(
+                      value: broker['broker_code'] as String,
+                      child: Text(broker['fnam'] as String),
+                    );
+                  }).toList(),
+                  onChanged: _brokers.isEmpty
+                      ? null
+                      : (String? value) {
+                    if (value != null) {
+                      setState(() => _selectedBrokerCode = value);
+                    }
+                  },
+                ),
+              ),
+            ),
+
+            // ── Phone field ────────────────────────────────────────────────
             const SizedBox(height: 30),
             TextField(
               controller: _phoneController,
@@ -678,6 +787,8 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
                 ),
               ),
             ),
+
+            // ── Amount field ───────────────────────────────────────────────
             const SizedBox(height: 30),
             TextField(
               controller: _amountController,
@@ -722,6 +833,8 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
                       widget.isDark ? Colors.white60 : Colors.black45,
                       fontSize: 12)),
             ],
+
+            // ── Action buttons ─────────────────────────────────────────────
             const SizedBox(height: 24),
             Row(
               children: [
@@ -782,6 +895,8 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
                 ),
               ],
             ),
+
+            // ── Recent withdrawals table ───────────────────────────────────
             const SizedBox(height: 32),
             if (_isLoadingWithdrawals)
               Center(

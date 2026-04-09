@@ -2,7 +2,6 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Result returned from any Mascom transaction call.
 class MascomResult {
   final bool success;
   final String message;
@@ -19,19 +18,9 @@ class MascomResult {
 
 class MascomService {
   static const String _baseUrl = 'https://zamagm.escrowagm.com/MainAPI/home/MascomTransactions';
-
-  /// Key used to persist the last-used ReferenceID counter in SharedPreferences.
   static const String _refIdKey = 'mascom_last_reference_id';
-
-  /// Starting counter — first generated ID will be 00030.
   static const int _startingCounter = 29;
 
-  // -------------------------------------------------------------------------
-  // ReferenceID helpers
-  // -------------------------------------------------------------------------
-
-  /// Returns the next ReferenceID string (zero-padded to 5 digits) and
-  /// persists the new counter so it survives app restarts.
   static Future<String> _nextReferenceId() async {
     final prefs = await SharedPreferences.getInstance();
     final current = prefs.getInt(_refIdKey) ?? _startingCounter;
@@ -41,25 +30,17 @@ class MascomService {
     return next.toString().padLeft(5, '0');
   }
 
-  /// Peek at the current counter without incrementing (useful for debugging).
   static Future<int> currentCounter() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getInt(_refIdKey) ?? _startingCounter;
   }
 
-  // -------------------------------------------------------------------------
-  // Core request
-  // -------------------------------------------------------------------------
-
-  /// Sends a transaction to the Mascom endpoint.
-  ///
-  /// [transactionType] must be either `'COLLECTION'` (deposit) or
-  /// `'DISBURSEMENT'` (withdrawal).
   static Future<MascomResult> _sendTransaction({
     required String cdsNumber,
     required String mobileNumber,
     required double amount,
     required String transactionType,
+    required String brokerCode, // ← added
   }) async {
     final referenceId = await _nextReferenceId();
 
@@ -72,11 +53,12 @@ class MascomService {
           'accept': 'application/json',
         },
         body: jsonEncode({
-          'Amount': amount.toStringAsFixed(0), // API expects string
+          'Amount': amount.toStringAsFixed(0),
           'ReferenceID': referenceId,
           'CDSNumber': cdsNumber,
           'TransactionType': transactionType,
           'MobileNumber': mobileNumber,
+          'BrokerCode': brokerCode,
         }),
       )
           .timeout(const Duration(seconds: 30));
@@ -98,7 +80,6 @@ class MascomService {
         final int code = first['responseCode'] ?? -1;
         final String message = first['responseMessage'] ?? 'Unknown response';
 
-        // responseCode 0 = success (adjust if Mascom uses a different code)
         final bool success = code == 0;
 
         return MascomResult(
@@ -125,35 +106,33 @@ class MascomService {
     }
   }
 
-  // -------------------------------------------------------------------------
-  // Public API
-  // -------------------------------------------------------------------------
-
-  /// Initiates a **deposit** (COLLECTION) via Mascom.
   static Future<MascomResult> deposit({
     required String cdsNumber,
     required String mobileNumber,
     required double amount,
+    required String brokerCode, // ← added
   }) {
     return _sendTransaction(
       cdsNumber: cdsNumber,
       mobileNumber: mobileNumber,
       amount: amount,
       transactionType: 'COLLECTION',
+      brokerCode: brokerCode, // ← passed through
     );
   }
 
-  /// Initiates a **withdrawal** (DISBURSEMENT) via Mascom.
   static Future<MascomResult> withdraw({
     required String cdsNumber,
     required String mobileNumber,
     required double amount,
+    required String brokerCode, // ← added
   }) {
     return _sendTransaction(
       cdsNumber: cdsNumber,
       mobileNumber: mobileNumber,
       amount: amount,
       transactionType: 'DISBURSEMENT',
+      brokerCode: brokerCode, // ← passed through
     );
   }
 }

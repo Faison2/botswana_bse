@@ -20,13 +20,46 @@ class _TransactionsTabState extends State<TransactionsTab> {
   String? _cdsNumber;
   String? _token;
 
+  // Broker state
+  List<Map<String, dynamic>> _brokers = [];
+  String? _selectedBrokerCode;
+  bool _isLoadingBrokers = true;
+
   static const String _apiUrl =
       'https://zamagm.escrowagm.com/MainAPI/Home/Transactions';
 
   @override
   void initState() {
     super.initState();
-    _loadTransactions();
+    _loadBrokersThenTransactions();
+  }
+
+  // Load brokers first, then auto-load transactions for the first broker
+  Future<void> _loadBrokersThenTransactions() async {
+    setState(() => _isLoadingBrokers = true);
+    try {
+      final response = await http
+          .get(
+        Uri.parse('https://zamagm.escrowagm.com/MainAPI/Home/getAllBrokers'),
+        headers: {'accept': 'application/json'},
+      )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = List<Map<String, dynamic>>.from(jsonDecode(response.body));
+        setState(() {
+          _brokers = data;
+          if (data.isNotEmpty) {
+            _selectedBrokerCode = data.first['broker_code'] as String;
+          }
+        });
+      }
+    } catch (e) {
+      print('Error loading brokers: $e');
+    }
+    setState(() => _isLoadingBrokers = false);
+    // Load transactions once we have a broker selected
+    await _loadTransactions();
   }
 
   Future<void> _loadTransactions() async {
@@ -56,12 +89,14 @@ class _TransactionsTabState extends State<TransactionsTab> {
           'accept': 'application/json',
           if (_token != null) 'Authorization': 'Bearer $_token',
         },
-        body: json.encode({'CDSNumber': _cdsNumber}),
+        body: json.encode({
+          'CDSNumber': _cdsNumber,
+          if (_selectedBrokerCode != null) 'BrokerCode': _selectedBrokerCode,
+        }),
       )
           .timeout(
         const Duration(seconds: 15),
-        onTimeout: () =>
-        throw TimeoutException('Connection timeout'),
+        onTimeout: () => throw TimeoutException('Connection timeout'),
       );
 
       if (response.statusCode == 200) {
@@ -88,9 +123,6 @@ class _TransactionsTabState extends State<TransactionsTab> {
         setState(() {
           _transactions = transactions;
           _isLoading = false;
-          if (transactions.isEmpty) {
-            _errorMessage = null; // show empty state
-          }
         });
       } else if (response.statusCode == 404) {
         setState(() {
@@ -121,14 +153,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
-  /// Parses a date string into a DateTime, returning null on failure.
-  /// Handles both ISO 8601 ("2026-02-28T...") and "M/d/yyyy h:mm:ss a" formats.
   DateTime? _parseDate(String? dateString) {
     if (dateString == null || dateString.isEmpty) return null;
-    // Try ISO 8601 first
     final iso = DateTime.tryParse(dateString);
     if (iso != null) return iso;
-    // Try "2/28/2026 4:03:20 PM"
     try {
       final parts = dateString.split(' ');
       final dateParts = parts[0].split('/');
@@ -184,7 +212,6 @@ class _TransactionsTabState extends State<TransactionsTab> {
     }
   }
 
-  /// Determine credit/debit from Amount sign and Description
   bool _isCredit(Map<String, dynamic> tx) {
     final raw = tx['Amount'];
     if (raw != null) {
@@ -222,14 +249,117 @@ class _TransactionsTabState extends State<TransactionsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final accentColor = widget.isDark
-        ? const Color(0xFF8B6914)
-        : const Color(0xFFB8860B);
-    final textColor =
-    widget.isDark ? Colors.white : Colors.black87;
-    final subColor =
-    widget.isDark ? Colors.white70 : Colors.black54;
+    final accentColor =
+    widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFB8860B);
+    final textColor = widget.isDark ? Colors.white : Colors.black87;
+    final subColor = widget.isDark ? Colors.white70 : Colors.black54;
 
+    return Column(
+      children: [
+        // ── Broker selector bar ──────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          color: widget.isDark
+              ? const Color(0xFF1A1A1A)
+              : const Color(0xFFF5F5F5),
+          child: Row(
+            children: [
+              Text('Broker:',
+                  style: TextStyle(
+                      color: subColor,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _isLoadingBrokers
+                    ? SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: Center(
+                    child: SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor:
+                        AlwaysStoppedAnimation<Color>(accentColor),
+                      ),
+                    ),
+                  ),
+                )
+                    : Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                        color: widget.isDark
+                            ? Colors.white24
+                            : Colors.black26),
+                    borderRadius: BorderRadius.circular(8),
+                    color: widget.isDark
+                        ? const Color(0xFF2E2E2E)
+                        : Colors.white,
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedBrokerCode,
+                      isExpanded: true,
+                      isDense: true,
+                      dropdownColor: widget.isDark
+                          ? const Color(0xFF2E2E2E)
+                          : Colors.white,
+                      style: TextStyle(
+                          color: textColor,
+                          fontSize: 14),
+                      hint: Text('Select broker',
+                          style: TextStyle(
+                              color: subColor, fontSize: 14)),
+                      items: _brokers.map((broker) {
+                        return DropdownMenuItem<String>(
+                          value: broker['broker_code'] as String,
+                          child: Text(broker['fnam'] as String),
+                        );
+                      }).toList(),
+                      onChanged: _brokers.isEmpty
+                          ? null
+                          : (String? value) {
+                        if (value != null &&
+                            value != _selectedBrokerCode) {
+                          setState(
+                                  () => _selectedBrokerCode = value);
+                          _loadTransactions();
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Refresh button
+              IconButton(
+                onPressed:
+                _isLoading ? null : _loadTransactions,
+                icon: Icon(Icons.refresh, color: accentColor, size: 22),
+                tooltip: 'Refresh',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                    minWidth: 36, minHeight: 36),
+              ),
+            ],
+          ),
+        ),
+
+        // ── Content ──────────────────────────────────────────────────────
+        Expanded(
+          child: _buildContent(
+              accentColor, textColor, subColor),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContent(
+      Color accentColor, Color textColor, Color subColor) {
     if (_isLoading) {
       return Center(
         child: Column(
@@ -253,7 +383,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
           children: [
             Icon(Icons.error_outline,
                 size: 64,
-                color: widget.isDark ? Colors.white30 : Colors.black26),
+                color: widget.isDark
+                    ? Colors.white30
+                    : Colors.black26),
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -286,7 +418,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
           children: [
             Icon(Icons.receipt_long,
                 size: 64,
-                color: widget.isDark ? Colors.white30 : Colors.black26),
+                color: widget.isDark
+                    ? Colors.white30
+                    : Colors.black26),
             const SizedBox(height: 16),
             Text('No transactions yet',
                 style: TextStyle(color: subColor, fontSize: 16)),
@@ -301,7 +435,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // ── Header row ──────────────────────────────────────────────
+          // ── Header row ────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: Row(
@@ -309,17 +443,17 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 _headerCell('Date', flex: 2),
                 _headerCell('Description', flex: 3),
                 _headerCell('Type', flex: 2),
-                _headerCell('Amount', flex: 2, align: TextAlign.right),
+                _headerCell('Amount',
+                    flex: 2, align: TextAlign.right),
               ],
             ),
           ),
-
           Divider(
               color: widget.isDark
                   ? Colors.white12
                   : Colors.black12),
 
-          // ── Transaction rows ─────────────────────────────────────────
+          // ── Transaction rows ──────────────────────────────────────
           ..._transactions.map((tx) {
             final color = _typeColor(tx);
             final label = _typeLabel(tx);
@@ -349,20 +483,19 @@ class _TransactionsTabState extends State<TransactionsTab> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Date
                       Expanded(
                         flex: 2,
                         child: Text(
                           _formatDate(tx['DateCreated']),
-                          style:
-                          TextStyle(color: textColor, fontSize: 12),
+                          style: TextStyle(
+                              color: textColor, fontSize: 12),
                         ),
                       ),
-                      // Description + Reference
                       Expanded(
                         flex: 3,
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment:
+                          CrossAxisAlignment.start,
                           children: [
                             Text(
                               tx['Description'] ?? '-',
@@ -374,18 +507,20 @@ class _TransactionsTabState extends State<TransactionsTab> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             if (tx['Reference'] != null &&
-                                tx['Reference'].toString().isNotEmpty)
+                                tx['Reference']
+                                    .toString()
+                                    .isNotEmpty)
                               Text(
                                 tx['Reference'],
                                 style: TextStyle(
-                                    color: subColor, fontSize: 10),
+                                    color: subColor,
+                                    fontSize: 10),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                           ],
                         ),
                       ),
-                      // Type badge
                       Expanded(
                         flex: 2,
                         child: Center(
@@ -394,7 +529,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
                                 horizontal: 6, vertical: 3),
                             decoration: BoxDecoration(
                               color: color.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(4),
+                              borderRadius:
+                              BorderRadius.circular(4),
                             ),
                             child: Text(
                               label,
@@ -407,13 +543,14 @@ class _TransactionsTabState extends State<TransactionsTab> {
                           ),
                         ),
                       ),
-                      // Amount
                       Expanded(
                         flex: 2,
                         child: Text(
                           _formatAmount(amount),
                           style: TextStyle(
-                            color: isNegative ? Colors.red : Colors.green,
+                            color: isNegative
+                                ? Colors.red
+                                : Colors.green,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),

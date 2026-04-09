@@ -33,6 +33,11 @@ class _DepositsTabState extends State<DepositsTab> {
   List<Map<String, dynamic>> _recentDeposits = [];
   bool _isLoadingDeposits = true;
 
+  // Broker state
+  List<Map<String, dynamic>> _brokers = [];
+  String? _selectedBrokerCode;
+  bool _isLoadingBrokers = false;
+
   final List<Map<String, String>> _providers = [
     {'name': 'Botswana Telecommunications', 'code': 'BTC'},
     {'name': 'Orange Botswana', 'code': 'ORANGE'},
@@ -44,6 +49,7 @@ class _DepositsTabState extends State<DepositsTab> {
     super.initState();
     _loadCdsNumber();
     _loadRecentDeposits();
+    _loadBrokers();
   }
 
   Future<void> _loadCdsNumber() async {
@@ -53,6 +59,31 @@ class _DepositsTabState extends State<DepositsTab> {
       _cdsNumber = prefs.getString('cdsNumber') ?? 'CSDsd723';
       _phoneController.text = phoneNumber ?? '';
     });
+  }
+
+  Future<void> _loadBrokers() async {
+    setState(() => _isLoadingBrokers = true);
+    try {
+      final response = await http
+          .get(
+        Uri.parse('https://zamagm.escrowagm.com/MainAPI/Home/getAllBrokers'),
+        headers: {'accept': 'application/json'},
+      )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = List<Map<String, dynamic>>.from(jsonDecode(response.body));
+        setState(() {
+          _brokers = data;
+          if (data.isNotEmpty) {
+            _selectedBrokerCode = data.first['broker_code'] as String;
+          }
+        });
+      }
+    } catch (e) {
+      print('Error loading brokers: $e');
+    }
+    setState(() => _isLoadingBrokers = false);
   }
 
   Future<void> _loadRecentDeposits() async {
@@ -124,10 +155,6 @@ class _DepositsTabState extends State<DepositsTab> {
     super.dispose();
   }
 
-  // -------------------------------------------------------------------------
-  // Deposit entry point — routes to Mascom or existing API
-  // -------------------------------------------------------------------------
-
   Future<void> _initiateDeposit() async {
     if (_amountController.text.isEmpty || _phoneController.text.isEmpty) {
       _showErrorDialog('Please fill in all fields');
@@ -135,6 +162,10 @@ class _DepositsTabState extends State<DepositsTab> {
     }
     if (_cdsNumber == null) {
       _showErrorDialog('CDS Number not found. Please login again.');
+      return;
+    }
+    if (_selectedBrokerCode == null) {
+      _showErrorDialog('Please select a broker');
       return;
     }
 
@@ -162,6 +193,7 @@ class _DepositsTabState extends State<DepositsTab> {
       cdsNumber: _cdsNumber!,
       mobileNumber: _phoneController.text.trim(),
       amount: amount,
+      brokerCode: _selectedBrokerCode!,
     );
 
     if (!mounted) return;
@@ -199,6 +231,7 @@ class _DepositsTabState extends State<DepositsTab> {
           'cdsNumber': _cdsNumber,
           'amount': amount,
           'subscriberMsisdn': _phoneController.text,
+          'brokerCode': _selectedBrokerCode,
         }),
       );
 
@@ -651,6 +684,8 @@ class _DepositsTabState extends State<DepositsTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+
+            // ── Provider dropdown ──────────────────────────────────────────
             Text('Select Provider',
                 style: TextStyle(
                     color: widget.isDark ? Colors.white : Colors.black87,
@@ -746,6 +781,80 @@ class _DepositsTabState extends State<DepositsTab> {
               ),
             ],
 
+            // ── Broker dropdown ────────────────────────────────────────────
+            const SizedBox(height: 20),
+            Text('Select Broker',
+                style: TextStyle(
+                    color: widget.isDark ? Colors.white : Colors.black87,
+                    fontSize: 16)),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                    color: widget.isDark
+                        ? Colors.white30
+                        : Colors.black26),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: _isLoadingBrokers
+                  ? Padding(
+                padding: const EdgeInsets.all(16),
+                child: Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        widget.isDark
+                            ? const Color(0xFF8B6914)
+                            : const Color(0xFFB8860B),
+                      ),
+                    ),
+                  ),
+                ),
+              )
+                  : DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedBrokerCode,
+                  isExpanded: true,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 8),
+                  dropdownColor: widget.isDark
+                      ? const Color(0xFF2E2E2E)
+                      : Colors.white,
+                  style: TextStyle(
+                      color: widget.isDark
+                          ? Colors.white
+                          : Colors.black87,
+                      fontSize: 16),
+                  hint: Text(
+                    _brokers.isEmpty
+                        ? 'No brokers available'
+                        : 'Select a broker',
+                    style: TextStyle(
+                        color: widget.isDark
+                            ? Colors.white54
+                            : Colors.black45),
+                  ),
+                  items: _brokers.map((broker) {
+                    return DropdownMenuItem<String>(
+                      value: broker['broker_code'] as String,
+                      child: Text(broker['fnam'] as String),
+                    );
+                  }).toList(),
+                  onChanged: _brokers.isEmpty
+                      ? null
+                      : (String? value) {
+                    if (value != null) {
+                      setState(() => _selectedBrokerCode = value);
+                    }
+                  },
+                ),
+              ),
+            ),
+
+            // ── Phone field ────────────────────────────────────────────────
             const SizedBox(height: 30),
             TextField(
               controller: _phoneController,
@@ -799,6 +908,8 @@ class _DepositsTabState extends State<DepositsTab> {
                 ),
               ),
             ),
+
+            // ── Amount field ───────────────────────────────────────────────
             const SizedBox(height: 30),
             TextField(
               controller: _amountController,
@@ -842,6 +953,8 @@ class _DepositsTabState extends State<DepositsTab> {
                       color: widget.isDark ? Colors.white60 : Colors.black45,
                       fontSize: 12)),
             ],
+
+            // ── Action buttons ─────────────────────────────────────────────
             const SizedBox(height: 24),
             Row(
               children: [
@@ -902,6 +1015,8 @@ class _DepositsTabState extends State<DepositsTab> {
                 ),
               ],
             ),
+
+            // ── Recent deposits table ──────────────────────────────────────
             const SizedBox(height: 32),
             if (_isLoadingDeposits)
               Center(
