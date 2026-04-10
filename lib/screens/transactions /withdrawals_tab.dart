@@ -27,7 +27,7 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
   final TextEditingController _phoneController = TextEditingController();
 
   String _selectedProvider = 'BTC';
-  String? _cdsNumber;
+  String? _cdsAccount;
   bool _isLoading = false;
   List<Map<String, dynamic>> _recentWithdrawals = [];
   bool _isLoadingWithdrawals = true;
@@ -46,16 +46,16 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
   @override
   void initState() {
     super.initState();
-    _loadCdsNumber();
+    _loadCdsAccount();
     _loadRecentWithdrawals();
     _loadBrokers();
   }
 
-  Future<void> _loadCdsNumber() async {
+  Future<void> _loadCdsAccount() async {
     final prefs = await SharedPreferences.getInstance();
     final phoneNumber = prefs.getString('phoneNumber');
     setState(() {
-      _cdsNumber = prefs.getString('cdsNumber') ?? 'CSDsd723';
+      _cdsAccount = prefs.getString('CDSAccount') ?? '';
       _phoneController.text = phoneNumber ?? '';
     });
   }
@@ -90,8 +90,8 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cdsNumber = prefs.getString('cdsNumber');
-      if (cdsNumber == null) {
+      final cdsAccount = prefs.getString('CDSAccount');
+      if (cdsAccount == null || cdsAccount.isEmpty) {
         setState(() => _isLoadingWithdrawals = false);
         return;
       }
@@ -99,7 +99,7 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
       final response = await http
           .get(
         Uri.parse(
-            'http://192.168.3.201:5000/api/Clients/$cdsNumber/transactions?page=1&pageSize=50'),
+            'http://192.168.3.201:5000/api/Clients/$cdsAccount/transactions?page=1&pageSize=50'),
         headers: {'accept': 'application/json'},
       )
           .timeout(const Duration(seconds: 10));
@@ -161,8 +161,8 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
       _showErrorDialog('Please fill in all fields');
       return;
     }
-    if (_cdsNumber == null) {
-      _showErrorDialog('CDS Number not found. Please login again.');
+    if (_cdsAccount == null || _cdsAccount!.isEmpty) {
+      _showErrorDialog('CDS Account not found. Please login again.');
       return;
     }
     if (_selectedBrokerCode == null) {
@@ -191,7 +191,7 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
 
   Future<void> _initiateWithdrawalMascom(double amount) async {
     final result = await MascomService.withdraw(
-      cdsNumber: _cdsNumber!,
+      cdsNumber: _cdsAccount!,
       mobileNumber: _phoneController.text.trim(),
       amount: amount,
       brokerCode: _selectedBrokerCode!,
@@ -230,7 +230,7 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
         },
         body: jsonEncode({
           'provider': _selectedProvider,
-          'cdsNumber': _cdsNumber,
+          'CDSAccount': _cdsAccount,
           'amount': amount,
           'subscriberMsisdn': _phoneController.text,
           'brokerCode': _selectedBrokerCode,
@@ -825,9 +825,9 @@ class _WithdrawalsTabState extends State<WithdrawalsTab> {
                 contentPadding: const EdgeInsets.all(16),
               ),
             ),
-            if (_cdsNumber != null) ...[
+            if (_cdsAccount != null && _cdsAccount!.isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text('ACC Number: $_cdsNumber',
+              Text('ACC Number: $_cdsAccount',
                   style: TextStyle(
                       color:
                       widget.isDark ? Colors.white60 : Colors.black45,

@@ -17,7 +17,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
   List<Map<String, dynamic>> _transactions = [];
   bool _isLoading = true;
   String? _errorMessage;
-  String? _cdsNumber;
+  String? _cdsAccount;
   String? _token;
 
   // Broker state
@@ -34,7 +34,6 @@ class _TransactionsTabState extends State<TransactionsTab> {
     _loadBrokersThenTransactions();
   }
 
-  // Load brokers first, then auto-load transactions for the first broker
   Future<void> _loadBrokersThenTransactions() async {
     setState(() => _isLoadingBrokers = true);
     try {
@@ -58,7 +57,6 @@ class _TransactionsTabState extends State<TransactionsTab> {
       print('Error loading brokers: $e');
     }
     setState(() => _isLoadingBrokers = false);
-    // Load transactions once we have a broker selected
     await _loadTransactions();
   }
 
@@ -70,12 +68,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      _cdsNumber = prefs.getString('cdsNumber');
+      _cdsAccount = prefs.getString('CDSAccount');
       _token = prefs.getString('token');
 
-      if (_cdsNumber == null || _cdsNumber!.isEmpty) {
+      if (_cdsAccount == null || _cdsAccount!.isEmpty) {
         setState(() {
-          _errorMessage = 'CDS Number not found. Please login again.';
+          _errorMessage = 'CDS Account not found. Please login again.';
           _isLoading = false;
         });
         return;
@@ -90,7 +88,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
           if (_token != null) 'Authorization': 'Bearer $_token',
         },
         body: json.encode({
-          'CDSNumber': _cdsNumber,
+          'cdsNumber': _cdsAccount,   // key stays "cdsNumber", value is CDSAccount
           if (_selectedBrokerCode != null) 'BrokerCode': _selectedBrokerCode,
         }),
       )
@@ -110,7 +108,6 @@ class _TransactionsTabState extends State<TransactionsTab> {
           transactions = List<Map<String, dynamic>>.from(data['data']);
         }
 
-        // Sort by date descending (most recent first)
         transactions.sort((a, b) {
           final dateA = _parseDate(a['DateCreated']);
           final dateB = _parseDate(b['DateCreated']);
@@ -256,7 +253,6 @@ class _TransactionsTabState extends State<TransactionsTab> {
 
     return Column(
       children: [
-        // ── Broker selector bar ──────────────────────────────────────────
         Container(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           color: widget.isDark
@@ -335,10 +331,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 ),
               ),
               const SizedBox(width: 8),
-              // Refresh button
               IconButton(
-                onPressed:
-                _isLoading ? null : _loadTransactions,
+                onPressed: _isLoading ? null : _loadTransactions,
                 icon: Icon(Icons.refresh, color: accentColor, size: 22),
                 tooltip: 'Refresh',
                 padding: EdgeInsets.zero,
@@ -349,10 +343,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
           ),
         ),
 
-        // ── Content ──────────────────────────────────────────────────────
         Expanded(
-          child: _buildContent(
-              accentColor, textColor, subColor),
+          child: _buildContent(accentColor, textColor, subColor),
         ),
       ],
     );
@@ -435,7 +427,6 @@ class _TransactionsTabState extends State<TransactionsTab> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // ── Header row ────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: Row(
@@ -453,7 +444,6 @@ class _TransactionsTabState extends State<TransactionsTab> {
                   ? Colors.white12
                   : Colors.black12),
 
-          // ── Transaction rows ──────────────────────────────────────
           ..._transactions.map((tx) {
             final color = _typeColor(tx);
             final label = _typeLabel(tx);
