@@ -25,32 +25,26 @@ class _TradingPageState extends State<TradingPage> {
   bool isBuy = true;
   bool isLoading = false;
   bool isFetchingStocks = false;
-  bool isFetchingBrokers = false;
   String? _token;
   String? _userName;
   String? _cdsNumber;
   String? _phoneNumber;
   String? _cdsAccount;
+  String? _brokerCode;
 
   String? selectedCompany;
   String? selectedTimeInForce = 'Day Order';
-
-  String? selectedBroker;
-  String? selectedBrokerName;
 
   final quantityController = TextEditingController(text: '');
   final priceController = TextEditingController(text: '');
   final chargesController = TextEditingController(text: '0.00');
 
   List<Map<String, dynamic>> _allStocks = [];
-  List<Map<String, dynamic>> _brokers = [];
 
   final List<String> timeInForceOptions = ['Day Order', 'Good Till Cancelled'];
 
   static const String apiUrl = '$baseUrl/Home/OrderPosting';
   static const String marketDataUrl = '$baseUrl/Home/getMarketData';
-  static const String brokersUrl =
-      'https://zamagm.escrowagm.com/MainAPI/Home/getAllBrokers';
 
   @override
   void initState() {
@@ -58,7 +52,6 @@ class _TradingPageState extends State<TradingPage> {
     _loadUserData();
     _initializeWithPrefilledData();
     _fetchStocksIfNeeded();
-    _fetchBrokers();
 
     quantityController.addListener(updateCalculations);
     priceController.addListener(updateCalculations);
@@ -104,6 +97,7 @@ class _TradingPageState extends State<TradingPage> {
       setState(() {
         _token = token;
         _cdsAccount = prefs.getString('CDSAccount') ?? '';
+        _brokerCode = prefs.getString('BrokerCode') ?? '';
       });
 
       final response = await http.post(
@@ -156,50 +150,11 @@ class _TradingPageState extends State<TradingPage> {
           _phoneNumber = prefs.getString('phoneNumber') ?? '';
           _cdsNumber = prefs.getString('cdsNumber') ?? '';
           _cdsAccount = prefs.getString('CDSAccount') ?? '';
+          _brokerCode = prefs.getString('BrokerCode') ?? '';
         });
       } catch (e) {
         print('Error loading cached user data: $e');
       }
-    }
-  }
-
-  // ─── Fetch Brokers ────────────────────────────────────────────────────────
-
-  Future<void> _fetchBrokers() async {
-    setState(() => isFetchingBrokers = true);
-
-    try {
-      final response = await http.get(
-        Uri.parse(brokersUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          if (_token != null) 'Authorization': 'Bearer $_token',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-
-        setState(() {
-          _brokers = data
-              .map((e) => {
-            'broker_code': e['broker_code']?.toString() ?? '',
-            'fnam': e['fnam']?.toString() ?? '',
-          })
-              .toList();
-
-          if (_brokers.isNotEmpty && selectedBroker == null) {
-            selectedBroker = _brokers[0]['broker_code'];
-            selectedBrokerName = _brokers[0]['fnam'];
-          }
-        });
-      } else {
-        print('Failed to fetch brokers: ${response.statusCode}');
-      }
-    } catch (e) {
-      print('Error fetching brokers: $e');
-    } finally {
-      setState(() => isFetchingBrokers = false);
     }
   }
 
@@ -307,23 +262,17 @@ class _TradingPageState extends State<TradingPage> {
     }
   }
 
-  // ─── FIX: Map API data — display Company name, use Code as ticker ─────────
-
   Map<String, dynamic> _mapApiDataToStock(dynamic item) {
     final rawCode = item['Code']?.toString() ?? '';
     final rawName = item['Company']?.toString() ?? 'Unknown';
     final rawSymbol = item['Symbol']?.toString() ?? '';
 
-    // Display name = Company name (full name shown in dropdown)
     String name = rawName.isNotEmpty ? rawName : rawCode;
 
-    // ticker = Code (used as the identifier for order submission)
-    // Falls back to Symbol if Code is empty, then to name
     String ticker = rawCode.isNotEmpty
         ? rawCode
         : (rawSymbol.isNotEmpty ? rawSymbol : rawName);
 
-    // code = Code field (explicitly stored for order submission)
     String code = rawCode;
 
     String closingPrice = item['ClosingPrice']?.toString() ?? '0';
@@ -344,8 +293,8 @@ class _TradingPageState extends State<TradingPage> {
     Color color = _getColorForStock(ticker);
 
     return {
-      'name': name,       // Full company name — shown in dropdown
-      'ticker': ticker,   // Code value — used as identifier
+      'name': name,
+      'ticker': ticker,
       'price': price,
       'bestBid': bestBid,
       'bestAsk': bestAsk,
@@ -354,7 +303,7 @@ class _TradingPageState extends State<TradingPage> {
       'icon': icon,
       'color': color,
       'status': status,
-      'code': code,       // Explicit Code field — sent in order payload
+      'code': code,
       'closingPriceValue': double.tryParse(closingPrice) ?? 0.0,
       'openingPriceValue': double.tryParse(openingPrice) ?? 0.0,
       'maxPriceValue': double.tryParse(maxPrice) ?? 0.0,
@@ -471,8 +420,8 @@ class _TradingPageState extends State<TradingPage> {
       _showError('Please select a company');
       return;
     }
-    if (selectedBroker == null || selectedBroker!.isEmpty) {
-      _showError('Please select a broker');
+    if (_brokerCode == null || _brokerCode!.isEmpty) {
+      _showError('Broker code not available. Please log in again.');
       return;
     }
 
@@ -482,7 +431,6 @@ class _TradingPageState extends State<TradingPage> {
       final parts = selectedCompany!.split('-');
       final index = int.tryParse(parts.last);
 
-      // ─── FIX: Send Code field, not ticker/name ─────────────────────────
       String companyCode = '';
 
       if (index != null && index < _allStocks.length) {
@@ -491,13 +439,11 @@ class _TradingPageState extends State<TradingPage> {
         final ticker = stock['ticker']?.toString() ?? '';
         final name = stock['name']?.toString() ?? '';
 
-        // Prefer Code → ticker (which is also Code after fix) → name
         companyCode = code.isNotEmpty
             ? code
             : (ticker.isNotEmpty ? ticker : name);
       }
 
-      // Fallback: parts[1] is the code segment in the uniqueId ('ticker-code-index')
       if (companyCode.isEmpty && parts.length >= 2) {
         companyCode = parts[1];
       }
@@ -516,11 +462,11 @@ class _TradingPageState extends State<TradingPage> {
       final orderData = {
         "OrderType": isBuy ? "BUY" : "SELL",
         "ReferenceNumber": "ORD${now.millisecondsSinceEpoch}",
-        "Company": companyCode, // ← Sends Code (e.g. "ABSA"), not full name
+        "Company": companyCode,
         "Quantity": double.tryParse(quantityController.text) ?? 0,
         "BasePrice": double.tryParse(priceController.text) ?? 0,
         "TimeInForce": selectedTimeInForce,
-        "BrokerCode": selectedBroker,
+        "BrokerCode": _brokerCode,
         "CdsAcNo": _cdsAccount ?? '',
         "Shareholder": "SHR7891011",
         "LiNumber": "LI998877",
@@ -787,21 +733,14 @@ class _TradingPageState extends State<TradingPage> {
                         ),
                         const SizedBox(height: 16),
 
-                        // ── Broker Dropdown ────────────────────────────────
-                        if (isFetchingBrokers)
-                          _buildLoadingField('Broker',
-                              textColor: textColor,
-                              fieldBorderColor: fieldBorderColor,
-                              fieldBgColor: fieldBgColor,
-                              accentColor: accentColor)
-                        else
-                          _buildBrokerDropdown(
-                            textColor: textColor,
-                            fieldBorderColor: fieldBorderColor,
-                            dropdownBgColor: dropdownBgColor,
-                            accentColor: accentColor,
-                            fieldBgColor: fieldBgColor,
-                          ),
+                        // ── Broker Code (read-only) ────────────────────────
+                        _buildReadOnlyField(
+                          'Broker Code',
+                          _brokerCode ?? 'N/A',
+                          textColor: textColor,
+                          fieldBorderColor: fieldBorderColor,
+                          fieldBgColor: fieldBgColor,
+                        ),
                         const SizedBox(height: 16),
 
                         // ── Quantity ───────────────────────────────────────
@@ -837,10 +776,10 @@ class _TradingPageState extends State<TradingPage> {
                         ),
                         const SizedBox(height: 16),
 
-                        // ── CDS Number (read-only) ─────────────────────────
+                        // ── CDS Account (read-only) ────────────────────────
                         _buildReadOnlyField(
-                          'ACC Number',
-                          _cdsNumber ?? 'N/A',
+                          'CDS Account',
+                          _cdsAccount ?? 'N/A',
                           textColor: textColor,
                           fieldBorderColor: fieldBorderColor,
                           fieldBgColor: fieldBgColor,
@@ -942,11 +881,8 @@ class _TradingPageState extends State<TradingPage> {
                                       borderRadius:
                                       BorderRadius.circular(12)),
                                 ),
-                                onPressed: (isLoading ||
-                                    isFetchingStocks ||
-                                    isFetchingBrokers ||
-                                    _allStocks.isEmpty ||
-                                    _brokers.isEmpty)
+                                onPressed:
+                                (isLoading || isFetchingStocks || _allStocks.isEmpty)
                                     ? null
                                     : placeOrder,
                                 child: isLoading
@@ -1025,8 +961,6 @@ class _TradingPageState extends State<TradingPage> {
     );
   }
 
-  // ─── FIX: Company dropdown shows full Company name, code shown as hint ────
-
   Widget _buildCompanyDropdown({
     required Color textColor,
     required Color fieldBorderColor,
@@ -1055,8 +989,7 @@ class _TradingPageState extends State<TradingPage> {
               hint: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text('Select Company',
-                    style:
-                    TextStyle(color: textColor.withOpacity(0.5))),
+                    style: TextStyle(color: textColor.withOpacity(0.5))),
               ),
               isExpanded: true,
               dropdownColor: dropdownBgColor,
@@ -1069,9 +1002,7 @@ class _TradingPageState extends State<TradingPage> {
                 final index = entry.key;
                 final stock = entry.value;
 
-                // Display: full Company name
                 final companyName = stock['name'] ?? 'Unknown Company';
-                // Sub-label: Code (short code shown in brackets)
                 final code = stock['code'] ?? '';
                 final ticker = stock['ticker'] ?? code;
                 final uniqueId = '$ticker-$code-$index';
@@ -1122,86 +1053,6 @@ class _TradingPageState extends State<TradingPage> {
             padding: EdgeInsets.only(top: 8.0),
             child: Text(
               'No companies available. Please check your connection or contact support.',
-              style: TextStyle(color: Colors.red, fontSize: 12),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildBrokerDropdown({
-    required Color textColor,
-    required Color fieldBorderColor,
-    required Color dropdownBgColor,
-    required Color accentColor,
-    required Color fieldBgColor,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Broker',
-            style: TextStyle(
-                color: textColor,
-                fontSize: 14,
-                fontWeight: FontWeight.w500)),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: fieldBgColor,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: fieldBorderColor, width: 1),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: selectedBroker,
-              hint: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text('Select Broker',
-                    style:
-                    TextStyle(color: textColor.withOpacity(0.5))),
-              ),
-              isExpanded: true,
-              dropdownColor: dropdownBgColor,
-              icon: Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: Icon(Icons.arrow_drop_down, color: accentColor),
-              ),
-              style: TextStyle(color: textColor, fontSize: 14),
-              items: _brokers.map((broker) {
-                return DropdownMenuItem<String>(
-                  value: broker['broker_code'],
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
-                    child: Text(
-                      broker['fnam']!,
-                      style: TextStyle(
-                          color: textColor,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                );
-              }).toList(),
-              onChanged: _brokers.isEmpty
-                  ? null
-                  : (value) {
-                setState(() {
-                  selectedBroker = value;
-                  selectedBrokerName = _brokers.firstWhere(
-                        (b) => b['broker_code'] == value,
-                    orElse: () => {'fnam': ''},
-                  )['fnam'];
-                });
-              },
-            ),
-          ),
-        ),
-        if (_brokers.isEmpty && !isFetchingBrokers)
-          const Padding(
-            padding: EdgeInsets.only(top: 8.0),
-            child: Text(
-              'No brokers available. Please check your connection.',
               style: TextStyle(color: Colors.red, fontSize: 12),
             ),
           ),
@@ -1326,8 +1177,7 @@ class _TradingPageState extends State<TradingPage> {
         const SizedBox(height: 8),
         Container(
           width: double.infinity,
-          padding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             color: fieldBgColor,
             borderRadius: BorderRadius.circular(12),

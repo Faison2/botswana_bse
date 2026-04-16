@@ -29,14 +29,10 @@ class _DepositsTabState extends State<DepositsTab> {
 
   String _selectedProvider = 'BTC';
   String? _cdsAccount;
+  String? _brokerCode;
   bool _isLoading = false;
   List<Map<String, dynamic>> _recentDeposits = [];
   bool _isLoadingDeposits = true;
-
-  // Broker state
-  List<Map<String, dynamic>> _brokers = [];
-  String? _selectedBrokerCode;
-  bool _isLoadingBrokers = false;
 
   final List<Map<String, String>> _providers = [
     {'name': 'Botswana Telecommunications', 'code': 'BTC'},
@@ -49,7 +45,6 @@ class _DepositsTabState extends State<DepositsTab> {
     super.initState();
     _loadCdsAccount();
     _loadRecentDeposits();
-    _loadBrokers();
   }
 
   Future<void> _loadCdsAccount() async {
@@ -57,33 +52,9 @@ class _DepositsTabState extends State<DepositsTab> {
     final phoneNumber = prefs.getString('phoneNumber');
     setState(() {
       _cdsAccount = prefs.getString('CDSAccount') ?? '';
+      _brokerCode = prefs.getString('BrokerCode') ?? '';
       _phoneController.text = phoneNumber ?? '';
     });
-  }
-
-  Future<void> _loadBrokers() async {
-    setState(() => _isLoadingBrokers = true);
-    try {
-      final response = await http
-          .get(
-        Uri.parse('https://zamagm.escrowagm.com/MainAPI/Home/getAllBrokers'),
-        headers: {'accept': 'application/json'},
-      )
-          .timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        final data = List<Map<String, dynamic>>.from(jsonDecode(response.body));
-        setState(() {
-          _brokers = data;
-          if (data.isNotEmpty) {
-            _selectedBrokerCode = data.first['broker_code'] as String;
-          }
-        });
-      }
-    } catch (e) {
-      print('Error loading brokers: $e');
-    }
-    setState(() => _isLoadingBrokers = false);
   }
 
   Future<void> _loadRecentDeposits() async {
@@ -164,8 +135,8 @@ class _DepositsTabState extends State<DepositsTab> {
       _showErrorDialog('CDS Account not found. Please login again.');
       return;
     }
-    if (_selectedBrokerCode == null) {
-      _showErrorDialog('Please select a broker');
+    if (_brokerCode == null || _brokerCode!.isEmpty) {
+      _showErrorDialog('Broker code not available. Please login again.');
       return;
     }
 
@@ -193,7 +164,7 @@ class _DepositsTabState extends State<DepositsTab> {
       cdsNumber: _cdsAccount!,
       mobileNumber: _phoneController.text.trim(),
       amount: amount,
-      brokerCode: _selectedBrokerCode!,
+      brokerCode: _brokerCode!,
     );
 
     if (!mounted) return;
@@ -215,7 +186,7 @@ class _DepositsTabState extends State<DepositsTab> {
   }
 
   // -------------------------------------------------------------------------
-  // Existing API deposit (BTC / ORANGE) — unchanged countdown flow
+  // Existing API deposit (BTC / ORANGE)
   // -------------------------------------------------------------------------
 
   Future<void> _initiateDepositExisting(double amount) async {
@@ -231,7 +202,7 @@ class _DepositsTabState extends State<DepositsTab> {
           'CDSAccount': _cdsAccount,
           'amount': amount,
           'subscriberMsisdn': _phoneController.text,
-          'brokerCode': _selectedBrokerCode,
+          'brokerCode': _brokerCode,
         }),
       );
 
@@ -397,7 +368,7 @@ class _DepositsTabState extends State<DepositsTab> {
   }
 
   // -------------------------------------------------------------------------
-  // Existing countdown + status check dialogs (BTC / ORANGE) — unchanged
+  // Existing countdown + status check dialogs (BTC / ORANGE)
   // -------------------------------------------------------------------------
 
   void _showCountdownDialog(String transactionRef, String message) {
@@ -422,9 +393,7 @@ class _DepositsTabState extends State<DepositsTab> {
                       setDialogState(() => countdown--);
                       if (countdown <= 0) {
                         t.cancel();
-                        Navigator.of(dialogContext,
-                            rootNavigator: false)
-                            .pop();
+                        Navigator.of(dialogContext, rootNavigator: false).pop();
                         Future.delayed(const Duration(milliseconds: 100), () {
                           if (mounted) _checkTransactionStatus(transactionRef);
                         });
@@ -781,81 +750,43 @@ class _DepositsTabState extends State<DepositsTab> {
               ),
             ],
 
-            // ── Broker dropdown ────────────────────────────────────────────
+            // ── Broker Code (read-only) ────────────────────────────────────
             const SizedBox(height: 20),
-            Text('Select Broker',
+            Text('Broker Code',
                 style: TextStyle(
                     color: widget.isDark ? Colors.white : Colors.black87,
                     fontSize: 16)),
             const SizedBox(height: 8),
             Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
+                color: widget.isDark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : Colors.black.withValues(alpha: 0.02),
                 border: Border.all(
-                    color: widget.isDark
-                        ? Colors.white30
-                        : Colors.black26),
+                    color: widget.isDark ? Colors.white30 : Colors.black26),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: _isLoadingBrokers
-                  ? Padding(
-                padding: const EdgeInsets.all(16),
-                child: Center(
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        widget.isDark
-                            ? const Color(0xFF8B6914)
-                            : const Color(0xFFB8860B),
-                      ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _brokerCode ?? 'N/A',
+                      style: TextStyle(
+                          color: widget.isDark ? Colors.white : Colors.black87,
+                          fontSize: 16),
                     ),
                   ),
-                ),
-              )
-                  : DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedBrokerCode,
-                  isExpanded: true,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 8),
-                  dropdownColor: widget.isDark
-                      ? const Color(0xFF2E2E2E)
-                      : Colors.white,
-                  style: TextStyle(
-                      color: widget.isDark
-                          ? Colors.white
-                          : Colors.black87,
-                      fontSize: 16),
-                  hint: Text(
-                    _brokers.isEmpty
-                        ? 'No brokers available'
-                        : 'Select a broker',
-                    style: TextStyle(
-                        color: widget.isDark
-                            ? Colors.white54
-                            : Colors.black45),
-                  ),
-                  items: _brokers.map((broker) {
-                    return DropdownMenuItem<String>(
-                      value: broker['broker_code'] as String,
-                      child: Text(broker['fnam'] as String),
-                    );
-                  }).toList(),
-                  onChanged: _brokers.isEmpty
-                      ? null
-                      : (String? value) {
-                    if (value != null) {
-                      setState(() => _selectedBrokerCode = value);
-                    }
-                  },
-                ),
+                  Icon(Icons.lock,
+                      color: widget.isDark ? Colors.white30 : Colors.black26,
+                      size: 18),
+                ],
               ),
             ),
 
             // ── Phone field ────────────────────────────────────────────────
-            const SizedBox(height: 30),
+            const SizedBox(height: 20),
             TextField(
               controller: _phoneController,
               enabled: false,
@@ -948,7 +879,7 @@ class _DepositsTabState extends State<DepositsTab> {
             ),
             if (_cdsAccount != null && _cdsAccount!.isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text('ACC Number: $_cdsAccount',
+              Text('CDS Account: $_cdsAccount',
                   style: TextStyle(
                       color: widget.isDark ? Colors.white60 : Colors.black45,
                       fontSize: 12)),

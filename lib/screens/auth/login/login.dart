@@ -63,6 +63,7 @@ class _LoginScreenState extends State<LoginScreen> {
           await prefs.setString('email', responseData['email']);
           await prefs.setString('fullName', responseData['fullName']);
           await prefs.setString('CDSAccount', responseData['CDSAccount'] ?? '');
+          await prefs.setString('BrokerCode', responseData['BrokerCode'] ?? '');
 
           // Check if password change is required
           if (responseData['requirePasswordChange'] == true) {
