@@ -41,10 +41,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _natureOfBusinessController = TextEditingController();
 
   // Step 4 – Banking
-  final _ibanController = TextEditingController();
-  final _bankDivisionController = TextEditingController();
-  final _bankBranchController = TextEditingController();
-  final _swiftCodeController = TextEditingController();
+  final _ibanController = TextEditingController();       // Account Number
+  final _bankDivisionController = TextEditingController(); // Bank Name
+  final _bankBranchController = TextEditingController();   // Bank Branch
+  final _swiftCodeController = TextEditingController();    // Swift Code
 
   // Dropdown values
   String _selectedTitle = 'Mr.';
@@ -55,6 +55,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   String _selectedAccountType = 'Individual';
   String _selectedEmploymentStatus = 'Full-time';
   String _selectedSourceOfIncome = 'Employment';
+  String _selectedBankAccountType = 'Savings'; // Bank Account Type
 
   // Broker
   String? _selectedBrokerCode;
@@ -382,7 +383,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         "AccountType": _selectedAccountType == "Individual" ? "I" : "C",
         "idtype": _selectedIdType,
         "myIdentification": _idNumberController.text,
-        "myTitle": _selectedTitle,
+        "Title": _selectedTitle,           // Fixed: was "myTitle"
         "DOB": _dobController.text,
         "Gender": _selectedGender,
         "Nationality": _selectedNationality,
@@ -392,16 +393,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
         "PostalCode": _postalCodeController.text,
         "VillageTownCity": _villageTownCityController.text,
         "ResidentIn": _residentInController.text,
-        "Tel": _phoneController.text, // No country code prefix
+        "Tel": _phoneController.text,
         "Fax": _faxController.text,
         "Email": _emailController.text,
         "Occupation": _occupationController.text,
         "EmploymentStatus": _selectedEmploymentStatus,
         "NatureOfBusiness": _natureOfBusinessController.text,
-        "IBAN": _ibanController.text,
-        "BankDiv": _bankDivisionController.text,
-        "BankBranch": _bankBranchController.text,
-        "SwiftCode": _swiftCodeController.text,
+        "IBAN": _ibanController.text,                    // Account Number
+        "BankDiv": _bankDivisionController.text,          // Bank Name
+        "BankBranch": _bankBranchController.text,         // Bank Branch
+        "SwiftCode": _swiftCodeController.text,           // Swift Code (restored)
+        "BankAccountType": _selectedBankAccountType,      // Account Type (new)
         "TIN": _tinController.text,
         "branchcode": _branchCode,
         "cdsnumber": _isNewClient ? "" : _cdsNumberController.text,
@@ -840,8 +842,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
             )),
           ]),
           const SizedBox(height: 15),
-      //    _buildLabelWithField('Nationality *', _buildDropdownField('Nationality', _selectedNationality, ['Botswana', 'Other'], (val) => setState(() => _selectedNationality = val!))),
-          const SizedBox(height: 15),
           _buildLabelWithField('Account Type', _buildDropdownField('Account Type', _selectedAccountType, ['Individual'], (val) => setState(() => _selectedAccountType = val!))),
         ],
       ),
@@ -904,15 +904,46 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildLabelWithField('Bank Name', _buildTextField('Enter Bank Name', _ibanController)),
+          // Bank Name → _bankDivisionController → payload "BankDiv"
+          _buildLabelWithField(
+            'Bank Name',
+            _buildTextField('Enter bank name', _bankDivisionController),
+          ),
           const SizedBox(height: 15),
           Row(children: [
-            Expanded(child: _buildLabelWithField('Bank Branch', _buildTextField('Enter bank branch', _bankDivisionController))),
+            // Bank Branch → _bankBranchController → payload "BankBranch"
+            Expanded(
+              child: _buildLabelWithField(
+                'Bank Branch',
+                _buildTextField('Enter bank branch', _bankBranchController),
+              ),
+            ),
             const SizedBox(width: 10),
-            Expanded(child: _buildLabelWithField('Account Type', _buildTextField('Enter account type', _bankBranchController))),
+            // Account Type → _selectedBankAccountType → payload "BankAccountType"
+            Expanded(
+              child: _buildLabelWithField(
+                'Account Type',
+                _buildDropdownField(
+                  'Account Type',
+                  _selectedBankAccountType,
+                  ['Savings', 'Current', 'Fixed Deposit'],
+                      (val) => setState(() => _selectedBankAccountType = val!),
+                ),
+              ),
+            ),
           ]),
           const SizedBox(height: 15),
-          _buildLabelWithField('Account Number', _buildTextField('Enter Account Number', _swiftCodeController)),
+          // Account Number → _ibanController → payload "IBAN"
+          _buildLabelWithField(
+            'Account Number',
+            _buildTextField('Enter account number', _ibanController, keyboardType: TextInputType.number),
+          ),
+          const SizedBox(height: 15),
+          // Swift Code → _swiftCodeController → payload "SwiftCode"
+          _buildLabelWithField(
+            'Swift Code',
+            _buildTextField('Enter swift code', _swiftCodeController),
+          ),
         ],
       ),
     );

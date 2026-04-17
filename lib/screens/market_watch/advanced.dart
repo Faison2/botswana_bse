@@ -105,18 +105,18 @@ class _CompanyComparisonScreenState extends State<CompanyComparisonScreen> {
             _marketData = items.map((item) {
               final Map<String, dynamic> raw = Map<String, dynamic>.from(item as Map);
 
-              final closePrice = double.tryParse(raw['ClosingPrice']?.toString() ?? '0') ?? 0;
+              final vwapPrice = double.tryParse(raw['VwapPrice']?.toString() ?? '0') ?? 0;
               final openPrice = double.tryParse(raw['OpeningPrice']?.toString() ?? '0') ?? 0;
               final maxPrice = double.tryParse(raw['MaxPrice']?.toString() ?? '0') ?? 0;
               final minPrice = double.tryParse(raw['MinPrice']?.toString() ?? '0') ?? 0;
 
               return {
                 ...raw,
-                'priceHistory': _generateRealisticPriceHistory(closePrice, openPrice),
-                'candlestickData': _generateCandlestickData(closePrice, openPrice, maxPrice, minPrice),
-                'currentPrice': closePrice,
+                'priceHistory': _generateRealisticPriceHistory(vwapPrice, openPrice),
+                'candlestickData': _generateCandlestickData(vwapPrice, openPrice, maxPrice, minPrice),
+                'currentPrice': vwapPrice,
                 'volume': _generateVolumeData(),
-                'marketCap': _calculateMarketCap(closePrice),
+                'marketCap': _calculateMarketCap(vwapPrice),
                 'peRatio': _generatePERatio(),
                 'dayHigh': maxPrice,
                 'dayLow': minPrice,
@@ -147,14 +147,14 @@ class _CompanyComparisonScreenState extends State<CompanyComparisonScreen> {
     }
   }
 
-  List<double> _generateRealisticPriceHistory(double closePrice, double openPrice) {
+  List<double> _generateRealisticPriceHistory(double vwapPrice, double openPrice) {
     final history = <double>[];
     final random = math.Random();
-    double currentPrice = closePrice * (0.9 + random.nextDouble() * 0.2);
+    double currentPrice = vwapPrice * (0.9 + random.nextDouble() * 0.2);
 
     for (int i = 0; i < 30; i++) {
-      final trend = (closePrice - currentPrice) / (30 - i);
-      final volatility = closePrice * 0.02;
+      final trend = (vwapPrice - currentPrice) / (30 - i);
+      final volatility = vwapPrice * 0.02;
       final change = trend + (random.nextDouble() - 0.5) * volatility;
       currentPrice += change;
       history.add(currentPrice);
@@ -163,18 +163,18 @@ class _CompanyComparisonScreenState extends State<CompanyComparisonScreen> {
   }
 
   List<Map<String, dynamic>> _generateCandlestickData(
-      double closePrice,
+      double vwapPrice,
       double openPrice,
       double maxPrice,
-      double minPrice
+      double minPrice,
       ) {
     final data = <Map<String, dynamic>>[];
     final random = math.Random();
-    double currentPrice = closePrice * 0.95;
+    double currentPrice = vwapPrice * 0.95;
 
     for (int i = 0; i < 30; i++) {
       final dayOpen = currentPrice;
-      final volatility = closePrice * 0.03;
+      final volatility = vwapPrice * 0.03;
       final dayClose = dayOpen + (random.nextDouble() - 0.5) * volatility;
       final dayHigh = math.max(dayOpen, dayClose) + random.nextDouble() * volatility * 0.5;
       final dayLow = math.min(dayOpen, dayClose) - random.nextDouble() * volatility * 0.5;
@@ -506,7 +506,6 @@ class _CompanyComparisonScreenState extends State<CompanyComparisonScreen> {
                   padding: const EdgeInsets.only(bottom: 100),
                   itemCount: filteredList.length,
                   itemBuilder: (context, listIndex) {
-                    // Find the original index in _marketData
                     final stock = filteredList[listIndex];
                     final originalIndex = _marketData.indexOf(stock);
                     final isSelected = _selectedIndices.contains(originalIndex);
@@ -562,9 +561,9 @@ class _CompanyComparisonScreenState extends State<CompanyComparisonScreen> {
       Color accentColor,
       Color cardBgColor,
       ) {
-    final closePrice = double.tryParse(stock['ClosingPrice']?.toString() ?? '0') ?? 0;
+    final vwapPrice = double.tryParse(stock['VwapPrice']?.toString() ?? '0') ?? 0;
     final openPrice = double.tryParse(stock['OpeningPrice']?.toString() ?? '0') ?? 0;
-    final priceChange = closePrice - openPrice;
+    final priceChange = vwapPrice - openPrice;
     final priceChangePercent = openPrice != 0 ? (priceChange / openPrice) * 100 : 0;
     final isPositive = priceChange >= 0;
 
@@ -649,7 +648,7 @@ class _CompanyComparisonScreenState extends State<CompanyComparisonScreen> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  'BWP ${closePrice.toStringAsFixed(2)}',
+                  'BWP ${vwapPrice.toStringAsFixed(2)}',
                   style: TextStyle(
                     color: textColor,
                     fontSize: 16,

@@ -86,16 +86,27 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
       );
 
       if (response.statusCode == 200) {
-        final List<dynamic> jsonData = json.decode(response.body);
+        final dynamic decoded = json.decode(response.body);
+
+        // ✅ Handle both List and Map responses
+        List<dynamic> jsonData = [];
+        if (decoded is List) {
+          jsonData = decoded;
+        } else if (decoded is Map) {
+          jsonData = [decoded]; // wrap single object in a list
+        }
 
         if (jsonData.isNotEmpty && jsonData[0]['MdataItem'] != null) {
           final List<dynamic> items = jsonData[0]['MdataItem'];
 
+          // ✅ Also handle if MdataItem itself is a Map instead of a List
+          final List<dynamic> itemList = items is List ? items : [items];
+
           setState(() {
-            _marketData = items.map((item) {
+            _marketData = itemList.map((item) {
               final Map<String, dynamic> raw = Map<String, dynamic>.from(item as Map);
 
-              final closePrice = double.tryParse(raw['ClosingPrice']?.toString() ?? '0') ?? 0;
+              final closePrice = double.tryParse(raw['VwapPrice']?.toString() ?? '0') ?? 0;
               final openPrice = double.tryParse(raw['OpeningPrice']?.toString() ?? '0') ?? 0;
               final maxPrice = double.tryParse(raw['MaxPrice']?.toString() ?? '0') ?? 0;
               final minPrice = double.tryParse(raw['MinPrice']?.toString() ?? '0') ?? 0;
@@ -118,6 +129,11 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
             }).toList();
             _isLoading = false;
             _errorMessage = null;
+          });
+        } else {
+          setState(() {
+            _errorMessage = 'No market data found in response';
+            _isLoading = false;
           });
         }
       } else if (response.statusCode == 401) {
@@ -419,7 +435,8 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
 
   Widget _buildStockCard(Map<String, dynamic> stock, bool isDark) {
     final priceHistory = stock['priceHistory'] as List<double>;
-    final closePrice = double.tryParse(stock['ClosingPrice']?.toString() ?? '0') ?? 0;
+    // ✅ Changed: ClosingPrice → VwapPrice
+    final closePrice = double.tryParse(stock['VwapPrice']?.toString() ?? '0') ?? 0;
     final status = stock['status']?.toString().toUpperCase() ?? '';
 
     final cardBgColor = isDark ? const Color(0xFF2A2A2A) : Colors.white;
@@ -481,7 +498,7 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      'BWP ${stock['ClosingPrice'] ?? '0'}',
+                      'BWP ${stock['VwapPrice'] ?? '0'}',
                       style: TextStyle(
                         color: textColor,
                         fontSize: 18,
@@ -606,13 +623,13 @@ class _FullScreenStockDetailsState extends State<FullScreenStockDetails> with Si
   }
 
   void _navigateToTrading(bool isBuy) {
-    // Prepare stock data for trading page
+    // ✅ Changed: ClosingPrice → VwapPrice in both price and closingPriceValue
     final stockData = {
       'name': widget.stock['Company'] ?? 'Unknown',
       'ticker': widget.stock['Symbol'] ?? 'N/A',
       'code': widget.stock['Code'] ?? '',
-      'price': 'BWP ${widget.stock['ClosingPrice'] ?? '0'}',
-      'closingPriceValue': double.tryParse(widget.stock['ClosingPrice']?.toString() ?? '0') ?? 0.0,
+      'price': 'BWP ${widget.stock['VwapPrice'] ?? '0'}',
+      'closingPriceValue': double.tryParse(widget.stock['VwapPrice']?.toString() ?? '0') ?? 0.0,
       'openingPriceValue': double.tryParse(widget.stock['OpeningPrice']?.toString() ?? '0') ?? 0.0,
       'maxPriceValue': double.tryParse(widget.stock['MaxPrice']?.toString() ?? '0') ?? 0.0,
       'minPriceValue': double.tryParse(widget.stock['MinPrice']?.toString() ?? '0') ?? 0.0,
@@ -623,13 +640,14 @@ class _FullScreenStockDetailsState extends State<FullScreenStockDetails> with Si
       MaterialPageRoute(
         builder: (context) => TradingPage(
           prefilledStockData: stockData,
+          // ✅ Changed: ClosingPrice → VwapPrice in allStocks mapping
           allStocks: widget.allStocks.map((stock) {
             return {
               'name': stock['Company'] ?? 'Unknown',
               'ticker': stock['Symbol'] ?? 'N/A',
               'code': stock['Code'] ?? '',
-              'price': 'BWP ${stock['ClosingPrice'] ?? '0'}',
-              'closingPriceValue': double.tryParse(stock['ClosingPrice']?.toString() ?? '0') ?? 0.0,
+              'price': 'BWP ${stock['VwapPrice'] ?? '0'}',
+              'closingPriceValue': double.tryParse(stock['VwapPrice']?.toString() ?? '0') ?? 0.0,
               'openingPriceValue': double.tryParse(stock['OpeningPrice']?.toString() ?? '0') ?? 0.0,
               'maxPriceValue': double.tryParse(stock['MaxPrice']?.toString() ?? '0') ?? 0.0,
               'minPriceValue': double.tryParse(stock['MinPrice']?.toString() ?? '0') ?? 0.0,
@@ -648,7 +666,8 @@ class _FullScreenStockDetailsState extends State<FullScreenStockDetails> with Si
     final subtextColor = widget.isDark ? Colors.white.withOpacity(0.6) : Colors.black54;
     final accentColor = widget.isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855);
 
-    final closePrice = double.tryParse(widget.stock['ClosingPrice']?.toString() ?? '0') ?? 0;
+    // ✅ Changed: ClosingPrice → VwapPrice for price change calculation
+    final closePrice = double.tryParse(widget.stock['VwapPrice']?.toString() ?? '0') ?? 0;
     final openPrice = double.tryParse(widget.stock['OpeningPrice']?.toString() ?? '0') ?? 0;
     final priceChange = closePrice - openPrice;
     final priceChangePercent = openPrice != 0 ? (priceChange / openPrice) * 100 : 0;
@@ -1046,7 +1065,8 @@ class _FullScreenStockDetailsState extends State<FullScreenStockDetails> with Si
                   const SizedBox(height: 16),
                   _buildDetailRow('Opening Price', 'BWP ${widget.stock['OpeningPrice'] ?? 'N/A'}', textColor, subtextColor),
                   const SizedBox(height: 12),
-                  _buildDetailRow('Closing Price', 'BWP ${widget.stock['ClosingPrice'] ?? 'N/A'}', textColor, subtextColor),
+                  // ✅ Changed: label "Closing Price" → "VWAP Price", key ClosingPrice → VwapPrice
+                  _buildDetailRow('VWAP Price', 'BWP ${widget.stock['VwapPrice'] ?? 'N/A'}', textColor, subtextColor),
                   const SizedBox(height: 12),
                   _buildDetailRow('Settlement Price', 'BWP ${widget.stock['SettlementPrice'] ?? 'N/A'}', textColor, subtextColor),
                   const SizedBox(height: 12),
