@@ -731,7 +731,16 @@ class _TradingPageState extends State<TradingPage> {
                           accentColor: accentColor,
                           fieldBgColor: fieldBgColor,
                         ),
+
                         const SizedBox(height: 16),
+                        _buildReadOnlyField(
+                          'CSD Account',
+                          _cdsAccount ?? 'N/A',
+                          textColor: textColor,
+                          fieldBorderColor: fieldBorderColor,
+                          fieldBgColor: fieldBgColor,
+                        ),
+                        const SizedBox(height: 24),
 
                         // ── Broker Code (read-only) ────────────────────────
                         _buildReadOnlyField(
@@ -775,18 +784,6 @@ class _TradingPageState extends State<TradingPage> {
                           fieldBgColor: fieldBgColor,
                         ),
                         const SizedBox(height: 16),
-
-                        // ── CDS Account (read-only) ────────────────────────
-                        _buildReadOnlyField(
-                          'CDS Account',
-                          _cdsAccount ?? 'N/A',
-                          textColor: textColor,
-                          fieldBorderColor: fieldBorderColor,
-                          fieldBgColor: fieldBgColor,
-                        ),
-                        const SizedBox(height: 24),
-
-                        // ── Order Summary ──────────────────────────────────
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
