@@ -30,7 +30,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _addressController = TextEditingController();
   final _physicalAddressController = TextEditingController();
   final _postalCodeController = TextEditingController();
-  final _villageController = TextEditingController();       // ← NEW
+  final _villageController = TextEditingController();
   final _villageTownCityController = TextEditingController();
   final _residentInController = TextEditingController();
   final _tinController = TextEditingController();
@@ -44,9 +44,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   // Step 4 – Banking
   final _ibanController = TextEditingController();
-  final _bankDivisionController = TextEditingController();
-  final _bankBranchController = TextEditingController();
-  final _swiftCodeController = TextEditingController();
 
   // Dropdown values
   String _selectedTitle = 'Mr.';
@@ -65,6 +62,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
   List<Map<String, dynamic>> _brokersList = [];
   bool _isLoadingBrokers = false;
 
+  // Banks
+  List<Map<String, dynamic>> _banksList = [];
+  bool _isLoadingBanks = false;
+  String? _selectedBankCode;
+  String? _selectedBankName;
+  String? _selectedBankSwiftCode;
+
+  // Branches
+  List<Map<String, dynamic>> _branchesList = [];
+  bool _isLoadingBranches = false;
+  String? _selectedBranchCode;
+  String? _selectedBranchName;
+
   // Documents
   File? _idDocument;
   File? _proofOfAddressDocument;
@@ -78,6 +88,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   void initState() {
     super.initState();
     _fetchBrokers();
+    _fetchBanks();
     _requestStoragePermission();
   }
 
@@ -86,12 +97,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
       if (Platform.isAndroid) {
         final status = await Permission.storage.request();
         if (status.isPermanentlyDenied) {
-          _showSnackBar('Storage permission permanently denied. Please enable it from settings.');
+          _showSnackBar(
+              'Storage permission permanently denied. Please enable it from settings.');
         }
       } else if (Platform.isIOS || Platform.isMacOS) {
         final status = await Permission.photos.request();
         if (status.isPermanentlyDenied) {
-          _showSnackBar('Photos permission permanently denied. Please enable it from settings.');
+          _showSnackBar(
+              'Photos permission permanently denied. Please enable it from settings.');
         }
       }
     } catch (e) {
@@ -109,7 +122,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _addressController.dispose();
     _physicalAddressController.dispose();
     _postalCodeController.dispose();
-    _villageController.dispose();                          // ← NEW
+    _villageController.dispose();
     _villageTownCityController.dispose();
     _residentInController.dispose();
     _tinController.dispose();
@@ -119,12 +132,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _occupationController.dispose();
     _natureOfBusinessController.dispose();
     _ibanController.dispose();
-    _bankDivisionController.dispose();
-    _bankBranchController.dispose();
-    _swiftCodeController.dispose();
     super.dispose();
   }
 
+  // ── Fetch Brokers ──────────────────────────────────────────────────────────
   Future<void> _fetchBrokers() async {
     setState(() => _isLoadingBrokers = true);
     try {
@@ -158,6 +169,67 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
   }
 
+  // ── Fetch Banks ────────────────────────────────────────────────────────────
+  Future<void> _fetchBanks() async {
+    setState(() => _isLoadingBanks = true);
+    try {
+      final response = await http.get(
+        Uri.parse('https://zamagm.escrowagm.com/MainAPI/Home/GetBanks'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+        List<Map<String, dynamic>> list = [];
+        if (responseData is Map && responseData.containsKey('banks')) {
+          list = List<Map<String, dynamic>>.from(responseData['banks']);
+        } else if (responseData is List) {
+          list = List<Map<String, dynamic>>.from(responseData);
+        }
+        setState(() => _banksList = list);
+      } else {
+        _showSnackBar('Failed to load banks');
+      }
+    } catch (e) {
+      _showSnackBar('Error loading banks: $e');
+    } finally {
+      setState(() => _isLoadingBanks = false);
+    }
+  }
+
+  // ── Fetch Branches ─────────────────────────────────────────────────────────
+  Future<void> _fetchBranches(String bankCode) async {
+    setState(() {
+      _isLoadingBranches = true;
+      _branchesList = [];
+      _selectedBranchCode = null;
+      _selectedBranchName = null;
+    });
+    try {
+      final response = await http.get(
+        Uri.parse(
+            'https://zamagm.escrowagm.com/MainAPI/Home/GetBranches?bank=$bankCode'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+        List<Map<String, dynamic>> list = [];
+        if (responseData is Map && responseData.containsKey('branches')) {
+          list = List<Map<String, dynamic>>.from(responseData['branches']);
+        }
+        setState(() => _branchesList = list);
+      } else {
+        _showSnackBar('Failed to load branches');
+      }
+    } catch (e) {
+      _showSnackBar('Error loading branches: $e');
+    } finally {
+      setState(() => _isLoadingBranches = false);
+    }
+  }
+
+  // ── Document Picker ────────────────────────────────────────────────────────
   Future<void> _pickDocument(String documentType) async {
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -213,13 +285,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
   }
 
-  Widget _buildDocumentUploadField(String label, File? file, String documentType) {
+  Widget _buildDocumentUploadField(
+      String label, File? file, String documentType) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
             style: const TextStyle(
-                color: Color(0xFF6B5D4F), fontSize: 12, fontWeight: FontWeight.w500)),
+                color: Color(0xFF6B5D4F),
+                fontSize: 12,
+                fontWeight: FontWeight.w500)),
         const SizedBox(height: 4),
         GestureDetector(
           onTap: () => _pickDocument(documentType),
@@ -229,10 +304,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
               color: Colors.white,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                  color: file != null ? const Color(0xFFD4A855) : const Color(0xFFE8D7B8),
+                  color: file != null
+                      ? const Color(0xFFD4A855)
+                      : const Color(0xFFE8D7B8),
                   width: file != null ? 2 : 1),
               boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 5, offset: const Offset(0, 2))
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 5,
+                    offset: const Offset(0, 2))
               ],
             ),
             child: Padding(
@@ -241,10 +321,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 children: [
                   Icon(
                     file != null
-                        ? (file.path.toLowerCase().endsWith('.pdf') ? Icons.picture_as_pdf : Icons.image)
+                        ? (file.path.toLowerCase().endsWith('.pdf')
+                        ? Icons.picture_as_pdf
+                        : Icons.image)
                         : Icons.upload_file,
                     color: file != null
-                        ? (file.path.toLowerCase().endsWith('.pdf') ? Colors.red[700] : const Color(0xFFD4A855))
+                        ? (file.path.toLowerCase().endsWith('.pdf')
+                        ? Colors.red[700]
+                        : const Color(0xFFD4A855))
                         : Colors.grey[400],
                     size: 20,
                   ),
@@ -255,19 +339,26 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          file != null ? file.path.split('/').last : 'Tap to upload document',
+                          file != null
+                              ? file.path.split('/').last
+                              : 'Tap to upload document',
                           style: TextStyle(
-                              color: file != null ? const Color(0xFFD4A855) : Colors.grey[400],
+                              color: file != null
+                                  ? const Color(0xFFD4A855)
+                                  : Colors.grey[400],
                               fontSize: 14,
                               overflow: TextOverflow.ellipsis),
                         ),
                         if (file == null)
                           Text('PDF or image (PNG/JPG), max 5MB',
-                              style: TextStyle(color: Colors.grey[400], fontSize: 10)),
+                              style:
+                              TextStyle(color: Colors.grey[400], fontSize: 10)),
                       ],
                     ),
                   ),
-                  if (file != null) const Icon(Icons.check_circle, color: Color(0xFFD4A855), size: 18),
+                  if (file != null)
+                    const Icon(Icons.check_circle,
+                        color: Color(0xFFD4A855), size: 18),
                 ],
               ),
             ),
@@ -292,15 +383,28 @@ class _SignUpScreenState extends State<SignUpScreen> {
     List<Map<String, dynamic>> documents = [];
     final idBase64 = await _convertFileToBase64(_idDocument);
     if (idBase64 != null) {
-      documents.add({"Name": "ID", "ContentType": _contentTypeForFile(_idDocument!), "Data": idBase64});
+      documents.add({
+        "Name": "ID",
+        "ContentType": _contentTypeForFile(_idDocument!),
+        "Data": idBase64
+      });
     }
     final addressBase64 = await _convertFileToBase64(_proofOfAddressDocument);
     if (addressBase64 != null) {
-      documents.add({"Name": "Proof of Address", "ContentType": _contentTypeForFile(_proofOfAddressDocument!), "Data": addressBase64});
+      documents.add({
+        "Name": "Proof of Address",
+        "ContentType": _contentTypeForFile(_proofOfAddressDocument!),
+        "Data": addressBase64
+      });
     }
-    final employmentBase64 = await _convertFileToBase64(_proofOfEmploymentDocument);
+    final employmentBase64 =
+    await _convertFileToBase64(_proofOfEmploymentDocument);
     if (employmentBase64 != null) {
-      documents.add({"Name": "Proof of Employment", "ContentType": _contentTypeForFile(_proofOfEmploymentDocument!), "Data": employmentBase64});
+      documents.add({
+        "Name": "Proof of Employment",
+        "ContentType": _contentTypeForFile(_proofOfEmploymentDocument!),
+        "Data": employmentBase64
+      });
     }
     return documents;
   }
@@ -423,7 +527,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         "Address1": _addressController.text,
         "Add4": _postalCodeController.text,
         "Add5": _physicalAddressController.text,
-        "Village": _villageController.text,            // ← FIXED: was hardcoded ""
+        "Village": _villageController.text,
         "Town": _villageTownCityController.text,
         "ResidesIn": _residentInController.text,
         "myRegion": "",
@@ -443,9 +547,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
         "TIN": _tinController.text,
         "MaritalStatus": "",
         "IBAN": _ibanController.text,
-        "BankDiv": _bankDivisionController.text,
-        "BankBranch": _bankBranchController.text,
-        "SwiftCode": _swiftCodeController.text,
+        "BankDiv": _selectedBankCode ?? '',        // bank code from API
+        "BankBranch": _selectedBranchCode ?? '',   // branch code from API
+        "SwiftCode": _selectedBankSwiftCode ?? '', // auto-filled from bank API
         "InvestorType": "",
         "AccountType": _selectedAccountType,
         "accountClass": "",
@@ -493,10 +597,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body);
         if (responseData is List) {
-          if (responseData.isNotEmpty && responseData[0]['responseCode'] == 0) {
-            _showSuccessDialog(responseData[0]['responseMessage'] ?? 'Account Submitted Successfully');
+          if (responseData.isNotEmpty &&
+              responseData[0]['responseCode'] == 0) {
+            _showSuccessDialog(
+                responseData[0]['responseMessage'] ?? 'Account Submitted Successfully');
           } else if (responseData.isNotEmpty) {
-            _showErrorDialog(responseData[0]['responseMessage'] ?? 'Unknown error occurred');
+            _showErrorDialog(
+                responseData[0]['responseMessage'] ?? 'Unknown error occurred');
           } else {
             _showErrorDialog('Empty response from server');
           }
@@ -608,7 +715,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
             width: 30,
             height: 30,
             decoration: BoxDecoration(
-              color: isActive || isCompleted ? const Color(0xFFD4A855) : Colors.grey[300],
+              color: isActive || isCompleted
+                  ? const Color(0xFFD4A855)
+                  : Colors.grey[300],
               shape: BoxShape.circle,
             ),
             child: Center(
@@ -658,7 +767,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('Client Type',
-            style: TextStyle(color: Color(0xFF6B5D4F), fontSize: 12, fontWeight: FontWeight.w500)),
+            style: TextStyle(
+                color: Color(0xFF6B5D4F),
+                fontSize: 12,
+                fontWeight: FontWeight.w500)),
         const SizedBox(height: 6),
         Container(
           height: 36,
@@ -666,7 +778,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: const Color(0xFFE8D7B8)),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 3, offset: const Offset(0, 1))],
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 3,
+                  offset: const Offset(0, 1))
+            ],
           ),
           child: Row(
             children: [
@@ -675,9 +792,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   onTap: () => setState(() => _isNewClient = true),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: _isNewClient ? const Color(0xFFD4A855) : Colors.transparent,
+                      color: _isNewClient
+                          ? const Color(0xFFD4A855)
+                          : Colors.transparent,
                       borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(8), bottomLeft: Radius.circular(8)),
+                          topLeft: Radius.circular(8),
+                          bottomLeft: Radius.circular(8)),
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Center(
@@ -685,7 +805,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: _isNewClient ? Colors.white : const Color(0xFF6B5D4F))),
+                              color: _isNewClient
+                                  ? Colors.white
+                                  : const Color(0xFF6B5D4F))),
                     ),
                   ),
                 ),
@@ -695,9 +817,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   onTap: () => setState(() => _isNewClient = false),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: !_isNewClient ? const Color(0xFFD4A855) : Colors.transparent,
+                      color: !_isNewClient
+                          ? const Color(0xFFD4A855)
+                          : Colors.transparent,
                       borderRadius: const BorderRadius.only(
-                          topRight: Radius.circular(8), bottomRight: Radius.circular(8)),
+                          topRight: Radius.circular(8),
+                          bottomRight: Radius.circular(8)),
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Center(
@@ -705,7 +830,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: !_isNewClient ? Colors.white : const Color(0xFF6B5D4F))),
+                              color: !_isNewClient
+                                  ? Colors.white
+                                  : const Color(0xFF6B5D4F))),
                     ),
                   ),
                 ),
@@ -746,7 +873,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 20, spreadRadius: 2)
+                    BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 20,
+                        spreadRadius: 2)
                   ],
                 ),
                 padding: const EdgeInsets.all(8),
@@ -755,7 +885,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
               const SizedBox(height: 10),
               const Text(
                 'Account Creation',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF2C1810)),
+                style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2C1810)),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 10),
@@ -769,7 +902,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     color: Colors.transparent,
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, spreadRadius: 2)
+                      BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 20,
+                          spreadRadius: 2)
                     ],
                   ),
                   child: _buildCurrentStep(),
@@ -784,13 +920,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         onPressed: _handleBack,
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
-                          side: const BorderSide(color: Color(0xFFD4A855), width: 2),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          side:
+                          const BorderSide(color: Color(0xFFD4A855), width: 2),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
                         ),
                         child: Text(
                           _currentStep == 0 ? 'Cancel' : 'Previous',
                           style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFFD4A855)),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFFD4A855)),
                         ),
                       ),
                     ),
@@ -802,12 +942,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           backgroundColor: const Color(0xFFD4A855),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
                           elevation: 0,
                         ),
                         child: Text(
                           _currentStep == 4 ? 'Submit' : 'Next',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w600),
                         ),
                       ),
                     ),
@@ -838,7 +980,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
   }
 
-  // ── Step 1: Basic Info (KYC) ──────────────────────────────────────────────
+  // ── Step 1: Basic Info (KYC) ───────────────────────────────────────────────
   Widget _buildStep1() {
     return SingleChildScrollView(
       child: Column(
@@ -847,8 +989,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
           _buildClientTypeToggle(),
           const SizedBox(height: 15),
           if (!_isNewClient) ...[
-            _buildLabelWithField(
-                'CDS Number *', _buildTextField('Enter CDS number', _cdsNumberController)),
+            _buildLabelWithField('CDS Number *',
+                _buildTextField('Enter CDS number', _cdsNumberController)),
             const SizedBox(height: 15),
           ],
           _buildLabelWithField('Broker *', _buildBrokerDropdown()),
@@ -857,27 +999,35 @@ class _SignUpScreenState extends State<SignUpScreen> {
             Expanded(
                 child: _buildLabelWithField(
                     'Title',
-                    _buildDropdownField('Title', _selectedTitle, ['Mr.', 'Mrs.', 'Ms.', 'Dr.'],
+                    _buildDropdownField(
+                        'Title',
+                        _selectedTitle,
+                        ['Mr.', 'Mrs.', 'Ms.', 'Dr.'],
                             (val) => setState(() => _selectedTitle = val!)))),
             const SizedBox(width: 10),
             Expanded(
                 child: _buildLabelWithField(
                     'Gender',
-                    _buildDropdownField('Gender', _selectedGender, ['Male', 'Female'],
+                    _buildDropdownField(
+                        'Gender',
+                        _selectedGender,
+                        ['Male', 'Female'],
                             (val) => setState(() => _selectedGender = val!)))),
           ]),
           const SizedBox(height: 15),
-          _buildLabelWithField(
-              'Forenames *', _buildTextField('Enter forenames', _firstNameController)),
+          _buildLabelWithField('Forenames *',
+              _buildTextField('Enter forenames', _firstNameController)),
           const SizedBox(height: 15),
-          _buildLabelWithField('Surname *', _buildTextField('Enter surname', _lastNameController)),
+          _buildLabelWithField('Surname *',
+              _buildTextField('Enter surname', _lastNameController)),
           const SizedBox(height: 15),
           _buildLabelWithField(
               'Date of Birth *',
               _buildTextField('YYYY-MM-DD', _dobController, onTap: () async {
                 final date = await showDatePicker(
                   context: context,
-                  initialDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
+                  initialDate:
+                  DateTime.now().subtract(const Duration(days: 365 * 18)),
                   firstDate: DateTime(1900),
                   lastDate: DateTime.now(),
                 );
@@ -924,11 +1074,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     style: const TextStyle(color: Colors.black87, fontSize: 14),
                     decoration: InputDecoration(
                       hintText: '9-digit ID',
-                      hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+                      hintStyle:
+                      TextStyle(color: Colors.grey[400], fontSize: 14),
                       border: InputBorder.none,
                       counterText: '',
-                      contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12),
                     ),
                   ),
                 ),
@@ -958,11 +1109,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   isExpanded: true,
                   dropdownColor: Colors.white,
                   style: const TextStyle(color: Colors.black87, fontSize: 14),
-                  icon: Icon(Icons.arrow_drop_down, color: Colors.grey[600], size: 20),
+                  icon:
+                  Icon(Icons.arrow_drop_down, color: Colors.grey[600], size: 20),
                   items: const [
                     DropdownMenuItem(value: 'I', child: Text('Individual')),
                   ],
-                  onChanged: (val) => setState(() => _selectedAccountType = val!),
+                  onChanged: (val) =>
+                      setState(() => _selectedAccountType = val!),
                 ),
               ),
             ),
@@ -972,58 +1125,62 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  // ── Step 2: Address ───────────────────────────────────────────────────────
+  // ── Step 2: Address ────────────────────────────────────────────────────────
   Widget _buildStep2() {
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildLabelWithField('Postal Address *',
+              _buildTextField('Enter postal address', _addressController)),
+          const SizedBox(height: 15),
           _buildLabelWithField(
-              'Postal Address *', _buildTextField('Enter postal address', _addressController)),
+              'Physical Address',
+              _buildTextField(
+                  'Enter physical address', _physicalAddressController)),
           const SizedBox(height: 15),
-          _buildLabelWithField('Physical Address',
-              _buildTextField('Enter physical address', _physicalAddressController)),
-          const SizedBox(height: 15),
-          // ── Row 1: Postal Code + Village ─────────────────────────────────
           Row(children: [
             Expanded(
                 child: _buildLabelWithField(
                     'Postal Code',
-                    _buildTextField('Enter postal code', _postalCodeController))),
+                    _buildTextField(
+                        'Enter postal code', _postalCodeController))),
             const SizedBox(width: 10),
             Expanded(
-                child: _buildLabelWithField(
-                    'Village',
-                    _buildTextField('Enter village', _villageController))),   // ← NEW
+                child: _buildLabelWithField('Village',
+                    _buildTextField('Enter village', _villageController))),
           ]),
           const SizedBox(height: 15),
-          // ── Row 2: Town / City + Resides In ──────────────────────────────
           Row(children: [
             Expanded(
                 child: _buildLabelWithField(
                     'Town / City *',
-                    _buildTextField('Enter town or city', _villageTownCityController))),
+                    _buildTextField(
+                        'Enter town or city', _villageTownCityController))),
             const SizedBox(width: 10),
             Expanded(
                 child: _buildLabelWithField(
                     'Resides In *',
-                    _buildTextField('e.g. Gaborone', _residentInController))),
+                    _buildTextField(
+                        'e.g. Gaborone', _residentInController))),
           ]),
           const SizedBox(height: 15),
-          // ── Country (full-width) ──────────────────────────────────────────
           _buildLabelWithField(
               'Country *',
-              _buildDropdownField('Country', _selectedCountry, ['Botswana', 'Other'],
+              _buildDropdownField(
+                  'Country',
+                  _selectedCountry,
+                  ['Botswana', 'Other'],
                       (val) => setState(() => _selectedCountry = val!))),
           const SizedBox(height: 15),
-          _buildLabelWithField(
-              'TIN / Tax Code', _buildTextField('Enter TIN number', _tinController)),
+          _buildLabelWithField('TIN / Tax Code',
+              _buildTextField('Enter TIN number', _tinController)),
         ],
       ),
     );
   }
 
-  // ── Step 3: Contact & Work ────────────────────────────────────────────────
+  // ── Step 3: Contact & Work ─────────────────────────────────────────────────
   Widget _buildStep3() {
     return SingleChildScrollView(
       child: Column(
@@ -1039,11 +1196,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
             ),
           ),
           const SizedBox(height: 15),
-          _buildLabelWithField('Mobile Number *',
+          _buildLabelWithField(
+              'Mobile Number *',
               _buildTextField('Enter phone number', _phoneController,
                   keyboardType: TextInputType.phone)),
           const SizedBox(height: 15),
-          _buildLabelWithField('Email *',
+          _buildLabelWithField(
+              'Email *',
               _buildTextField('Enter email address', _emailController,
                   keyboardType: TextInputType.emailAddress)),
           const SizedBox(height: 15),
@@ -1054,13 +1213,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     _buildDropdownField(
                         'Employment Status',
                         _selectedEmploymentStatus,
-                        ['Full-time', 'Part-time', 'Self-employed', 'Unemployed'],
-                            (val) => setState(() => _selectedEmploymentStatus = val!)))),
+                        [
+                          'Full-time',
+                          'Part-time',
+                          'Self-employed',
+                          'Unemployed'
+                        ],
+                            (val) => setState(
+                                () => _selectedEmploymentStatus = val!)))),
             const SizedBox(width: 10),
             Expanded(
                 child: _buildLabelWithField(
                     'Occupation',
-                    _buildTextField('Enter occupation', _occupationController))),
+                    _buildTextField(
+                        'Enter occupation', _occupationController))),
           ]),
           const SizedBox(height: 15),
           _buildLabelWithField(
@@ -1069,41 +1235,86 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   'Source of Income',
                   _selectedSourceOfIncome,
                   ['Employment', 'Business', 'Investments', 'Other'],
-                      (val) => setState(() => _selectedSourceOfIncome = val!))),
+                      (val) =>
+                      setState(() => _selectedSourceOfIncome = val!))),
           const SizedBox(height: 15),
           _buildLabelWithField(
               'Nature & Location of Business Activities',
-              _buildTextField('Describe nature of business', _natureOfBusinessController)),
+              _buildTextField('Describe nature of business',
+                  _natureOfBusinessController)),
         ],
       ),
     );
   }
 
-  // ── Step 4: Banking ───────────────────────────────────────────────────────
+  // ── Step 4: Banking ────────────────────────────────────────────────────────
   Widget _buildStep4() {
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildLabelWithField(
-              'Bank Name', _buildTextField('Enter bank name', _bankDivisionController)),
+          // Bank Name Dropdown
+          _buildLabelWithField('Bank Name', _buildBankDropdown()),
           const SizedBox(height: 15),
+
+          // Swift Code – auto-filled, read-only
           _buildLabelWithField(
-              'Bank Branch', _buildTextField('Enter bank branch', _bankBranchController)),
+            'Swift Code',
+            Container(
+              height: 50,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F5F5),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE8D7B8)),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 5,
+                      offset: const Offset(0, 2))
+                ],
+              ),
+              child: Padding(
+                padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                child: Row(
+                  children: [
+                    Icon(Icons.lock_outline, size: 16, color: Colors.grey[400]),
+                    const SizedBox(width: 8),
+                    Text(
+                      (_selectedBankSwiftCode != null &&
+                          _selectedBankSwiftCode!.isNotEmpty)
+                          ? _selectedBankSwiftCode!
+                          : 'Auto-filled on bank selection',
+                      style: TextStyle(
+                        color: (_selectedBankSwiftCode != null &&
+                            _selectedBankSwiftCode!.isNotEmpty)
+                            ? Colors.black87
+                            : Colors.grey[400],
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
           const SizedBox(height: 15),
+
+          // Bank Branch Dropdown
+          _buildLabelWithField('Bank Branch', _buildBranchDropdown()),
+          const SizedBox(height: 15),
+
+          // Account Number
           _buildLabelWithField(
               'Account Number',
               _buildTextField('Enter account number', _ibanController,
                   keyboardType: TextInputType.number)),
-          const SizedBox(height: 15),
-          _buildLabelWithField(
-              'Swift Code', _buildTextField('Enter swift code', _swiftCodeController)),
         ],
       ),
     );
   }
 
-  // ── Step 5: Documents & Final ─────────────────────────────────────────────
+  // ── Step 5: Documents & Final ──────────────────────────────────────────────
   Widget _buildStep5() {
     return SingleChildScrollView(
       child: Column(
@@ -1113,17 +1324,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
             const Text(
               'Attachments *',
               style: TextStyle(
-                  color: Color(0xFF6B5D4F), fontSize: 12, fontWeight: FontWeight.w500),
+                  color: Color(0xFF6B5D4F),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 8),
             _buildDocumentUploadField(
-                '1. Certified Copy of National Identity Card', _idDocument, 'ID'),
+                '1. Certified Copy of National Identity Card',
+                _idDocument,
+                'ID'),
             const SizedBox(height: 15),
             _buildDocumentUploadField(
                 '2. Proof of Address', _proofOfAddressDocument, 'ProofOfAddress'),
             const SizedBox(height: 15),
-            _buildDocumentUploadField('3. Proof of Source of Income / Employment',
-                _proofOfEmploymentDocument, 'ProofOfEmployment'),
+            _buildDocumentUploadField(
+                '3. Proof of Source of Income / Employment',
+                _proofOfEmploymentDocument,
+                'ProofOfEmployment'),
             const SizedBox(height: 25),
           ],
           Row(
@@ -1134,11 +1351,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 height: 20,
                 child: Checkbox(
                   value: _agreeToTerms,
-                  onChanged: (value) => setState(() => _agreeToTerms = value ?? false),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                  onChanged: (value) =>
+                      setState(() => _agreeToTerms = value ?? false),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4)),
                   side: BorderSide(color: Colors.grey[400]!, width: 1.5),
                   fillColor: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.selected)) return const Color(0xFFD4A855);
+                    if (states.contains(WidgetState.selected))
+                      return const Color(0xFFD4A855);
                     return Colors.transparent;
                   }),
                 ),
@@ -1150,7 +1370,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     children: [
                       TextSpan(
                           text: 'I agree to the ',
-                          style: TextStyle(color: Color(0xFF6B5D4F), fontSize: 13)),
+                          style: TextStyle(
+                              color: Color(0xFF6B5D4F), fontSize: 13)),
                       TextSpan(
                           text: 'Terms & Conditions',
                           style: TextStyle(
@@ -1158,8 +1379,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               fontSize: 13,
                               decoration: TextDecoration.underline)),
                       TextSpan(
-                          text: ' and confirm that all information provided is accurate.',
-                          style: TextStyle(color: Color(0xFF6B5D4F), fontSize: 13)),
+                          text:
+                          ' and confirm that all information provided is accurate.',
+                          style: TextStyle(
+                              color: Color(0xFF6B5D4F), fontSize: 13)),
                     ],
                   ),
                 ),
@@ -1174,14 +1397,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: const Color(0xFFFFE082)),
             ),
-            child: Row(
+            child: const Row(
               children: [
-                const Icon(Icons.info_outline, color: Color(0xFFD4A855), size: 18),
-                const SizedBox(width: 8),
-                const Expanded(
+                Icon(Icons.info_outline, color: Color(0xFFD4A855), size: 18),
+                SizedBox(width: 8),
+                Expanded(
                   child: Text(
                     'Please review all information before submitting. Ensure all required fields are filled.',
-                    style: TextStyle(color: Color(0xFF6B5D4F), fontSize: 12),
+                    style:
+                    TextStyle(color: Color(0xFF6B5D4F), fontSize: 12),
                   ),
                 ),
               ],
@@ -1192,7 +1416,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  // ── Shared helpers ────────────────────────────────────────────────────────
+  // ── Shared helpers ─────────────────────────────────────────────────────────
   Widget _buildBrokerDropdown() {
     return Container(
       height: 50,
@@ -1203,7 +1427,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
         border: Border.all(color: const Color(0xFFE8D7B8)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.03), blurRadius: 5, offset: const Offset(0, 2))
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 5,
+              offset: const Offset(0, 2))
         ],
       ),
       child: DropdownButtonHideUnderline(
@@ -1241,13 +1467,138 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
+  Widget _buildBankDropdown() {
+    return Container(
+      height: 50,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE8D7B8)),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 5,
+              offset: const Offset(0, 2))
+        ],
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedBankCode,
+          isExpanded: true,
+          dropdownColor: Colors.white,
+          style: const TextStyle(color: Colors.black87, fontSize: 14),
+          icon: Icon(Icons.arrow_drop_down, color: Colors.grey[600], size: 20),
+          hint: _isLoadingBanks
+              ? const Row(children: [
+            SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2)),
+            SizedBox(width: 8),
+            Text('Loading banks...', style: TextStyle(fontSize: 14)),
+          ])
+              : Text('Select bank',
+              style: TextStyle(fontSize: 14, color: Colors.grey[400])),
+          items: _banksList.map((bank) {
+            final code = bank['bank']?.toString() ?? '';
+            final name = bank['bank_name']?.toString() ?? 'Unknown';
+            return DropdownMenuItem<String>(
+              value: code,
+              child: Text(name, overflow: TextOverflow.ellipsis),
+            );
+          }).toList(),
+          onChanged: (String? newCode) {
+            if (newCode == null) return;
+            final bank = _banksList.firstWhere(
+                  (b) => b['bank']?.toString() == newCode,
+              orElse: () => {},
+            );
+            setState(() {
+              _selectedBankCode = newCode;
+              _selectedBankName = bank['bank_name']?.toString() ?? '';
+              _selectedBankSwiftCode = bank['swiftcode']?.toString() ?? '';
+            });
+            _fetchBranches(newCode);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBranchDropdown() {
+    return Container(
+      height: 50,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: _selectedBankCode == null
+            ? const Color(0xFFF5F5F5)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE8D7B8)),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 5,
+              offset: const Offset(0, 2))
+        ],
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedBranchCode,
+          isExpanded: true,
+          dropdownColor: Colors.white,
+          style: const TextStyle(color: Colors.black87, fontSize: 14),
+          icon: _isLoadingBranches
+              ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2))
+              : Icon(Icons.arrow_drop_down, color: Colors.grey[600], size: 20),
+          hint: Text(
+            _selectedBankCode == null
+                ? 'Select a bank first'
+                : _isLoadingBranches
+                ? 'Loading branches...'
+                : 'Select branch',
+            style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+          ),
+          items: _branchesList.map((branch) {
+            final code = branch['branch']?.toString() ?? '';
+            final name = branch['branch_name']?.toString() ?? 'Unknown';
+            return DropdownMenuItem<String>(
+              value: code,
+              child: Text(name, overflow: TextOverflow.ellipsis),
+            );
+          }).toList(),
+          onChanged: (_selectedBankCode == null || _isLoadingBranches)
+              ? null
+              : (String? newCode) {
+            if (newCode == null) return;
+            final branch = _branchesList.firstWhere(
+                  (b) => b['branch']?.toString() == newCode,
+              orElse: () => {},
+            );
+            setState(() {
+              _selectedBranchCode = newCode;
+              _selectedBranchName =
+                  branch['branch_name']?.toString() ?? '';
+            });
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _buildLabelWithField(String label, Widget field) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
             style: const TextStyle(
-                color: Color(0xFF6B5D4F), fontSize: 12, fontWeight: FontWeight.w500)),
+                color: Color(0xFF6B5D4F),
+                fontSize: 12,
+                fontWeight: FontWeight.w500)),
         const SizedBox(height: 4),
         field,
       ],
@@ -1264,7 +1615,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
         border: Border.all(color: const Color(0xFFE8D7B8)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.03), blurRadius: 5, offset: const Offset(0, 2))
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 5,
+              offset: const Offset(0, 2))
         ],
       ),
       child: TextField(
@@ -1277,14 +1630,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
           hintText: hint,
           hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          contentPadding:
+          const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         ),
       ),
     );
   }
 
-  Widget _buildDropdownField(
-      String hint, String value, List<String> items, Function(String?) onChanged) {
+  Widget _buildDropdownField(String hint, String value, List<String> items,
+      Function(String?) onChanged) {
     return Container(
       height: 50,
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1294,7 +1648,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
         border: Border.all(color: const Color(0xFFE8D7B8)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.03), blurRadius: 5, offset: const Offset(0, 2))
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 5,
+              offset: const Offset(0, 2))
         ],
       ),
       child: DropdownButtonHideUnderline(
