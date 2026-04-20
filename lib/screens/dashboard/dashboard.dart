@@ -1,5 +1,6 @@
 import 'package:bse/contants/constants.dart';
 import 'package:bse/screens/buy_sell/buy_sell.dart';
+import 'package:bse/screens/dashboard/widgets/market_ticker.dart';
 import 'package:bse/screens/dashboard/widgets/portifolio_widget.dart';
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
@@ -15,6 +16,7 @@ import 'package:provider/provider.dart';
 import '../../theme_provider.dart';
 import '../transactions /transactions.dart';
 import 'widgets/market_watch_widget.dart';
+
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -409,6 +411,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 12),
+          MarketTickerWidget(isDark: isDark),
           const SizedBox(height: 20),
           _buildPortfolioCard(isDark),
           const SizedBox(height: 30),
