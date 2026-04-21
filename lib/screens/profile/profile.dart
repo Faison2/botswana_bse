@@ -21,7 +21,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _email = '';
   String _fullName = '';
   String _phoneNumber = '';
-  String _cdsNumber = '';
+  String _cvNumber = '';        // ← renamed from _cdsNumber
   String _status = '';
   String _lastLoginDate = '';
   String _dateCreated = '';
@@ -59,7 +59,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           });
         } else if (responseData is Map && responseData.containsKey('brokers')) {
           setState(() {
-            _brokersList = List<Map<String, dynamic>>.from(responseData['brokers']);
+            _brokersList =
+            List<Map<String, dynamic>>.from(responseData['brokers']);
             _isLoadingBrokers = false;
           });
         } else {
@@ -98,7 +99,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       final response = await http
           .post(
-        Uri.parse('https://zamagm.escrowagm.com/MainAPI/Authentication/GetProfile'),
+        Uri.parse(
+            'https://zamagm.escrowagm.com/MainAPI/Authentication/GetProfile'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'Token': token}),
       )
@@ -109,12 +111,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
         if (responseData['responseCode'] == 200) {
           final phoneNumber = responseData['phoneNumber'] ?? '';
-          final cdsNumber = responseData['cdsNumber'] ?? '';
+          // cvNumber is the username stored in SharedPreferences at login
+          final cvNumber = responseData['username'] ?? '';
 
           // Save to SharedPreferences for use in other screens
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('phoneNumber', phoneNumber);
-          await prefs.setString('cdsNumber', cdsNumber);
 
           setState(() {
             _userId = responseData['userId'] ?? '';
@@ -122,7 +124,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _email = responseData['email'] ?? '';
             _fullName = responseData['fullName'] ?? '';
             _phoneNumber = phoneNumber;
-            _cdsNumber = cdsNumber;
+            _cvNumber = cvNumber;                              // ← renamed
             _status = responseData['status'] ?? '';
             _lastLoginDate = responseData['lastLoginDate'] ?? '';
             _dateCreated = responseData['dateCreated'] ?? '';
@@ -154,8 +156,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? '';
 
-      if (_cdsNumber.isEmpty) {
-        _showSnackBar('CDS Number not available', Colors.red);
+      if (_cvNumber.isEmpty) {                               // ← renamed
+        _showSnackBar('CV Number not available', Colors.red);
         return;
       }
 
@@ -166,7 +168,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
-          'CdsNumber': _cdsNumber,
+          'CvNumber': _cvNumber,                             // ← renamed key
           'BrokerCode': brokerCode,
         }),
       ).timeout(const Duration(seconds: 30));
@@ -174,10 +176,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['responseCode'] == 200) {
-          _showSnackBar(data['responseMessage'] ?? 'Broker linked successfully', Colors.green);
+          _showSnackBar(
+              data['responseMessage'] ?? 'Broker linked successfully',
+              Colors.green);
           Navigator.pop(context);
         } else {
-          _showSnackBar(data['responseMessage'] ?? 'Failed to link broker', Colors.red);
+          _showSnackBar(
+              data['responseMessage'] ?? 'Failed to link broker', Colors.red);
         }
       } else {
         _showSnackBar('Failed to link broker. Please try again.', Colors.red);
@@ -247,9 +252,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // CDS Number Display
+                // CV Number Display
                 Text(
-                  'CDS Number',
+                  'CV Number',                               // ← renamed label
                   style: TextStyle(
                     color: isDark ? Colors.white70 : Colors.black87,
                     fontSize: 14,
@@ -261,13 +266,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF3C3C3C) : Colors.grey[200],
+                    color: isDark
+                        ? const Color(0xFF3C3C3C)
+                        : Colors.grey[200],
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    _cdsNumber.isEmpty ? 'Not available' : _cdsNumber,
+                    _cvNumber.isEmpty ? 'Not available' : _cvNumber, // ← renamed
                     style: TextStyle(
-                      color: _cdsNumber.isEmpty
+                      color: _cvNumber.isEmpty
                           ? Colors.grey
                           : (isDark ? Colors.white : Colors.black87),
                       fontSize: 16,
@@ -289,7 +296,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF3C3C3C) : Colors.grey[200],
+                    color: isDark
+                        ? const Color(0xFF3C3C3C)
+                        : Colors.grey[200],
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: _isLoadingBrokers
@@ -301,7 +310,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         width: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.amber),
                         ),
                       ),
                     ),
@@ -312,11 +322,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       hint: Text(
                         'Select a broker',
                         style: TextStyle(
-                          color: isDark ? Colors.white54 : Colors.black54,
+                          color: isDark
+                              ? Colors.white54
+                              : Colors.black54,
                         ),
                       ),
                       value: selectedBrokerCode,
-                      dropdownColor: isDark ? const Color(0xFF3C3C3C) : Colors.white,
+                      dropdownColor: isDark
+                          ? const Color(0xFF3C3C3C)
+                          : Colors.white,
                       style: TextStyle(
                         color: isDark ? Colors.white : Colors.black87,
                         fontSize: 16,
@@ -326,8 +340,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         color: isDark ? Colors.white70 : Colors.black87,
                       ),
                       items: _brokersList.map((broker) {
-                        String brokerName = broker['fnam']?.toString() ?? 'Unknown Broker';
-                        String brokerCode = broker['broker_code']?.toString() ?? '';
+                        String brokerName =
+                            broker['fnam']?.toString() ??
+                                'Unknown Broker';
+                        String brokerCode =
+                            broker['broker_code']?.toString() ?? '';
 
                         return DropdownMenuItem<String>(
                           value: brokerCode,
@@ -370,7 +387,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: Text(
                           'Note: Your broker link request will be submitted for approval. You will be notified once it has been processed.',
                           style: TextStyle(
-                            color: isDark ? Colors.blue[200] : Colors.blue[900],
+                            color: isDark
+                                ? Colors.blue[200]
+                                : Colors.blue[900],
                             fontSize: 12,
                           ),
                         ),
@@ -385,7 +404,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             TextButton(
               onPressed: () => Navigator.pop(context),
               style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
               child: Text(
                 'CANCEL',
@@ -396,12 +416,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             ElevatedButton(
-              onPressed: selectedBrokerCode == null || _cdsNumber.isEmpty
+              onPressed: selectedBrokerCode == null || _cvNumber.isEmpty // ← renamed
                   ? null
                   : () => _linkBroker(selectedBrokerCode!),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFD4A855),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -487,7 +508,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: _isLoading
                   ? const Center(
                 child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
+                  valueColor:
+                  AlwaysStoppedAnimation<Color>(Colors.amber),
                 ),
               )
                   : _errorMessage.isNotEmpty
@@ -520,9 +542,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _loadProfileData,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.amber,
-              ),
+              style:
+              ElevatedButton.styleFrom(backgroundColor: Colors.amber),
               child: const Text(
                 'Retry',
                 style: TextStyle(color: Colors.white),
@@ -578,7 +599,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           // Status Badge
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             decoration: BoxDecoration(
               color: _status == 'Active'
                   ? Colors.green.withOpacity(0.2)
@@ -605,11 +627,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _spacer(),
             _buildDetailRow("Email", _email, isDark),
             _spacer(),
-            _buildDetailRow("Phone Number",
-                _phoneNumber.isEmpty ? 'Not provided' : _phoneNumber, isDark),
+            _buildDetailRow(
+                "Phone Number",
+                _phoneNumber.isEmpty ? 'Not provided' : _phoneNumber,
+                isDark),
             _spacer(),
-            _buildDetailRow("ACC Number",
-                _cdsNumber.isEmpty ? 'Not provided' : _cdsNumber, isDark),
+            _buildDetailRow(                                   // ← renamed label
+                "ACC Number",
+                _cvNumber.isEmpty ? 'Not provided' : _cvNumber,
+                isDark),
           ]),
 
           const SizedBox(height: 20),
@@ -755,14 +781,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF1F1F1F) : Colors.white,
+        backgroundColor:
+        isDark ? const Color(0xFF1F1F1F) : Colors.white,
         title: Text(
           'Logout',
-          style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+          style:
+          TextStyle(color: isDark ? Colors.white : Colors.black87),
         ),
         content: Text(
           'Are you sure you want to logout?',
-          style: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+          style: TextStyle(
+              color: isDark ? Colors.white70 : Colors.black87),
         ),
         actions: [
           TextButton(
@@ -778,7 +807,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     context, '/login', (route) => false);
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style:
+            ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Logout'),
           ),
         ],
