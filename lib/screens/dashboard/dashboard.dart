@@ -1,5 +1,6 @@
 import 'package:bse/contants/constants.dart';
 import 'package:bse/screens/buy_sell/buy_sell.dart';
+import 'package:bse/screens/buy_sell/transactions.dart';
 import 'package:bse/screens/dashboard/widgets/market_ticker.dart';
 import 'package:bse/screens/dashboard/widgets/portifolio_widget.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +10,8 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../buy_sell/deposit.dart';
+import '../buy_sell/withdrawal.dart';
 import '../market_watch/market_watch.dart';
 import '../portifolio/portifolio.dart';
 import '../drawer/drawer.dart';
@@ -16,6 +19,7 @@ import 'package:provider/provider.dart';
 import '../../theme_provider.dart';
 import '../transactions /transactions.dart';
 import 'widgets/market_watch_widget.dart';
+
 
 
 class DashboardScreen extends StatefulWidget {
@@ -415,6 +419,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           MarketTickerWidget(isDark: isDark),
           const SizedBox(height: 20),
           _buildPortfolioCard(isDark),
+          const SizedBox(height: 16),           // ← NEW: spacing before buttons
+          _buildQuickActions(isDark),            // ← NEW: Deposit / Withdrawal / Advanced
           const SizedBox(height: 30),
           _buildSectionHeader('My Portfolio', 'View Details', isDark, null),
           const SizedBox(height: 15),
@@ -661,6 +667,112 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  Quick-action buttons (Deposit / Withdrawal / Advanced)
+  // ─────────────────────────────────────────────────────────────
+
+  Widget _buildQuickActions(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        children: [
+          _buildActionButton(
+            icon: Icons.add_circle_outline_rounded,
+            label: 'Deposit',
+            isDark: isDark,
+            accentColor: const Color(0xFF4CAF50),
+            onTap: () => _navigateWithDebounce(const DepositScreen()),
+          ),
+          const SizedBox(width: 8),
+          _buildActionButton(
+            icon: Icons.remove_circle_outline_rounded,
+            label: 'Withdrawal',
+            isDark: isDark,
+            accentColor: const Color(0xFFEF5350),
+            onTap: () => _navigateWithDebounce(const WithdrawalScreen()),
+          ),
+          const SizedBox(width: 8),
+          _buildActionButton(
+            icon: Icons.receipt_long_outlined,
+            label: 'My Trans...',
+            isDark: isDark,
+            accentColor: const Color(0xFF29B6F6),
+            onTap: () => _navigateWithDebounce(const TransactionsScreens()),
+          ),
+          const SizedBox(width: 8),
+          _buildActionButton(
+            icon: Icons.tune_rounded,
+            label: 'Advanced',
+            isDark: isDark,
+            accentColor: const Color(0xFFFFB300),
+            onTap: () {
+              // TODO: navigate to Advanced screen
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required bool isDark,
+    required Color accentColor,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            // Frosted-glass / transparent feel
+            color: isDark
+                ? Colors.white.withOpacity(0.07)
+                : Colors.black.withOpacity(0.04),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: accentColor.withOpacity(0.35),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: accentColor.withOpacity(0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Tinted circular icon badge
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: accentColor.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: accentColor, size: 20),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.black54,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
