@@ -16,33 +16,27 @@ class WithdrawalScreen extends StatefulWidget {
 
 class _WithdrawalScreenState extends State<WithdrawalScreen>
     with SingleTickerProviderStateMixin {
-  // ── Form state ──
+
   final TextEditingController _amountController = TextEditingController();
   bool _isLoading = false;
 
-  // ── User data from SharedPreferences ──
   String _brokerCode       = '';
   String _mobileNumber     = '';
   String _cdsAccount       = '';
   double _availableBalance = 0.0;
 
-  // ── Animation ──
   late AnimationController _animController;
-  late Animation<double> _fadeAnim;
-  late Animation<Offset> _slideAnim;
+  late Animation<double>   _fadeAnim;
+  late Animation<Offset>   _slideAnim;
 
   @override
   void initState() {
     super.initState();
     _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 520),
-    );
-    _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
-    _slideAnim = Tween<Offset>(
-      begin: const Offset(0, 0.06),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _animController, curve: Curves.easeOut));
+        vsync: this, duration: const Duration(milliseconds: 520));
+    _fadeAnim  = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
+    _slideAnim = Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _animController, curve: Curves.easeOut));
     _animController.forward();
     _loadUserData();
   }
@@ -51,10 +45,10 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _brokerCode       = prefs.getString('BrokerCode')            ?? '';
-      _mobileNumber     = prefs.getString('phoneNumber')           ?? '';
-      _cdsAccount       = prefs.getString('CDSAccount')            ?? '';
-      _availableBalance = prefs.getDouble('cachedCashBalance')     ?? 0.0;
+      _brokerCode       = prefs.getString('BrokerCode')        ?? '';
+      _mobileNumber     = prefs.getString('phoneNumber')       ?? '';
+      _cdsAccount       = prefs.getString('CDSAccount')        ?? '';
+      _availableBalance = prefs.getDouble('cachedCashBalance') ?? 0.0;
     });
   }
 
@@ -65,36 +59,29 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────────────────────
-  //  Reference ID — shared counter with DepositScreen
-  // ─────────────────────────────────────────────────────────────
+  // ── Reference ID ──
 
   Future<String> _nextReferenceID() async {
     final prefs   = await SharedPreferences.getInstance();
-    final current = prefs.getInt('lastReferenceID') ?? 79; // first call → 80
+    final current = prefs.getInt('lastReferenceID') ?? 79;
     final next    = current + 1;
     await prefs.setInt('lastReferenceID', next);
-    return next.toString().padLeft(5, '0'); // "00080", "00081", …
+    return next.toString().padLeft(5, '0');
   }
 
-  // ─────────────────────────────────────────────────────────────
-  //  Submit withdrawal
-  // ─────────────────────────────────────────────────────────────
+  // ── Submit ──
 
   Future<void> _submitWithdrawal() async {
     final amount = _amountController.text.trim();
     if (amount.isEmpty) {
-      _showSnack('Please enter an amount', isError: true);
-      return;
+      _showSnack('Please enter an amount', isError: true); return;
     }
     final parsed = double.tryParse(amount);
     if (parsed == null || parsed <= 0) {
-      _showSnack('Please enter a valid amount', isError: true);
-      return;
+      _showSnack('Please enter a valid amount', isError: true); return;
     }
     if (_availableBalance > 0 && parsed > _availableBalance) {
-      _showSnack('Amount exceeds your available balance', isError: true);
-      return;
+      _showSnack('Amount exceeds your available balance', isError: true); return;
     }
 
     setState(() => _isLoading = true);
@@ -114,7 +101,7 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
           'Amount':          amount,
           'ReferenceID':     referenceID,
           'CDSNumber':       _cdsAccount,
-          'TransactionType': 'DISBURSEMENT',         // always DISBURSEMENT for withdrawal
+          'TransactionType': 'DISBURSEMENT',
           'MobileNumber':    _mobileNumber,
           'BrokerCode':      _brokerCode,
         }),
@@ -124,11 +111,8 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
-        // Response: [{"responseCode": 0, "responseMessage": "..."}]
-        final data = decoded is List ? decoded.first as Map : decoded as Map;
-        final code = data['responseCode'];
-
-        if (code == 0) {
+        final data    = decoded is List ? decoded.first as Map : decoded as Map;
+        if (data['responseCode'] == 0) {
           _showSnack(
             data['responseMessage'] ??
                 'Transaction submitted, please check prompt on your mobile',
@@ -138,13 +122,12 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
             if (mounted) Navigator.pop(context);
           });
         } else {
-          _showSnack(
-              data['responseMessage'] ?? 'Withdrawal failed', isError: true);
+          _showSnack(data['responseMessage'] ?? 'Withdrawal failed', isError: true);
         }
       } else {
         _showSnack('Server error ${response.statusCode}', isError: true);
       }
-    } catch (e) {
+    } catch (_) {
       _showSnack('Network error. Please try again.', isError: true);
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -152,28 +135,22 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
   }
 
   void _showSnack(String msg, {required bool isError}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg,
-            style: const TextStyle(
-                fontWeight: FontWeight.w600, color: Colors.white)),
-        backgroundColor:
-        isError ? const Color(0xFFEF5350) : const Color(0xFF4CAF50),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-        duration: Duration(seconds: isError ? 3 : 5),
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg,
+          style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+      backgroundColor: isError ? const Color(0xFFEF5350) : const Color(0xFF4CAF50),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.all(16),
+      duration: Duration(seconds: isError ? 3 : 5),
+    ));
   }
 
   String _formatAmount(double v) => v
       .toStringAsFixed(2)
       .replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+\.)'), (m) => '${m[1]},');
 
-  // ─────────────────────────────────────────────────────────────
-  //  Build
-  // ─────────────────────────────────────────────────────────────
+  // ── Build ──
 
   @override
   Widget build(BuildContext context) {
@@ -213,8 +190,7 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
                             const SizedBox(height: 20),
 
                             _buildAmountHeroCard(
-                                isDark, fieldColor, hintColor,
-                                textColor, red, redLight),
+                                isDark, fieldColor, hintColor, textColor, red, redLight),
                             const SizedBox(height: 24),
 
                             _buildLabel('CDS Account', labelColor),
@@ -222,41 +198,27 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
                             _buildLockedField(
                               value: _cdsAccount.isNotEmpty ? _cdsAccount : 'Not set',
                               isDark: isDark, fieldColor: fieldColor,
-                              borderColor: borderColor, textColor: textColor,
-                              iconColor: iconColor,
+                              borderColor: borderColor, textColor: textColor, iconColor: iconColor,
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 16),
 
                             _buildLabel('Broker Code', labelColor),
                             const SizedBox(height: 8),
                             _buildLockedField(
                               value: _brokerCode.isNotEmpty ? _brokerCode : 'Not set',
                               isDark: isDark, fieldColor: fieldColor,
-                              borderColor: borderColor, textColor: textColor,
-                              iconColor: iconColor,
+                              borderColor: borderColor, textColor: textColor, iconColor: iconColor,
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 16),
 
                             _buildLabel('Mobile Number', labelColor),
                             const SizedBox(height: 8),
                             _buildLockedField(
                               value: _mobileNumber.isNotEmpty ? _mobileNumber : 'Not set',
                               isDark: isDark, fieldColor: fieldColor,
-                              borderColor: borderColor, textColor: textColor,
-                              iconColor: iconColor,
+                              borderColor: borderColor, textColor: textColor, iconColor: iconColor,
                             ),
-                            const SizedBox(height: 20),
-
-                            // Transaction type pill
-                            _buildTypeBanner(
-                              label: 'DISBURSEMENT',
-                              color: const Color(0xFFFF7043),
-                              icon: Icons.arrow_upward_rounded,
-                              isDark: isDark,
-                              subColor: subTextColor,
-                            ),
-
-                            const SizedBox(height: 80),
+                            const SizedBox(height: 16),
                           ],
                         ),
                       ),
@@ -271,10 +233,6 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
       },
     );
   }
-
-  // ─────────────────────────────────────────────────────────────
-  //  Widgets
-  // ─────────────────────────────────────────────────────────────
 
   Widget _buildTopBar(bool isDark, Color textColor, Color red) {
     return Container(
@@ -291,18 +249,15 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
                     : Colors.black.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(Icons.arrow_back_ios_new_rounded,
-                  color: textColor, size: 18),
+              child: Icon(Icons.arrow_back_ios_new_rounded, color: textColor, size: 18),
             ),
           ),
           const SizedBox(width: 16),
           Expanded(
             child: Text('Withdraw Funds',
                 style: TextStyle(
-                    color: textColor,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.3)),
+                    color: textColor, fontSize: 20,
+                    fontWeight: FontWeight.bold, letterSpacing: 0.3)),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -318,10 +273,8 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
                 SizedBox(width: 4),
                 Text('WITHDRAW',
                     style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8)),
+                        color: Colors.white, fontSize: 10,
+                        fontWeight: FontWeight.w800, letterSpacing: 0.8)),
               ],
             ),
           ),
@@ -349,10 +302,9 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            decoration:
-            BoxDecoration(color: red.withOpacity(0.12), shape: BoxShape.circle),
-            child: Icon(Icons.account_balance_wallet_outlined,
-                color: red, size: 18),
+            decoration: BoxDecoration(
+                color: red.withOpacity(0.12), shape: BoxShape.circle),
+            child: Icon(Icons.account_balance_wallet_outlined, color: red, size: 18),
           ),
           const SizedBox(width: 12),
           Column(
@@ -361,24 +313,19 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
               Text('Available Balance',
                   style: TextStyle(color: subTextColor, fontSize: 11)),
               const SizedBox(height: 2),
-              Text(
-                'P ${_formatAmount(_availableBalance)}',
-                style: TextStyle(
-                    color: isDark ? Colors.white : Colors.black87,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5),
-              ),
+              Text('P ${_formatAmount(_availableBalance)}',
+                  style: TextStyle(
+                      color: isDark ? Colors.white : Colors.black87,
+                      fontSize: 18, fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5)),
             ],
           ),
           const Spacer(),
           GestureDetector(
-            onTap: () => setState(
-                    () => _amountController.text =
-                    _availableBalance.toStringAsFixed(2)),
+            onTap: () => setState(() =>
+            _amountController.text = _availableBalance.toStringAsFixed(2)),
             child: Container(
-              padding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: red.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
@@ -386,10 +333,8 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
               ),
               child: Text('MAX',
                   style: TextStyle(
-                      color: red,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.8)),
+                      color: red, fontSize: 11,
+                      fontWeight: FontWeight.w800, letterSpacing: 0.8)),
             ),
           ),
         ],
@@ -412,9 +357,7 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: red.withOpacity(0.25), width: 1.2),
         boxShadow: [
-          BoxShadow(
-              color: red.withOpacity(0.08),
-              blurRadius: 20,
+          BoxShadow(color: red.withOpacity(0.08), blurRadius: 20,
               offset: const Offset(0, 6)),
         ],
       ),
@@ -433,8 +376,7 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
               Text('Enter Amount (BWP)',
                   style: TextStyle(
                       color: isDark ? Colors.white60 : Colors.black54,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500)),
+                      fontSize: 13, fontWeight: FontWeight.w500)),
             ],
           ),
           const SizedBox(height: 16),
@@ -445,10 +387,8 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
               FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))
             ],
             style: TextStyle(
-                color: textColor,
-                fontSize: 36,
-                fontWeight: FontWeight.w300,
-                letterSpacing: 1),
+                color: textColor, fontSize: 36,
+                fontWeight: FontWeight.w300, letterSpacing: 1),
             decoration: InputDecoration(
               hintText: '0.00',
               hintStyle: TextStyle(
@@ -469,19 +409,15 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
                 onTap: () => setState(
                         () => _amountController.text = amt.replaceAll(',', '')),
                 child: Container(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: red.withOpacity(0.10),
                     borderRadius: BorderRadius.circular(20),
-                    border:
-                    Border.all(color: red.withOpacity(0.28), width: 1),
+                    border: Border.all(color: red.withOpacity(0.28), width: 1),
                   ),
                   child: Text('P $amt',
                       style: TextStyle(
-                          color: red,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600)),
+                          color: red, fontSize: 12, fontWeight: FontWeight.w600)),
                 ),
               );
             }).toList(),
@@ -511,9 +447,7 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
           Expanded(
             child: Text(value,
                 style: TextStyle(
-                    color: textColor,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500)),
+                    color: textColor, fontSize: 15, fontWeight: FontWeight.w500)),
           ),
           Icon(Icons.lock_outline_rounded, color: iconColor, size: 18),
         ],
@@ -521,50 +455,12 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
     );
   }
 
-  Widget _buildTypeBanner({
-    required String label,
-    required Color color,
-    required IconData icon,
-    required bool isDark,
-    required Color subColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.2), width: 1),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Transaction Type',
-                  style: TextStyle(color: subColor, fontSize: 11)),
-              const SizedBox(height: 2),
-              Text(label,
-                  style: TextStyle(
-                      color: color,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildLabel(String text, Color color) {
     return Text(text,
         style: TextStyle(
-            color: color,
-            fontSize: 13.5,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.2));
+            color: color, fontSize: 13.5,
+            fontWeight: FontWeight.w600, letterSpacing: 0.2));
   }
 
   Widget _buildBottomButtons(
@@ -576,12 +472,10 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
         boxShadow: [
           BoxShadow(
               color: Colors.black.withOpacity(isDark ? 0.4 : 0.08),
-              blurRadius: 20,
-              offset: const Offset(0, -6)),
+              blurRadius: 20, offset: const Offset(0, -6)),
         ],
         borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
+          topLeft: Radius.circular(24), topRight: Radius.circular(24),
         ),
       ),
       child: Row(
@@ -606,8 +500,7 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
                 child: Text('CLOSE',
                     style: TextStyle(
                         color: isDark ? Colors.white70 : Colors.black54,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 14, fontWeight: FontWeight.w800,
                         letterSpacing: 1.2)),
               ),
             ),
@@ -633,15 +526,13 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
                       : [
                     BoxShadow(
                         color: red.withOpacity(0.40),
-                        blurRadius: 16,
-                        offset: const Offset(0, 5)),
+                        blurRadius: 16, offset: const Offset(0, 5)),
                   ],
                 ),
                 alignment: Alignment.center,
                 child: _isLoading
                     ? const SizedBox(
-                    width: 22,
-                    height: 22,
+                    width: 22, height: 22,
                     child: CircularProgressIndicator(
                         strokeWidth: 2.5, color: Colors.white))
                     : const Row(
@@ -652,10 +543,8 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
                     SizedBox(width: 6),
                     Text('WITHDRAW',
                         style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.4)),
+                            color: Colors.white, fontSize: 15,
+                            fontWeight: FontWeight.w800, letterSpacing: 1.4)),
                   ],
                 ),
               ),
