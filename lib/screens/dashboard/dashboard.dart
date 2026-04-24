@@ -869,8 +869,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         boxShadow: [
           BoxShadow(
               color: Colors.amber.withOpacity(0.5),
-              blurRadius: 20,
-              offset: const Offset(0, 5)),
+              blurRadius: 2,
+              offset: const Offset(0, 1)),
         ],
       ),
       child: FloatingActionButton(
