@@ -17,35 +17,22 @@ class DepositScreen extends StatefulWidget {
 class _DepositScreenState extends State<DepositScreen>
     with SingleTickerProviderStateMixin {
   // ── Form state ──
-  String? _selectedProvider;
   final TextEditingController _amountController = TextEditingController();
   bool _isLoading = false;
 
-  // ── User data ──
-  String _brokerCode  = 'MOTS';
-  String _phoneNumber = '';
-  String _cdsAccount  = '';
+  // ── User data from SharedPreferences ──
+  String _brokerCode   = '';
+  String _mobileNumber = '';
+  String _cdsAccount   = '';
 
   // ── Animation ──
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
 
-  static const List<String> _providers = [
-    'Botswana Telecommunications',
-    'Orange Botswana',
-    'Mascom Wireless',
-    'MyZaka',
-    'Standard Chartered',
-    'First National Bank',
-    'Absa Bank',
-  ];
-
   @override
   void initState() {
     super.initState();
-    _selectedProvider = _providers.first;
-
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 520),
@@ -55,7 +42,6 @@ class _DepositScreenState extends State<DepositScreen>
       begin: const Offset(0, 0.06),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _animController, curve: Curves.easeOut));
-
     _animController.forward();
     _loadUserData();
   }
@@ -64,9 +50,9 @@ class _DepositScreenState extends State<DepositScreen>
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _brokerCode  = prefs.getString('brokerCode')  ?? 'MOTS';
-      _phoneNumber = prefs.getString('phoneNumber') ?? '';
-      _cdsAccount  = prefs.getString('cdsNumber')   ?? '';
+      _brokerCode   = prefs.getString('BrokerCode')  ?? '';
+      _mobileNumber = prefs.getString('phoneNumber') ?? '';
+      _cdsAccount   = prefs.getString('CDSAccount')  ?? '';
     });
   }
 
@@ -78,7 +64,19 @@ class _DepositScreenState extends State<DepositScreen>
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  Submit
+  //  Reference ID — starts at 00080, auto-increments per transaction
+  // ─────────────────────────────────────────────────────────────
+
+  Future<String> _nextReferenceID() async {
+    final prefs   = await SharedPreferences.getInstance();
+    final current = prefs.getInt('lastReferenceID') ?? 79; // first call → 80
+    final next    = current + 1;
+    await prefs.setInt('lastReferenceID', next);
+    return next.toString().padLeft(5, '0'); // "00080", "00081", …
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  Submit deposit
   // ─────────────────────────────────────────────────────────────
 
   Future<void> _submitDeposit() async {
@@ -95,35 +93,45 @@ class _DepositScreenState extends State<DepositScreen>
     setState(() => _isLoading = true);
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token') ?? '';
+      final prefs       = await SharedPreferences.getInstance();
+      final token       = prefs.getString('token') ?? '';
+      final referenceID = await _nextReferenceID();
 
       final response = await http.post(
-        Uri.parse('$baseUrl/Transactions/Deposit'),
+        Uri.parse('http://192.168.3.201/mainapi/home/MascomTransactions'),
         headers: {
           'Content-Type': 'application/json',
           if (token.isNotEmpty) 'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
-          'Provider':   _selectedProvider,
-          'BrokerCode': _brokerCode,
-          'Phone':      _phoneNumber,
-          'Amount':     amount,
-          'CDSAccount': _cdsAccount,
+          'Amount':          amount,
+          'ReferenceID':     referenceID,
+          'CDSNumber':       _cdsAccount,
+          'TransactionType': 'COLLECTION',           // always COLLECTION for deposit
+          'MobileNumber':    _mobileNumber,
+          'BrokerCode':      _brokerCode,
         }),
       ).timeout(const Duration(seconds: 30));
 
       if (!mounted) return;
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['responseCode'] == 200) {
-          _showSnack('Deposit initiated successfully!', isError: false);
-          Future.delayed(const Duration(milliseconds: 1200), () {
+        final decoded = jsonDecode(response.body);
+        // Response: [{"responseCode": 0, "responseMessage": "..."}]
+        final data = decoded is List ? decoded.first as Map : decoded as Map;
+        final code = data['responseCode'];
+
+        if (code == 0) {
+          _showSnack(
+            data['responseMessage'] ??
+                'Transaction submitted, please check prompt on your mobile',
+            isError: false,
+          );
+          Future.delayed(const Duration(milliseconds: 2000), () {
             if (mounted) Navigator.pop(context);
           });
         } else {
-          _showSnack(data['message'] ?? 'Deposit failed', isError: true);
+          _showSnack(data['responseMessage'] ?? 'Deposit failed', isError: true);
         }
       } else {
         _showSnack('Server error ${response.statusCode}', isError: true);
@@ -141,10 +149,12 @@ class _DepositScreenState extends State<DepositScreen>
         content: Text(msg,
             style: const TextStyle(
                 fontWeight: FontWeight.w600, color: Colors.white)),
-        backgroundColor: isError ? const Color(0xFFEF5350) : const Color(0xFF4CAF50),
+        backgroundColor:
+        isError ? const Color(0xFFEF5350) : const Color(0xFF4CAF50),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
+        duration: Duration(seconds: isError ? 3 : 5),
       ),
     );
   }
@@ -159,18 +169,17 @@ class _DepositScreenState extends State<DepositScreen>
       builder: (context, themeProvider, _) {
         final isDark = themeProvider.isDarkMode;
 
-        // ── Color tokens ──
-        final bgColor       = isDark ? const Color(0xFF0D0D0D) : const Color(0xFFF5F5F5);
-        final surfaceColor  = isDark ? const Color(0xFF1C1C1C) : Colors.white;
-        final fieldColor    = isDark ? const Color(0xFF242424) : const Color(0xFFF0F0F0);
-        final borderColor   = isDark ? const Color(0xFF3A3A3A) : const Color(0xFFDDDDDD);
-        final labelColor    = isDark ? Colors.white70          : Colors.black54;
-        final textColor     = isDark ? Colors.white            : Colors.black87;
-        final hintColor     = isDark ? Colors.white30          : Colors.black26;
-        final iconColor     = isDark ? Colors.white38          : Colors.black26;
-        final subTextColor  = isDark ? Colors.white38          : Colors.black38;
-        const gold          = Color(0xFFB8860B);
-        const goldLight     = Color(0xFFFFB300);
+        final bgColor      = isDark ? const Color(0xFF0D0D0D) : const Color(0xFFF5F5F5);
+        final surfaceColor = isDark ? const Color(0xFF1C1C1C) : Colors.white;
+        final fieldColor   = isDark ? const Color(0xFF242424) : const Color(0xFFF0F0F0);
+        final borderColor  = isDark ? const Color(0xFF3A3A3A) : const Color(0xFFDDDDDD);
+        final labelColor   = isDark ? Colors.white70          : Colors.black54;
+        final textColor    = isDark ? Colors.white            : Colors.black87;
+        final hintColor    = isDark ? Colors.white30          : Colors.black26;
+        final iconColor    = isDark ? Colors.white38          : Colors.black26;
+        final subTextColor = isDark ? Colors.white38          : Colors.black38;
+        const gold         = Color(0xFFB8860B);
+        const goldLight    = Color(0xFFFFB300);
 
         return Scaffold(
           backgroundColor: bgColor,
@@ -181,95 +190,62 @@ class _DepositScreenState extends State<DepositScreen>
                 position: _slideAnim,
                 child: Column(
                   children: [
-                    // ── Top bar ──
                     _buildTopBar(isDark, textColor, gold),
-
-                    // ── Scrollable form body ──
                     Expanded(
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Amount hero card
                             _buildAmountHeroCard(
-                              isDark, surfaceColor, fieldColor,
-                              hintColor, textColor, gold, goldLight,
-                            ),
+                                isDark, fieldColor, hintColor,
+                                textColor, gold, goldLight),
                             const SizedBox(height: 24),
 
-                            // Provider dropdown
-                            _buildLabel('Select Provider', labelColor),
+                            _buildLabel('CDS Account', labelColor),
                             const SizedBox(height: 8),
-                            _buildProviderDropdown(
-                              isDark, fieldColor, borderColor, textColor, gold,
+                            _buildLockedField(
+                              value: _cdsAccount.isNotEmpty ? _cdsAccount : 'Not set',
+                              isDark: isDark, fieldColor: fieldColor,
+                              borderColor: borderColor, textColor: textColor,
+                              iconColor: iconColor,
                             ),
                             const SizedBox(height: 20),
 
-                            // Broker Code (read-only)
                             _buildLabel('Broker Code', labelColor),
                             const SizedBox(height: 8),
                             _buildLockedField(
-                              value: _brokerCode,
-                              isDark: isDark,
-                              fieldColor: fieldColor,
-                              borderColor: borderColor,
-                              textColor: textColor,
+                              value: _brokerCode.isNotEmpty ? _brokerCode : 'Not set',
+                              isDark: isDark, fieldColor: fieldColor,
+                              borderColor: borderColor, textColor: textColor,
                               iconColor: iconColor,
                             ),
                             const SizedBox(height: 20),
 
-                            // Phone Number (read-only)
-                            _buildLabel('Phone Number', labelColor),
+                            _buildLabel('Mobile Number', labelColor),
                             const SizedBox(height: 8),
                             _buildLockedField(
-                              value: _phoneNumber.isNotEmpty
-                                  ? _phoneNumber
-                                  : 'Not set',
-                              isDark: isDark,
-                              fieldColor: fieldColor,
-                              borderColor: borderColor,
-                              textColor: textColor,
+                              value: _mobileNumber.isNotEmpty ? _mobileNumber : 'Not set',
+                              isDark: isDark, fieldColor: fieldColor,
+                              borderColor: borderColor, textColor: textColor,
                               iconColor: iconColor,
                             ),
-                            const SizedBox(height: 28),
+                            const SizedBox(height: 20),
 
-                            // CDS account info
-                            if (_cdsAccount.isNotEmpty)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: gold.withOpacity(0.08),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                      color: gold.withOpacity(0.2), width: 1),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.account_balance_outlined,
-                                        color: gold, size: 16),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        'CDS Account: $_cdsAccount',
-                                        style: TextStyle(
-                                            color: subTextColor,
-                                            fontSize: 12,
-                                            letterSpacing: 0.3),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                            // Transaction type pill
+                            _buildTypeBanner(
+                              label: 'COLLECTION',
+                              color: const Color(0xFF29B6F6),
+                              icon: Icons.arrow_downward_rounded,
+                              isDark: isDark,
+                              subColor: subTextColor,
+                            ),
 
                             const SizedBox(height: 80),
                           ],
                         ),
                       ),
                     ),
-
-                    // ── Bottom action buttons ──
                     _buildBottomButtons(isDark, surfaceColor, gold, goldLight),
                   ],
                 ),
@@ -282,7 +258,7 @@ class _DepositScreenState extends State<DepositScreen>
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  Top bar
+  //  Widgets
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildTopBar(bool isDark, Color textColor, Color gold) {
@@ -306,23 +282,18 @@ class _DepositScreenState extends State<DepositScreen>
           ),
           const SizedBox(width: 16),
           Expanded(
-            child: Text(
-              'Deposit Funds',
-              style: TextStyle(
-                color: textColor,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.3,
-              ),
-            ),
+            child: Text('Deposit Funds',
+                style: TextStyle(
+                    color: textColor,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.3)),
           ),
-          // Gold accent badge
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF8B6914), Color(0xFFFFB300)],
-              ),
+                  colors: [Color(0xFF8B6914), Color(0xFFFFB300)]),
               borderRadius: BorderRadius.circular(20),
             ),
             child: const Row(
@@ -344,19 +315,8 @@ class _DepositScreenState extends State<DepositScreen>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  //  Amount hero card
-  // ─────────────────────────────────────────────────────────────
-
-  Widget _buildAmountHeroCard(
-      bool isDark,
-      Color surfaceColor,
-      Color fieldColor,
-      Color hintColor,
-      Color textColor,
-      Color gold,
-      Color goldLight,
-      ) {
+  Widget _buildAmountHeroCard(bool isDark, Color fieldColor, Color hintColor,
+      Color textColor, Color gold, Color goldLight) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -371,10 +331,9 @@ class _DepositScreenState extends State<DepositScreen>
         border: Border.all(color: gold.withOpacity(0.25), width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: gold.withOpacity(0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
-          ),
+              color: gold.withOpacity(0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 6)),
         ],
       ),
       child: Column(
@@ -385,79 +344,62 @@ class _DepositScreenState extends State<DepositScreen>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: gold.withOpacity(0.15),
-                  shape: BoxShape.circle,
-                ),
+                    color: gold.withOpacity(0.15), shape: BoxShape.circle),
                 child: Icon(Icons.payments_outlined, color: gold, size: 20),
               ),
               const SizedBox(width: 12),
-              Text(
-                'Enter Amount (BWP)',
-                style: TextStyle(
-                  color: isDark ? Colors.white60 : Colors.black54,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              Text('Enter Amount (BWP)',
+                  style: TextStyle(
+                      color: isDark ? Colors.white60 : Colors.black54,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500)),
             ],
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _amountController,
-            keyboardType:
-            const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))
             ],
             style: TextStyle(
-              color: textColor,
-              fontSize: 36,
-              fontWeight: FontWeight.w300,
-              letterSpacing: 1,
-            ),
+                color: textColor,
+                fontSize: 36,
+                fontWeight: FontWeight.w300,
+                letterSpacing: 1),
             decoration: InputDecoration(
               hintText: '0.00',
               hintStyle: TextStyle(
-                color: hintColor,
-                fontSize: 36,
-                fontWeight: FontWeight.w300,
-              ),
+                  color: hintColor, fontSize: 36, fontWeight: FontWeight.w300),
               prefixText: 'P  ',
               prefixStyle: TextStyle(
-                color: gold,
-                fontSize: 28,
-                fontWeight: FontWeight.w500,
-              ),
+                  color: gold, fontSize: 28, fontWeight: FontWeight.w500),
               border: InputBorder.none,
               isDense: true,
               contentPadding: EdgeInsets.zero,
             ),
           ),
           const SizedBox(height: 12),
-          // Quick-amount chips
           Wrap(
             spacing: 8,
             children: ['500', '1,000', '2,500', '5,000'].map((amt) {
               return GestureDetector(
-                onTap: () => setState(() =>
-                _amountController.text = amt.replaceAll(',', '')),
+                onTap: () => setState(
+                        () => _amountController.text = amt.replaceAll(',', '')),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: gold.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: gold.withOpacity(0.3), width: 1),
+                    border:
+                    Border.all(color: gold.withOpacity(0.3), width: 1),
                   ),
-                  child: Text(
-                    'P $amt',
-                    style: TextStyle(
-                      color: gold,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  child: Text('P $amt',
+                      style: TextStyle(
+                          color: gold,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600)),
                 ),
               );
             }).toList(),
@@ -466,53 +408,6 @@ class _DepositScreenState extends State<DepositScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────────────────────
-  //  Provider dropdown
-  // ─────────────────────────────────────────────────────────────
-
-  Widget _buildProviderDropdown(
-      bool isDark,
-      Color fieldColor,
-      Color borderColor,
-      Color textColor,
-      Color gold,
-      ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      decoration: BoxDecoration(
-        color: fieldColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor, width: 1),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _selectedProvider,
-          isExpanded: true,
-          icon: Icon(Icons.keyboard_arrow_down_rounded,
-              color: isDark ? Colors.white54 : Colors.black38),
-          dropdownColor: isDark ? const Color(0xFF242424) : Colors.white,
-          style: TextStyle(
-              color: textColor, fontSize: 15, fontWeight: FontWeight.w500),
-          items: _providers.map((p) {
-            return DropdownMenuItem(
-              value: p,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Text(p,
-                    style: TextStyle(color: textColor, fontSize: 15)),
-              ),
-            );
-          }).toList(),
-          onChanged: (val) => setState(() => _selectedProvider = val),
-        ),
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  //  Locked / read-only field
-  // ─────────────────────────────────────────────────────────────
 
   Widget _buildLockedField({
     required String value,
@@ -532,14 +427,11 @@ class _DepositScreenState extends State<DepositScreen>
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                color: textColor,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
+            child: Text(value,
+                style: TextStyle(
+                    color: textColor,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500)),
           ),
           Icon(Icons.lock_outline_rounded, color: iconColor, size: 18),
         ],
@@ -547,42 +439,63 @@ class _DepositScreenState extends State<DepositScreen>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  //  Label
-  // ─────────────────────────────────────────────────────────────
-
-  Widget _buildLabel(String text, Color color) {
-    return Text(
-      text,
-      style: TextStyle(
-        color: color,
-        fontSize: 13.5,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.2,
+  Widget _buildTypeBanner({
+    required String label,
+    required Color color,
+    required IconData icon,
+    required bool isDark,
+    required Color subColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.2), width: 1),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Transaction Type',
+                  style: TextStyle(color: subColor, fontSize: 11)),
+              const SizedBox(height: 2),
+              Text(label,
+                  style: TextStyle(
+                      color: color,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5)),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  //  Bottom buttons
-  // ─────────────────────────────────────────────────────────────
+  Widget _buildLabel(String text, Color color) {
+    return Text(text,
+        style: TextStyle(
+            color: color,
+            fontSize: 13.5,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2));
+  }
 
   Widget _buildBottomButtons(
-      bool isDark,
-      Color surfaceColor,
-      Color gold,
-      Color goldLight,
-      ) {
+      bool isDark, Color surfaceColor, Color gold, Color goldLight) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
       decoration: BoxDecoration(
         color: surfaceColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.4 : 0.08),
-            blurRadius: 20,
-            offset: const Offset(0, -6),
-          ),
+              color: Colors.black.withOpacity(isDark ? 0.4 : 0.08),
+              blurRadius: 20,
+              offset: const Offset(0, -6)),
         ],
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(24),
@@ -591,7 +504,6 @@ class _DepositScreenState extends State<DepositScreen>
       ),
       child: Row(
         children: [
-          // Close
           Expanded(
             child: GestureDetector(
               onTap: () => Navigator.pop(context),
@@ -603,28 +515,22 @@ class _DepositScreenState extends State<DepositScreen>
                       : Colors.black.withOpacity(0.05),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: isDark
-                        ? Colors.white.withOpacity(0.12)
-                        : Colors.black.withOpacity(0.1),
-                    width: 1,
-                  ),
+                      color: isDark
+                          ? Colors.white.withOpacity(0.12)
+                          : Colors.black.withOpacity(0.1),
+                      width: 1),
                 ),
                 alignment: Alignment.center,
-                child: Text(
-                  'CLOSE',
-                  style: TextStyle(
-                    color: isDark ? Colors.white70 : Colors.black54,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2,
-                  ),
-                ),
+                child: Text('CLOSE',
+                    style: TextStyle(
+                        color: isDark ? Colors.white70 : Colors.black54,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.2)),
               ),
             ),
           ),
           const SizedBox(width: 12),
-
-          // Deposit
           Expanded(
             flex: 2,
             child: GestureDetector(
@@ -644,37 +550,30 @@ class _DepositScreenState extends State<DepositScreen>
                       ? []
                       : [
                     BoxShadow(
-                      color: gold.withOpacity(0.45),
-                      blurRadius: 16,
-                      offset: const Offset(0, 5),
-                    ),
+                        color: gold.withOpacity(0.45),
+                        blurRadius: 16,
+                        offset: const Offset(0, 5)),
                   ],
                 ),
                 alignment: Alignment.center,
                 child: _isLoading
                     ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: Colors.white,
-                  ),
-                )
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.5, color: Colors.white))
                     : const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(Icons.bolt_rounded,
                         color: Colors.white, size: 20),
                     SizedBox(width: 6),
-                    Text(
-                      'DEPOSIT',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.4,
-                      ),
-                    ),
+                    Text('DEPOSIT',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.4)),
                   ],
                 ),
               ),

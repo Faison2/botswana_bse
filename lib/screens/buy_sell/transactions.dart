@@ -17,14 +17,13 @@ class _TransactionsScreensState extends State<TransactionsScreens>
     with SingleTickerProviderStateMixin {
 
   // ── State ──
-  String? _selectedBroker;
-  double _totalCashBalance = 0.0;
-  double _weeklyChange     = 0.0;
-  double _weeklyChangePct  = 0.0;
-  bool   _isLoadingBalance = false;
-  bool   _isLoadingTx      = false;
+  double  _totalCashBalance   = 0.0;
+  double  _lockedInOpenOrders = 0.0;
+  bool    _isLoadingBalance   = false;
+  bool    _isLoadingTx        = false;
   String? _txError;
-  String  _cdsNumber       = '';
+  String  _cdsAccount  = '';
+  String  _brokerCode  = '';
 
   List<Map<String, dynamic>> _transactions = [];
 
@@ -32,19 +31,9 @@ class _TransactionsScreensState extends State<TransactionsScreens>
   late AnimationController _animController;
   late Animation<double>   _fadeAnim;
 
-  static const List<String> _brokers = [
-    'Motswedi Securities',
-    'African Alliance',
-    'Stockbrokers Botswana',
-    'Imara',
-    'Capital Securities',
-  ];
-
   @override
   void initState() {
     super.initState();
-    _selectedBroker = _brokers.first;
-
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 480),
@@ -52,7 +41,6 @@ class _TransactionsScreensState extends State<TransactionsScreens>
     _fadeAnim = CurvedAnimation(
         parent: _animController, curve: Curves.easeOut);
     _animController.forward();
-
     _bootstrap();
   }
 
@@ -60,11 +48,11 @@ class _TransactionsScreensState extends State<TransactionsScreens>
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _cdsNumber       = prefs.getString('cdsNumber') ?? '';
-      _totalCashBalance =
-          prefs.getDouble('cachedCashBalance') ?? 0.0;
+      _cdsAccount         = prefs.getString('CDSAccount') ?? '';
+      _brokerCode         = prefs.getString('BrokerCode') ?? '';
+      _totalCashBalance   = prefs.getDouble('cachedCashBalance') ?? 0.0;
+      _lockedInOpenOrders = prefs.getDouble('cachedLockedBalance') ?? 0.0;
     });
-    await _fetchBalance();
     await _fetchTransactions();
   }
 
@@ -75,120 +63,129 @@ class _TransactionsScreensState extends State<TransactionsScreens>
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  API – Cash Balance
-  // ─────────────────────────────────────────────────────────────
-
-  Future<void> _fetchBalance() async {
-    if (!mounted) return;
-    setState(() => _isLoadingBalance = true);
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token') ?? '';
-      final cds   = _cdsNumber.isNotEmpty
-          ? _cdsNumber
-          : (prefs.getString('cdsNumber') ?? '');
-
-      final response = await http.post(
-        Uri.parse('$baseUrl/Transactions/GetCashBalance'),
-        headers: {
-          'Content-Type': 'application/json',
-          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({'CDSNumber': cds, 'Broker': _selectedBroker}),
-      ).timeout(const Duration(seconds: 30));
-
-      if (!mounted) return;
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final balance =
-            double.tryParse(data['cashBalance']?.toString() ?? '0') ?? 0.0;
-        final change =
-            double.tryParse(data['weeklyChange']?.toString() ?? '0') ?? 0.0;
-        final pct =
-            double.tryParse(data['weeklyChangePct']?.toString() ?? '0') ?? 0.0;
-
-        await prefs.setDouble('cachedCashBalance', balance);
-
-        setState(() {
-          _totalCashBalance = balance;
-          _weeklyChange     = change;
-          _weeklyChangePct  = pct;
-        });
-      }
-    } catch (_) {
-      // Silently fail — cached value is already shown
-    } finally {
-      if (mounted) setState(() => _isLoadingBalance = false);
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  //  API – Transactions
+  //  API – Transactions (GET with query param)
   // ─────────────────────────────────────────────────────────────
 
   Future<void> _fetchTransactions() async {
     if (!mounted) return;
     setState(() {
-      _isLoadingTx = true;
-      _txError     = null;
+      _isLoadingBalance = true;
+      _isLoadingTx      = true;
+      _txError          = null;
     });
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token') ?? '';
-      final cds   = _cdsNumber.isNotEmpty
-          ? _cdsNumber
-          : (prefs.getString('cdsNumber') ?? '');
+      final prefs  = await SharedPreferences.getInstance();
+      final token  = prefs.getString('token') ?? '';
+      final cds    = _cdsAccount.isNotEmpty
+          ? _cdsAccount
+          : (prefs.getString('CDSAccount') ?? '');
 
-      final response = await http.post(
-        Uri.parse('$baseUrl/Transactions/GetMyTransactions'),
+      final uri = Uri.parse(
+        'https://zamagm.escrowagm.com/MainAPI/Home/GetMyRecentTransactions'
+            '?cdsNumber=${Uri.encodeComponent(cds)}',
+      );
+
+      final response = await http.get(
+        uri,
         headers: {
           'Content-Type': 'application/json',
           if (token.isNotEmpty) 'Authorization': 'Bearer $token',
         },
-        body: jsonEncode({'CDSNumber': cds, 'Broker': _selectedBroker}),
       ).timeout(const Duration(seconds: 30));
 
       if (!mounted) return;
 
       if (response.statusCode == 200) {
-        final dynamic decoded = jsonDecode(response.body);
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
 
-        List<dynamic> raw = [];
-        if (decoded is List) {
-          raw = decoded;
-        } else if (decoded is Map) {
-          raw = decoded.values
-              .firstWhere((v) => v is List, orElse: () => []) as List;
-        }
+        final balance = double.tryParse(
+            data['totalAccountBalance']?.toString() ?? '0') ??
+            0.0;
+        final locked = double.tryParse(
+            data['lockedInOpenOrders']?.toString() ?? '0') ??
+            0.0;
 
+        await prefs.setDouble('cachedCashBalance', balance);
+        await prefs.setDouble('cachedLockedBalance', locked);
+
+        final raw = (data['transactions'] as List<dynamic>? ?? []);
         final txList = raw.whereType<Map>().map((item) {
           return <String, dynamic>{
-            'date':        item['Date']?.toString()        ?? 'N/A',
-            'description': item['Description']?.toString() ?? '-',
-            'type':        item['Type']?.toString()        ?? 'Debit',
+            'reference':    item['reference']?.toString()      ?? 'N/A',
+            'provider':     item['provider']?.toString()       ?? '-',
+            'source':       item['source']?.toString()         ?? '-',
+            'status':       item['status']?.toString()         ?? 'UNKNOWN',
+            'type':         item['transactionType']?.toString() ?? '-',
             'amount': double.tryParse(
-                item['Amount']?.toString() ?? '0') ??
+                item['amount']?.toString() ?? '0') ??
                 0.0,
+            'currency':     item['currency']?.toString()       ?? 'BWP',
+            'date':         item['createdAt']?.toString()      ?? 'N/A',
           };
         }).toList();
 
-        setState(() => _transactions = txList);
+        setState(() {
+          _totalCashBalance   = balance;
+          _lockedInOpenOrders = locked;
+          _transactions       = txList;
+        });
       } else {
         setState(() => _txError = 'Server error ${response.statusCode}');
       }
     } catch (e) {
       if (mounted) setState(() => _txError = 'Could not load transactions');
     } finally {
-      if (mounted) setState(() => _isLoadingTx = false);
+      if (mounted) {
+        setState(() {
+          _isLoadingBalance = false;
+          _isLoadingTx      = false;
+        });
+      }
     }
   }
+
+  // ─────────────────────────────────────────────────────────────
+  //  Helpers
+  // ─────────────────────────────────────────────────────────────
 
   String _formatAmount(double v) => v
       .toStringAsFixed(2)
       .replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+\.)'), (m) => '${m[1]},');
+
+  /// Formats "2026-04-23 14:00:00" → "23 Apr, 14:00"
+  String _formatDate(String raw) {
+    try {
+      final dt = DateTime.parse(raw.replaceFirst(' ', 'T'));
+      final months = [
+        '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      final h = dt.hour.toString().padLeft(2, '0');
+      final m = dt.minute.toString().padLeft(2, '0');
+      return '${dt.day} ${months[dt.month]}\n$h:$m';
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status.toUpperCase()) {
+      case 'SUCCESSFUL': return const Color(0xFF4CAF50);
+      case 'FAILED':     return const Color(0xFFEF5350);
+      case 'PAUSED':     return const Color(0xFFFFB300);
+      default:           return Colors.grey;
+    }
+  }
+
+  Color _typeColor(String type) {
+    switch (type.toUpperCase()) {
+      case 'COLLECTION': return const Color(0xFF29B6F6);
+      case 'DISBURSEMENT': return const Color(0xFFFF7043);
+      case 'DEPOSIT':    return const Color(0xFF4CAF50);
+      default:           return Colors.grey;
+    }
+  }
 
   // ─────────────────────────────────────────────────────────────
   //  Build
@@ -201,12 +198,9 @@ class _TransactionsScreensState extends State<TransactionsScreens>
         final isDark = themeProvider.isDarkMode;
 
         final bgColor      = isDark ? const Color(0xFF0D0D0D) : const Color(0xFFF5F5F5);
-        final surfaceColor = isDark ? const Color(0xFF1C1C1C) : Colors.white;
         final borderColor  = isDark ? const Color(0xFF2E2E2E) : const Color(0xFFE0E0E0);
-        final labelColor   = isDark ? Colors.white70          : Colors.black54;
         final textColor    = isDark ? Colors.white            : Colors.black87;
         final subColor     = isDark ? Colors.white38          : Colors.black38;
-        const gold         = Color(0xFFB8860B);
         const goldLight    = Color(0xFFFFB300);
 
         return Scaffold(
@@ -220,22 +214,19 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                   Expanded(
                     child: RefreshIndicator(
                       color: goldLight,
-                      onRefresh: () async {
-                        await _fetchBalance();
-                        await _fetchTransactions();
-                      },
+                      onRefresh: _fetchTransactions,
                       child: ListView(
                         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                         children: [
                           // ── Balance card ──
-                          _buildBalanceCard(isDark),
+                          _buildBalanceCard(),
                           const SizedBox(height: 20),
 
-                          // ── Broker row ──
-                          _buildBrokerRow(
-                              isDark, surfaceColor, borderColor,
-                              textColor, labelColor, gold),
-                          const SizedBox(height: 20),
+                          // ── Account info row ──
+                          if (_cdsAccount.isNotEmpty || _brokerCode.isNotEmpty)
+                            _buildAccountInfoRow(isDark, textColor, subColor),
+                          if (_cdsAccount.isNotEmpty || _brokerCode.isNotEmpty)
+                            const SizedBox(height: 20),
 
                           // ── Table header ──
                           _buildTableHeader(isDark, textColor),
@@ -244,8 +235,7 @@ class _TransactionsScreensState extends State<TransactionsScreens>
 
                           // ── Rows ──
                           _buildTransactionRows(
-                              isDark, surfaceColor, borderColor,
-                              textColor, subColor),
+                              isDark, borderColor, textColor, subColor),
                         ],
                       ),
                     ),
@@ -292,17 +282,26 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.3)),
           ),
-          // Receipt icon badge
-          Container(
-            padding: const EdgeInsets.all(9),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? Colors.white.withOpacity(0.08)
-                  : Colors.black.withOpacity(0.05),
-              shape: BoxShape.circle,
+          // Refresh button
+          GestureDetector(
+            onTap: _fetchTransactions,
+            child: Container(
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withOpacity(0.08)
+                    : Colors.black.withOpacity(0.05),
+                shape: BoxShape.circle,
+              ),
+              child: _isLoadingTx
+                  ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Color(0xFFFFB300)))
+                  : const Icon(Icons.refresh_rounded,
+                  color: Color(0xFF29B6F6), size: 20),
             ),
-            child: Icon(Icons.receipt_long_outlined,
-                color: const Color(0xFF29B6F6), size: 20),
           ),
         ],
       ),
@@ -313,9 +312,7 @@ class _TransactionsScreensState extends State<TransactionsScreens>
   //  Balance card
   // ─────────────────────────────────────────────────────────────
 
-  Widget _buildBalanceCard(bool isDark) {
-    final isPositive = _weeklyChange >= 0;
-
+  Widget _buildBalanceCard() {
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
@@ -336,30 +333,22 @@ class _TransactionsScreensState extends State<TransactionsScreens>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Label row
+          // Label + loading
           Row(
             children: [
               const Expanded(
-                child: Text('Total Cash Balance',
+                child: Text('Total Account Balance',
                     style: TextStyle(
                         color: Colors.white70,
                         fontSize: 14,
                         fontWeight: FontWeight.w500)),
               ),
-              GestureDetector(
-                onTap: () {
-                  _fetchBalance();
-                  _fetchTransactions();
-                },
-                child: _isLoadingBalance
-                    ? const SizedBox(
+              if (_isLoadingBalance)
+                const SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white70))
-                    : const Icon(Icons.refresh_rounded,
-                    color: Colors.white70, size: 22),
-              ),
+                        strokeWidth: 2, color: Colors.white70)),
             ],
           ),
           const SizedBox(height: 14),
@@ -376,33 +365,19 @@ class _TransactionsScreensState extends State<TransactionsScreens>
           ),
           const SizedBox(height: 12),
 
-          // Weekly change
+          // Locked in open orders
           Row(
             children: [
-              Icon(
-                isPositive
-                    ? Icons.arrow_upward_rounded
-                    : Icons.arrow_downward_rounded,
-                color: isPositive
-                    ? const Color(0xFF4CAF50)
-                    : const Color(0xFFEF5350),
-                size: 16,
-              ),
-              const SizedBox(width: 4),
+              const Icon(Icons.lock_outline_rounded,
+                  color: Colors.white54, size: 15),
+              const SizedBox(width: 5),
               Text(
-                '${isPositive ? '+' : ''}${_formatAmount(_weeklyChange)} '
-                    '(${_weeklyChangePct.toStringAsFixed(1)}%)',
-                style: TextStyle(
-                  color: isPositive
-                      ? const Color(0xFF4CAF50)
-                      : const Color(0xFFEF5350),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
+                'Locked in orders: BWP ${_formatAmount(_lockedInOpenOrders)}',
+                style: const TextStyle(
+                    color: Colors.white60,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500),
               ),
-              const SizedBox(width: 6),
-              const Text('this week',
-                  style: TextStyle(color: Colors.white54, fontSize: 13)),
             ],
           ),
         ],
@@ -411,96 +386,55 @@ class _TransactionsScreensState extends State<TransactionsScreens>
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  Broker row
+  //  Account info row (CDS + Broker)
   // ─────────────────────────────────────────────────────────────
 
-  Widget _buildBrokerRow(
-      bool isDark,
-      Color surfaceColor,
-      Color borderColor,
-      Color textColor,
-      Color labelColor,
-      Color gold,
-      ) {
-    final fieldColor =
-    isDark ? const Color(0xFF242424) : const Color(0xFFF0F0F0);
+  Widget _buildAccountInfoRow(
+      bool isDark, Color textColor, Color subColor) {
+    final chipBg = isDark
+        ? Colors.white.withOpacity(0.07)
+        : Colors.black.withOpacity(0.04);
+
+    Widget chip(IconData icon, String label, String value) {
+      return Expanded(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: chipBg,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: const Color(0xFFFFB300), size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: TextStyle(color: subColor, fontSize: 11)),
+                    const SizedBox(height: 2),
+                    Text(value,
+                        style: TextStyle(
+                            color: textColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Row(
       children: [
-        Text('Broker:',
-            style: TextStyle(
-                color: textColor,
-                fontSize: 15,
-                fontWeight: FontWeight.w600)),
-        const SizedBox(width: 12),
-
-        // Dropdown
-        Expanded(
-          child: Container(
-            padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-            decoration: BoxDecoration(
-              color: fieldColor,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: borderColor, width: 1),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _selectedBroker,
-                isExpanded: true,
-                icon: Icon(Icons.keyboard_arrow_down_rounded,
-                    color: isDark ? Colors.white54 : Colors.black38,
-                    size: 20),
-                dropdownColor:
-                isDark ? const Color(0xFF242424) : Colors.white,
-                style: TextStyle(
-                    color: textColor,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500),
-                items: _brokers.map((b) {
-                  return DropdownMenuItem(
-                    value: b,
-                    child: Text(b,
-                        style:
-                        TextStyle(color: textColor, fontSize: 14)),
-                  );
-                }).toList(),
-                onChanged: (val) {
-                  setState(() => _selectedBroker = val);
-                  _fetchBalance();
-                  _fetchTransactions();
-                },
-              ),
-            ),
-          ),
-        ),
-
+        chip(Icons.credit_card_rounded, 'CDS Account', _cdsAccount),
         const SizedBox(width: 10),
-
-        // Refresh icon
-        GestureDetector(
-          onTap: () {
-            _fetchBalance();
-            _fetchTransactions();
-          },
-          child: Container(
-            padding: const EdgeInsets.all(9),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? Colors.white.withOpacity(0.07)
-                  : Colors.black.withOpacity(0.04),
-              shape: BoxShape.circle,
-              border: Border.all(color: gold.withOpacity(0.3), width: 1),
-            ),
-            child: _isLoadingTx
-                ? SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: gold))
-                : Icon(Icons.refresh_rounded, color: gold, size: 18),
-          ),
-        ),
+        chip(Icons.business_rounded, 'Broker Code', _brokerCode),
       ],
     );
   }
@@ -512,7 +446,7 @@ class _TransactionsScreensState extends State<TransactionsScreens>
   Widget _buildTableHeader(bool isDark, Color textColor) {
     final style = TextStyle(
       color: textColor,
-      fontSize: 13,
+      fontSize: 12,
       fontWeight: FontWeight.w700,
       letterSpacing: 0.2,
     );
@@ -521,10 +455,11 @@ class _TransactionsScreensState extends State<TransactionsScreens>
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
-          Expanded(flex: 2, child: Text('Date',        style: style)),
-          Expanded(flex: 3, child: Text('Description', style: style)),
-          Expanded(flex: 2, child: Text('Type',        style: style, textAlign: TextAlign.center)),
-          Expanded(flex: 2, child: Text('Amount',      style: style, textAlign: TextAlign.right)),
+          Expanded(flex: 2, child: Text('Date',     style: style)),
+          Expanded(flex: 2, child: Text('Provider', style: style)),
+          Expanded(flex: 2, child: Text('Type',     style: style, textAlign: TextAlign.center)),
+          Expanded(flex: 2, child: Text('Status',   style: style, textAlign: TextAlign.center)),
+          Expanded(flex: 2, child: Text('Amount',   style: style, textAlign: TextAlign.right)),
         ],
       ),
     );
@@ -536,7 +471,6 @@ class _TransactionsScreensState extends State<TransactionsScreens>
 
   Widget _buildTransactionRows(
       bool isDark,
-      Color surfaceColor,
       Color borderColor,
       Color textColor,
       Color subColor,
@@ -566,8 +500,7 @@ class _TransactionsScreensState extends State<TransactionsScreens>
               const SizedBox(height: 14),
               TextButton.icon(
                 onPressed: _fetchTransactions,
-                icon: const Icon(Icons.refresh,
-                    color: Color(0xFFFFB300)),
+                icon: const Icon(Icons.refresh, color: Color(0xFFFFB300)),
                 label: const Text('Retry',
                     style: TextStyle(color: Color(0xFFFFB300))),
               ),
@@ -585,8 +518,7 @@ class _TransactionsScreensState extends State<TransactionsScreens>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.inbox_outlined,
-                  color: subColor, size: 48),
+              Icon(Icons.inbox_outlined, color: subColor, size: 48),
               const SizedBox(height: 12),
               Text('No transactions found',
                   style: TextStyle(color: subColor, fontSize: 14)),
@@ -598,9 +530,8 @@ class _TransactionsScreensState extends State<TransactionsScreens>
 
     return Column(
       children: _transactions.asMap().entries.map((entry) {
-        final i  = entry.key;
-        final tx = entry.value;
-        return _buildTxRow(tx, i, isDark, borderColor, textColor, subColor);
+        return _buildTxRow(
+            entry.value, entry.key, isDark, borderColor, textColor, subColor);
       }).toList(),
     );
   }
@@ -613,19 +544,19 @@ class _TransactionsScreensState extends State<TransactionsScreens>
       Color textColor,
       Color subColor,
       ) {
-    final isCredit = (tx['type'] as String).toLowerCase() == 'credit';
-    final amount   = tx['amount'] as double;
+    final status   = tx['status']   as String;
+    final type     = tx['type']     as String;
+    final amount   = tx['amount']   as double;
+    final currency = tx['currency'] as String;
+    final provider = tx['provider'] as String;
 
-    final typeColor  = isCredit ? const Color(0xFF4CAF50) : const Color(0xFFEF5350);
-    final typeBg     = typeColor.withOpacity(0.15);
-    final amountColor = isCredit
-        ? const Color(0xFF4CAF50)
-        : const Color(0xFF4CAF50); // matches screenshot (green for both)
+    final statusColor = _statusColor(status);
+    final typeColor   = _typeColor(type);
 
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14),
+          padding: const EdgeInsets.symmetric(vertical: 12),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -633,17 +564,17 @@ class _TransactionsScreensState extends State<TransactionsScreens>
               Expanded(
                 flex: 2,
                 child: Text(
-                  tx['date'] as String,
+                  _formatDate(tx['date'] as String),
                   style: TextStyle(
-                      color: subColor, fontSize: 12, height: 1.3),
+                      color: subColor, fontSize: 11, height: 1.4),
                 ),
               ),
 
-              // Description
+              // Provider
               Expanded(
-                flex: 3,
+                flex: 2,
                 child: Text(
-                  tx['description'] as String,
+                  provider,
                   style: TextStyle(
                       color: textColor,
                       fontSize: 12,
@@ -659,19 +590,43 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                 child: Center(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
+                        horizontal: 6, vertical: 4),
                     decoration: BoxDecoration(
-                      color: typeBg,
+                      color: typeColor.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      isCredit ? 'Credit' : 'Debit',
+                      type,
+                      textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: typeColor,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.3,
-                      ),
+                          color: typeColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.2),
+                    ),
+                  ),
+                ),
+              ),
+
+              // Status badge
+              Expanded(
+                flex: 2,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      status,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color: statusColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.2),
                     ),
                   ),
                 ),
@@ -681,14 +636,13 @@ class _TransactionsScreensState extends State<TransactionsScreens>
               Expanded(
                 flex: 2,
                 child: Text(
-                  'BWP ${_formatAmount(amount)}',
+                  '$currency\n${_formatAmount(amount)}',
                   textAlign: TextAlign.right,
                   style: TextStyle(
-                    color: amountColor,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.2,
-                  ),
+                      color: textColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      height: 1.4),
                 ),
               ),
             ],

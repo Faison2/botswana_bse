@@ -17,14 +17,13 @@ class WithdrawalScreen extends StatefulWidget {
 class _WithdrawalScreenState extends State<WithdrawalScreen>
     with SingleTickerProviderStateMixin {
   // ── Form state ──
-  String? _selectedProvider;
   final TextEditingController _amountController = TextEditingController();
   bool _isLoading = false;
 
-  // ── User data ──
-  String _brokerCode  = 'MOTS';
-  String _phoneNumber = '';
-  String _cdsAccount  = '';
+  // ── User data from SharedPreferences ──
+  String _brokerCode       = '';
+  String _mobileNumber     = '';
+  String _cdsAccount       = '';
   double _availableBalance = 0.0;
 
   // ── Animation ──
@@ -32,31 +31,18 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
 
-  static const List<String> _providers = [
-    'Botswana Telecommunications',
-    'Orange Botswana',
-    'Mascom Wireless',
-    'MyZaka',
-    'Standard Chartered',
-    'First National Bank',
-    'Absa Bank',
-  ];
-
   @override
   void initState() {
     super.initState();
-    _selectedProvider = _providers.first;
-
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 520),
     );
-    _fadeAnim  = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
+    _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
     _slideAnim = Tween<Offset>(
       begin: const Offset(0, 0.06),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _animController, curve: Curves.easeOut));
-
     _animController.forward();
     _loadUserData();
   }
@@ -65,10 +51,10 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _brokerCode       = prefs.getString('brokerCode')         ?? 'MOTS';
-      _phoneNumber      = prefs.getString('phoneNumber')        ?? '';
-      _cdsAccount       = prefs.getString('cdsNumber')          ?? '';
-      _availableBalance = prefs.getDouble('cachedPortfolioValue') ?? 0.0;
+      _brokerCode       = prefs.getString('BrokerCode')            ?? '';
+      _mobileNumber     = prefs.getString('phoneNumber')           ?? '';
+      _cdsAccount       = prefs.getString('CDSAccount')            ?? '';
+      _availableBalance = prefs.getDouble('cachedCashBalance')     ?? 0.0;
     });
   }
 
@@ -80,7 +66,19 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  Submit
+  //  Reference ID — shared counter with DepositScreen
+  // ─────────────────────────────────────────────────────────────
+
+  Future<String> _nextReferenceID() async {
+    final prefs   = await SharedPreferences.getInstance();
+    final current = prefs.getInt('lastReferenceID') ?? 79; // first call → 80
+    final next    = current + 1;
+    await prefs.setInt('lastReferenceID', next);
+    return next.toString().padLeft(5, '0'); // "00080", "00081", …
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  Submit withdrawal
   // ─────────────────────────────────────────────────────────────
 
   Future<void> _submitWithdrawal() async {
@@ -94,7 +92,7 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
       _showSnack('Please enter a valid amount', isError: true);
       return;
     }
-    if (parsed > _availableBalance && _availableBalance > 0) {
+    if (_availableBalance > 0 && parsed > _availableBalance) {
       _showSnack('Amount exceeds your available balance', isError: true);
       return;
     }
@@ -102,35 +100,46 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
     setState(() => _isLoading = true);
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token') ?? '';
+      final prefs       = await SharedPreferences.getInstance();
+      final token       = prefs.getString('token') ?? '';
+      final referenceID = await _nextReferenceID();
 
       final response = await http.post(
-        Uri.parse('$baseUrl/Transactions/Withdraw'),
+        Uri.parse('http://192.168.3.201/mainapi/home/MascomTransactions'),
         headers: {
           'Content-Type': 'application/json',
           if (token.isNotEmpty) 'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
-          'Provider':   _selectedProvider,
-          'BrokerCode': _brokerCode,
-          'Phone':      _phoneNumber,
-          'Amount':     amount,
-          'CDSAccount': _cdsAccount,
+          'Amount':          amount,
+          'ReferenceID':     referenceID,
+          'CDSNumber':       _cdsAccount,
+          'TransactionType': 'DISBURSEMENT',         // always DISBURSEMENT for withdrawal
+          'MobileNumber':    _mobileNumber,
+          'BrokerCode':      _brokerCode,
         }),
       ).timeout(const Duration(seconds: 30));
 
       if (!mounted) return;
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['responseCode'] == 200) {
-          _showSnack('Withdrawal initiated successfully!', isError: false);
-          Future.delayed(const Duration(milliseconds: 1200), () {
+        final decoded = jsonDecode(response.body);
+        // Response: [{"responseCode": 0, "responseMessage": "..."}]
+        final data = decoded is List ? decoded.first as Map : decoded as Map;
+        final code = data['responseCode'];
+
+        if (code == 0) {
+          _showSnack(
+            data['responseMessage'] ??
+                'Transaction submitted, please check prompt on your mobile',
+            isError: false,
+          );
+          Future.delayed(const Duration(milliseconds: 2000), () {
             if (mounted) Navigator.pop(context);
           });
         } else {
-          _showSnack(data['message'] ?? 'Withdrawal failed', isError: true);
+          _showSnack(
+              data['responseMessage'] ?? 'Withdrawal failed', isError: true);
         }
       } else {
         _showSnack('Server error ${response.statusCode}', isError: true);
@@ -153,6 +162,7 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
+        duration: Duration(seconds: isError ? 3 : 5),
       ),
     );
   }
@@ -171,7 +181,6 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
       builder: (context, themeProvider, _) {
         final isDark = themeProvider.isDarkMode;
 
-        // ── Color tokens ──
         final bgColor      = isDark ? const Color(0xFF0D0D0D) : const Color(0xFFF5F5F5);
         final surfaceColor = isDark ? const Color(0xFF1C1C1C) : Colors.white;
         final fieldColor   = isDark ? const Color(0xFF242424) : const Color(0xFFF0F0F0);
@@ -200,80 +209,52 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // ── Available balance banner ──
                             _buildBalanceBanner(isDark, red, subTextColor),
                             const SizedBox(height: 20),
 
-                            // ── Amount hero card ──
                             _buildAmountHeroCard(
-                              isDark, fieldColor, hintColor,
-                              textColor, red, redLight,
-                            ),
+                                isDark, fieldColor, hintColor,
+                                textColor, red, redLight),
                             const SizedBox(height: 24),
 
-                            // ── Provider ──
-                            _buildLabel('Select Provider', labelColor),
+                            _buildLabel('CDS Account', labelColor),
                             const SizedBox(height: 8),
-                            _buildProviderDropdown(
-                                isDark, fieldColor, borderColor, textColor, red),
+                            _buildLockedField(
+                              value: _cdsAccount.isNotEmpty ? _cdsAccount : 'Not set',
+                              isDark: isDark, fieldColor: fieldColor,
+                              borderColor: borderColor, textColor: textColor,
+                              iconColor: iconColor,
+                            ),
                             const SizedBox(height: 20),
 
-                            // ── Broker Code (read-only) ──
                             _buildLabel('Broker Code', labelColor),
                             const SizedBox(height: 8),
                             _buildLockedField(
-                              value: _brokerCode,
-                              isDark: isDark,
-                              fieldColor: fieldColor,
-                              borderColor: borderColor,
-                              textColor: textColor,
+                              value: _brokerCode.isNotEmpty ? _brokerCode : 'Not set',
+                              isDark: isDark, fieldColor: fieldColor,
+                              borderColor: borderColor, textColor: textColor,
                               iconColor: iconColor,
                             ),
                             const SizedBox(height: 20),
 
-                            // ── Phone Number (read-only) ──
-                            _buildLabel('Phone Number', labelColor),
+                            _buildLabel('Mobile Number', labelColor),
                             const SizedBox(height: 8),
                             _buildLockedField(
-                              value: _phoneNumber.isNotEmpty
-                                  ? _phoneNumber
-                                  : 'Not set',
-                              isDark: isDark,
-                              fieldColor: fieldColor,
-                              borderColor: borderColor,
-                              textColor: textColor,
+                              value: _mobileNumber.isNotEmpty ? _mobileNumber : 'Not set',
+                              isDark: isDark, fieldColor: fieldColor,
+                              borderColor: borderColor, textColor: textColor,
                               iconColor: iconColor,
                             ),
-                            const SizedBox(height: 28),
+                            const SizedBox(height: 20),
 
-                            // ── CDS account info ──
-                            if (_cdsAccount.isNotEmpty)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: red.withOpacity(0.07),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                      color: red.withOpacity(0.2), width: 1),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.account_balance_outlined,
-                                        color: red, size: 16),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        'CDS Account: $_cdsAccount',
-                                        style: TextStyle(
-                                            color: subTextColor,
-                                            fontSize: 12,
-                                            letterSpacing: 0.3),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                            // Transaction type pill
+                            _buildTypeBanner(
+                              label: 'DISBURSEMENT',
+                              color: const Color(0xFFFF7043),
+                              icon: Icons.arrow_upward_rounded,
+                              isDark: isDark,
+                              subColor: subTextColor,
+                            ),
 
                             const SizedBox(height: 80),
                           ],
@@ -292,7 +273,7 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  Top bar
+  //  Widgets
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildTopBar(bool isDark, Color textColor, Color red) {
@@ -316,24 +297,18 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
           ),
           const SizedBox(width: 16),
           Expanded(
-            child: Text(
-              'Withdraw Funds',
-              style: TextStyle(
-                color: textColor,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.3,
-              ),
-            ),
+            child: Text('Withdraw Funds',
+                style: TextStyle(
+                    color: textColor,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.3)),
           ),
-          // Red accent badge
           Container(
-            padding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFFEF5350), Color(0xFFFF7043)],
-              ),
+                  colors: [Color(0xFFEF5350), Color(0xFFFF7043)]),
               borderRadius: BorderRadius.circular(20),
             ),
             child: const Row(
@@ -355,12 +330,7 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  //  Available balance banner
-  // ─────────────────────────────────────────────────────────────
-
-  Widget _buildBalanceBanner(
-      bool isDark, Color red, Color subTextColor) {
+  Widget _buildBalanceBanner(bool isDark, Color red, Color subTextColor) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
@@ -379,10 +349,8 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: red.withOpacity(0.12),
-              shape: BoxShape.circle,
-            ),
+            decoration:
+            BoxDecoration(color: red.withOpacity(0.12), shape: BoxShape.circle),
             child: Icon(Icons.account_balance_wallet_outlined,
                 color: red, size: 18),
           ),
@@ -396,30 +364,25 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
               Text(
                 'P ${_formatAmount(_availableBalance)}',
                 style: TextStyle(
-                  color: isDark ? Colors.white : Colors.black87,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5,
-                ),
+                    color: isDark ? Colors.white : Colors.black87,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5),
               ),
             ],
           ),
           const Spacer(),
           GestureDetector(
-            onTap: () {
-              setState(() {
-                _amountController.text =
-                    _availableBalance.toStringAsFixed(2);
-              });
-            },
+            onTap: () => setState(
+                    () => _amountController.text =
+                    _availableBalance.toStringAsFixed(2)),
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 6),
+              padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: red.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
-                border:
-                Border.all(color: red.withOpacity(0.25), width: 1),
+                border: Border.all(color: red.withOpacity(0.25), width: 1),
               ),
               child: Text('MAX',
                   style: TextStyle(
@@ -434,18 +397,8 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  //  Amount hero card
-  // ─────────────────────────────────────────────────────────────
-
-  Widget _buildAmountHeroCard(
-      bool isDark,
-      Color fieldColor,
-      Color hintColor,
-      Color textColor,
-      Color red,
-      Color redLight,
-      ) {
+  Widget _buildAmountHeroCard(bool isDark, Color fieldColor, Color hintColor,
+      Color textColor, Color red, Color redLight) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -457,14 +410,12 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
               : [const Color(0xFFFFF0F0), const Color(0xFFFAE8E8)],
         ),
         borderRadius: BorderRadius.circular(20),
-        border:
-        Border.all(color: red.withOpacity(0.25), width: 1.2),
+        border: Border.all(color: red.withOpacity(0.25), width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: red.withOpacity(0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
-          ),
+              color: red.withOpacity(0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 6)),
         ],
       ),
       child: Column(
@@ -475,80 +426,62 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: red.withOpacity(0.15),
-                  shape: BoxShape.circle,
-                ),
+                    color: red.withOpacity(0.15), shape: BoxShape.circle),
                 child: Icon(Icons.payments_outlined, color: red, size: 20),
               ),
               const SizedBox(width: 12),
-              Text(
-                'Enter Amount (BWP)',
-                style: TextStyle(
-                  color: isDark ? Colors.white60 : Colors.black54,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              Text('Enter Amount (BWP)',
+                  style: TextStyle(
+                      color: isDark ? Colors.white60 : Colors.black54,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500)),
             ],
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _amountController,
-            keyboardType:
-            const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [
-              FilteringTextInputFormatter.allow(
-                  RegExp(r'^\d+\.?\d{0,2}'))
+              FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))
             ],
             style: TextStyle(
-              color: textColor,
-              fontSize: 36,
-              fontWeight: FontWeight.w300,
-              letterSpacing: 1,
-            ),
+                color: textColor,
+                fontSize: 36,
+                fontWeight: FontWeight.w300,
+                letterSpacing: 1),
             decoration: InputDecoration(
               hintText: '0.00',
               hintStyle: TextStyle(
-                color: hintColor,
-                fontSize: 36,
-                fontWeight: FontWeight.w300,
-              ),
+                  color: hintColor, fontSize: 36, fontWeight: FontWeight.w300),
               prefixText: 'P  ',
               prefixStyle: TextStyle(
-                color: red,
-                fontSize: 28,
-                fontWeight: FontWeight.w500,
-              ),
+                  color: red, fontSize: 28, fontWeight: FontWeight.w500),
               border: InputBorder.none,
               isDense: true,
               contentPadding: EdgeInsets.zero,
             ),
           ),
           const SizedBox(height: 12),
-          // Quick-amount chips
           Wrap(
             spacing: 8,
             children: ['500', '1,000', '2,500', '5,000'].map((amt) {
               return GestureDetector(
-                onTap: () => setState(() =>
-                _amountController.text = amt.replaceAll(',', '')),
+                onTap: () => setState(
+                        () => _amountController.text = amt.replaceAll(',', '')),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: red.withOpacity(0.10),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: red.withOpacity(0.28), width: 1),
+                    border:
+                    Border.all(color: red.withOpacity(0.28), width: 1),
                   ),
-                  child: Text(
-                    'P $amt',
-                    style: TextStyle(
-                      color: red,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  child: Text('P $amt',
+                      style: TextStyle(
+                          color: red,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600)),
                 ),
               );
             }).toList(),
@@ -557,56 +490,6 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────────────────────
-  //  Provider dropdown
-  // ─────────────────────────────────────────────────────────────
-
-  Widget _buildProviderDropdown(
-      bool isDark,
-      Color fieldColor,
-      Color borderColor,
-      Color textColor,
-      Color red,
-      ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      decoration: BoxDecoration(
-        color: fieldColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor, width: 1),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _selectedProvider,
-          isExpanded: true,
-          icon: Icon(Icons.keyboard_arrow_down_rounded,
-              color: isDark ? Colors.white54 : Colors.black38),
-          dropdownColor:
-          isDark ? const Color(0xFF242424) : Colors.white,
-          style: TextStyle(
-              color: textColor,
-              fontSize: 15,
-              fontWeight: FontWeight.w500),
-          items: _providers.map((p) {
-            return DropdownMenuItem(
-              value: p,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Text(p,
-                    style: TextStyle(color: textColor, fontSize: 15)),
-              ),
-            );
-          }).toList(),
-          onChanged: (val) => setState(() => _selectedProvider = val),
-        ),
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  //  Locked / read-only field
-  // ─────────────────────────────────────────────────────────────
 
   Widget _buildLockedField({
     required String value,
@@ -638,42 +521,63 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  //  Label
-  // ─────────────────────────────────────────────────────────────
-
-  Widget _buildLabel(String text, Color color) {
-    return Text(
-      text,
-      style: TextStyle(
-        color: color,
-        fontSize: 13.5,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.2,
+  Widget _buildTypeBanner({
+    required String label,
+    required Color color,
+    required IconData icon,
+    required bool isDark,
+    required Color subColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.2), width: 1),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Transaction Type',
+                  style: TextStyle(color: subColor, fontSize: 11)),
+              const SizedBox(height: 2),
+              Text(label,
+                  style: TextStyle(
+                      color: color,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5)),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  //  Bottom buttons
-  // ─────────────────────────────────────────────────────────────
+  Widget _buildLabel(String text, Color color) {
+    return Text(text,
+        style: TextStyle(
+            color: color,
+            fontSize: 13.5,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2));
+  }
 
   Widget _buildBottomButtons(
-      bool isDark,
-      Color surfaceColor,
-      Color red,
-      Color redLight,
-      ) {
+      bool isDark, Color surfaceColor, Color red, Color redLight) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
       decoration: BoxDecoration(
         color: surfaceColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.4 : 0.08),
-            blurRadius: 20,
-            offset: const Offset(0, -6),
-          ),
+              color: Colors.black.withOpacity(isDark ? 0.4 : 0.08),
+              blurRadius: 20,
+              offset: const Offset(0, -6)),
         ],
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(24),
@@ -682,7 +586,6 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
       ),
       child: Row(
         children: [
-          // Close
           Expanded(
             child: GestureDetector(
               onTap: () => Navigator.pop(context),
@@ -694,28 +597,22 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
                       : Colors.black.withOpacity(0.05),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: isDark
-                        ? Colors.white.withOpacity(0.12)
-                        : Colors.black.withOpacity(0.1),
-                    width: 1,
-                  ),
+                      color: isDark
+                          ? Colors.white.withOpacity(0.12)
+                          : Colors.black.withOpacity(0.1),
+                      width: 1),
                 ),
                 alignment: Alignment.center,
-                child: Text(
-                  'CLOSE',
-                  style: TextStyle(
-                    color: isDark ? Colors.white70 : Colors.black54,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2,
-                  ),
-                ),
+                child: Text('CLOSE',
+                    style: TextStyle(
+                        color: isDark ? Colors.white70 : Colors.black54,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.2)),
               ),
             ),
           ),
           const SizedBox(width: 12),
-
-          // Withdraw
           Expanded(
             flex: 2,
             child: GestureDetector(
@@ -735,37 +632,30 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
                       ? []
                       : [
                     BoxShadow(
-                      color: red.withOpacity(0.40),
-                      blurRadius: 16,
-                      offset: const Offset(0, 5),
-                    ),
+                        color: red.withOpacity(0.40),
+                        blurRadius: 16,
+                        offset: const Offset(0, 5)),
                   ],
                 ),
                 alignment: Alignment.center,
                 child: _isLoading
                     ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: Colors.white,
-                  ),
-                )
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.5, color: Colors.white))
                     : const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(Icons.arrow_upward_rounded,
                         color: Colors.white, size: 20),
                     SizedBox(width: 6),
-                    Text(
-                      'WITHDRAW',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.4,
-                      ),
-                    ),
+                    Text('WITHDRAW',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.4)),
                   ],
                 ),
               ),
