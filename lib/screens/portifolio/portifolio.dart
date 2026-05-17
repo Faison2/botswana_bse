@@ -280,7 +280,10 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
         body: jsonEncode({'CDSNumber': cdsNumber}),
       );
 
-
+      debugPrint('=== Portfolio API Response ===');
+      debugPrint('Status: ${response.statusCode}');
+      debugPrint('Body: ${response.body}');
+      debugPrint('==============================');
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
@@ -404,6 +407,9 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
         headers: headers,
         body: jsonEncode({'CDSNumber': cdsNumber}),
       );
+      debugPrint('Orders Status: ${response.statusCode}');
+      debugPrint('Orders Body: ${response.body}');
+      debugPrint('===========================');
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
