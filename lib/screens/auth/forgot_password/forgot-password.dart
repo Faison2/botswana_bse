@@ -11,7 +11,7 @@ class PasswordResetService {
   static Future<Map<String, dynamic>> requestPasswordReset(String email) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/RequestPasswordReset'),
+        Uri.parse('$baseUrl/Authentication/RequestPasswordReset'),
         headers: {
           'Content-Type': 'application/json',
         },
@@ -49,7 +49,7 @@ class PasswordResetService {
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/VerifyOTPAndResetPassword'),
+        Uri.parse('$baseUrl/Authentication/VerifyOTPAndResetPassword'),
         headers: {
           'Content-Type': 'application/json',
         },

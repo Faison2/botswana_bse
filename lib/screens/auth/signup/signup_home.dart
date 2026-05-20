@@ -1214,9 +1214,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         'Employment Status',
                         _selectedEmploymentStatus,
                         [
-                          'Full-time',
-                          'Part-time',
-                          'Self-employed',
+                          'Student',
+                          'Employed',
                           'Unemployed'
                         ],
                             (val) => setState(

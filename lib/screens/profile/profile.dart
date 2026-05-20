@@ -21,65 +21,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _email = '';
   String _fullName = '';
   String _phoneNumber = '';
-  String _cvNumber = '';        // ← renamed from _cdsNumber
+  String _cvNumber = '';
   String _status = '';
   String _lastLoginDate = '';
   String _dateCreated = '';
   String _token = '';
 
-  // Broker data
+  // ← NEW fields from API response
+  String _cdsAccountNumber = '';
+  String _employmentStatus = '';
+
+  // Brokers now come from the profile response
   List<Map<String, dynamic>> _brokersList = [];
-  bool _isLoadingBrokers = false;
 
   @override
   void initState() {
     super.initState();
     _loadProfileData();
-    _fetchBrokers();
-  }
-
-  Future<void> _fetchBrokers() async {
-    setState(() {
-      _isLoadingBrokers = true;
-    });
-
-    try {
-      final response = await http.get(
-        Uri.parse('https://zamagm.escrowagm.com/MainAPI/Home/getAllBrokers'),
-        headers: {'Content-Type': 'application/json'},
-      ).timeout(const Duration(seconds: 30));
-
-      if (response.statusCode == 200) {
-        final responseData = jsonDecode(response.body);
-
-        if (responseData is List) {
-          setState(() {
-            _brokersList = List<Map<String, dynamic>>.from(responseData);
-            _isLoadingBrokers = false;
-          });
-        } else if (responseData is Map && responseData.containsKey('brokers')) {
-          setState(() {
-            _brokersList =
-            List<Map<String, dynamic>>.from(responseData['brokers']);
-            _isLoadingBrokers = false;
-          });
-        } else {
-          setState(() {
-            _isLoadingBrokers = false;
-          });
-        }
-      } else {
-        setState(() {
-          _isLoadingBrokers = false;
-        });
-        _showSnackBar('Failed to load brokers', Colors.red);
-      }
-    } catch (e) {
-      setState(() {
-        _isLoadingBrokers = false;
-      });
-      _showSnackBar('Error loading brokers: $e', Colors.red);
-    }
   }
 
   Future<void> _loadProfileData() async {
@@ -111,12 +69,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
         if (responseData['responseCode'] == 200) {
           final phoneNumber = responseData['phoneNumber'] ?? '';
-          // cvNumber is the username stored in SharedPreferences at login
           final cvNumber = responseData['username'] ?? '';
 
-          // Save to SharedPreferences for use in other screens
-          final prefs = await SharedPreferences.getInstance();
           await prefs.setString('phoneNumber', phoneNumber);
+
+          // ← Extract brokers list from profile response
+          List<Map<String, dynamic>> brokers = [];
+          if (responseData['brokers'] != null &&
+              responseData['brokers'] is List) {
+            brokers = List<Map<String, dynamic>>.from(
+                responseData['brokers']);
+          }
 
           setState(() {
             _userId = responseData['userId'] ?? '';
@@ -124,10 +87,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _email = responseData['email'] ?? '';
             _fullName = responseData['fullName'] ?? '';
             _phoneNumber = phoneNumber;
-            _cvNumber = cvNumber;                              // ← renamed
+            _cvNumber = cvNumber;
             _status = responseData['status'] ?? '';
             _lastLoginDate = responseData['lastLoginDate'] ?? '';
             _dateCreated = responseData['dateCreated'] ?? '';
+
+            // ← NEW
+            _cdsAccountNumber =
+                responseData['csdAccountNumber'] ?? '';
+            _employmentStatus =
+                responseData['employmentStatus'] ?? '';
+
+            _brokersList = brokers;
             _isLoading = false;
           });
         } else {
@@ -156,7 +127,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? '';
 
-      if (_cvNumber.isEmpty) {                               // ← renamed
+      if (_cvNumber.isEmpty) {
         _showSnackBar('CV Number not available', Colors.red);
         return;
       }
@@ -168,7 +139,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
-          'CvNumber': _cvNumber,                             // ← renamed key
+          'CvNumber': _cvNumber,
           'BrokerCode': brokerCode,
         }),
       ).timeout(const Duration(seconds: 30));
@@ -254,7 +225,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 // CV Number Display
                 Text(
-                  'CV Number',                               // ← renamed label
+                  'CV Number',
                   style: TextStyle(
                     color: isDark ? Colors.white70 : Colors.black87,
                     fontSize: 14,
@@ -272,7 +243,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    _cvNumber.isEmpty ? 'Not available' : _cvNumber, // ← renamed
+                    _cvNumber.isEmpty ? 'Not available' : _cvNumber,
                     style: TextStyle(
                       color: _cvNumber.isEmpty
                           ? Colors.grey
@@ -283,7 +254,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // Broker Dropdown
+                // Broker List — each as a tappable tile
                 Text(
                   'Select Broker',
                   style: TextStyle(
@@ -293,76 +264,152 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF3C3C3C)
-                        : Colors.grey[200],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: _isLoadingBrokers
-                      ? const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Center(
-                      child: SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.amber),
-                        ),
-                      ),
-                    ),
-                  )
-                      : DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      isExpanded: true,
-                      hint: Text(
-                        'Select a broker',
-                        style: TextStyle(
-                          color: isDark
-                              ? Colors.white54
-                              : Colors.black54,
-                        ),
-                      ),
-                      value: selectedBrokerCode,
-                      dropdownColor: isDark
-                          ? const Color(0xFF3C3C3C)
-                          : Colors.white,
-                      style: TextStyle(
-                        color: isDark ? Colors.white : Colors.black87,
-                        fontSize: 16,
-                      ),
-                      icon: Icon(
-                        Icons.keyboard_arrow_down,
-                        color: isDark ? Colors.white70 : Colors.black87,
-                      ),
-                      items: _brokersList.map((broker) {
-                        String brokerName =
-                            broker['fnam']?.toString() ??
-                                'Unknown Broker';
-                        String brokerCode =
-                            broker['broker_code']?.toString() ?? '';
 
-                        return DropdownMenuItem<String>(
-                          value: brokerCode,
-                          child: Text(
-                            '$brokerName ($brokerCode)',
-                            overflow: TextOverflow.ellipsis,
+                // ← Replaced DropdownButton with a list of tiles
+                //   Active brokers are grayed out and non-tappable
+                ..._brokersList.map((broker) {
+                  final brokerName =
+                      broker['brokerName']?.toString() ?? 'Unknown Broker';
+                  final brokerCode =
+                      broker['brokerCode']?.toString() ?? '';
+                  final brokerStatus =
+                  (broker['status']?.toString() ?? '').toUpperCase();
+                  final cdsAccount =
+                      broker['CDSAccount']?.toString() ?? '';
+                  final isActive = brokerStatus == 'ACTIVE';
+                  final isSelected = selectedBrokerCode == brokerCode;
+
+                  return GestureDetector(
+                    // ← Disable tap for ACTIVE brokers
+                    onTap: isActive
+                        ? null
+                        : () {
+                      setDialogState(() {
+                        selectedBrokerCode = brokerCode;
+                      });
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        // ← Gray background for ACTIVE, highlight for selected
+                        color: isActive
+                            ? (isDark
+                            ? const Color(0xFF2A2A2A)
+                            : Colors.grey[100])
+                            : isSelected
+                            ? const Color(0xFFD4A855).withOpacity(0.15)
+                            : (isDark
+                            ? const Color(0xFF3C3C3C)
+                            : Colors.grey[200]),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isActive
+                              ? Colors.grey.withOpacity(0.3)
+                              : isSelected
+                              ? const Color(0xFFD4A855)
+                              : Colors.transparent,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          // Selection indicator
+                          Icon(
+                            isSelected
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_off,
+                            color: isActive
+                                ? Colors.grey.withOpacity(0.4)
+                                : isSelected
+                                ? const Color(0xFFD4A855)
+                                : (isDark
+                                ? Colors.white38
+                                : Colors.black38),
+                            size: 20,
                           ),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        setDialogState(() {
-                          selectedBrokerCode = value;
-                        });
-                      },
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  brokerName,
+                                  style: TextStyle(
+                                    // ← Gray text for ACTIVE
+                                    color: isActive
+                                        ? Colors.grey.withOpacity(0.5)
+                                        : (isDark
+                                        ? Colors.white
+                                        : Colors.black87),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                if (cdsAccount.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'CDS: $cdsAccount',
+                                    style: TextStyle(
+                                      color: isActive
+                                          ? Colors.grey.withOpacity(0.4)
+                                          : (isDark
+                                          ? Colors.white54
+                                          : Colors.black54),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                                Text(
+                                  brokerCode,
+                                  style: TextStyle(
+                                    color: isActive
+                                        ? Colors.grey.withOpacity(0.4)
+                                        : (isDark
+                                        ? Colors.white38
+                                        : Colors.black38),
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Status badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isActive
+                                  ? Colors.grey.withOpacity(0.15)
+                                  : Colors.orange.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: isActive
+                                    ? Colors.grey.withOpacity(0.3)
+                                    : Colors.orange.withOpacity(0.4),
+                              ),
+                            ),
+                            child: Text(
+                              brokerStatus,
+                              style: TextStyle(
+                                color: isActive
+                                    ? Colors.grey
+                                    : Colors.orange,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 20),
+                  );
+                }),
+
+                const SizedBox(height: 10),
 
                 // Info Note
                 Container(
@@ -416,7 +463,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             ElevatedButton(
-              onPressed: selectedBrokerCode == null || _cvNumber.isEmpty // ← renamed
+              onPressed: selectedBrokerCode == null || _cvNumber.isEmpty
                   ? null
                   : () => _linkBroker(selectedBrokerCode!),
               style: ElevatedButton.styleFrom(
@@ -585,7 +632,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           const SizedBox(height: 20),
 
-          // Name
           Text(
             _fullName,
             style: TextStyle(
@@ -597,7 +643,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           const SizedBox(height: 8),
 
-          // Status Badge
           Container(
             padding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -620,6 +665,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           const SizedBox(height: 30),
 
+          // ── Personal Info Card ──────────────────────────────
           _buildCard(isDark, [
             _buildDetailRow("User ID", _userId, isDark),
             _spacer(),
@@ -632,14 +678,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _phoneNumber.isEmpty ? 'Not provided' : _phoneNumber,
                 isDark),
             _spacer(),
-            _buildDetailRow(                                   // ← renamed label
+            _buildDetailRow(
                 "ACC Number",
                 _cvNumber.isEmpty ? 'Not provided' : _cvNumber,
+                isDark),
+            _spacer(),
+            // ← NEW: CDS Account from API
+            _buildDetailRow(
+                "CDS Account",
+                _cdsAccountNumber.isEmpty
+                    ? 'Not provided'
+                    : _cdsAccountNumber,
+                isDark),
+            _spacer(),
+            // ← NEW: Employment Status from API
+            _buildDetailRow(
+                "Employment Status",
+                _employmentStatus.isEmpty
+                    ? 'Not provided'
+                    : _employmentStatus,
                 isDark),
           ]),
 
           const SizedBox(height: 20),
 
+          // ── Account Info Card ───────────────────────────────
           _buildCard(isDark, [
             Text(
               "Account Information",
@@ -652,12 +715,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _spacer(),
             _buildDetailRow("Account Created", _dateCreated, isDark),
             _spacer(),
-            _buildDetailRow("Last Login", _lastLoginDate, isDark),
+            // ← Already present — now properly populated
+            _buildDetailRow(
+                "Last Login",
+                _lastLoginDate.isEmpty ? 'Not available' : _lastLoginDate,
+                isDark),
           ]),
 
           const SizedBox(height: 30),
 
-          // Broker Link Button
           _buildActionButton(
             "Link Broker",
             Icons.link,
@@ -668,14 +734,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           const SizedBox(height: 12),
 
-          // Logout Button
           _buildActionButton(
             "Logout",
             Icons.logout,
             Colors.red,
-                () {
-              _showLogoutDialog(isDark);
-            },
+                () => _showLogoutDialog(isDark),
             isDark,
           ),
 
