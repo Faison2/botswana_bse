@@ -21,6 +21,7 @@ class _TransactionsScreensState extends State<TransactionsScreens>
   double  _lockedInOpenOrders = 0.0;
   bool    _isLoadingBalance   = false;
   bool    _isLoadingTx        = false;
+  String? _balanceError;
   String? _txError;
   String  _cdsAccount  = '';
   String  _brokerCode  = '';
@@ -38,8 +39,7 @@ class _TransactionsScreensState extends State<TransactionsScreens>
       vsync: this,
       duration: const Duration(milliseconds: 480),
     );
-    _fadeAnim = CurvedAnimation(
-        parent: _animController, curve: Curves.easeOut);
+    _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
     _animController.forward();
     _bootstrap();
   }
@@ -48,12 +48,13 @@ class _TransactionsScreensState extends State<TransactionsScreens>
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _cdsAccount         = prefs.getString('CDSAccount') ?? '';
-      _brokerCode         = prefs.getString('BrokerCode') ?? '';
-      _totalCashBalance   = prefs.getDouble('cachedCashBalance') ?? 0.0;
-      _lockedInOpenOrders = prefs.getDouble('cachedLockedBalance') ?? 0.0;
+      _cdsAccount         = prefs.getString('CDSAccount')  ?? '';
+      _brokerCode         = prefs.getString('BrokerCode')  ?? '';
+      _totalCashBalance   = prefs.getDouble('cachedCashBalance')   ?? 0.0;
+      _lockedInOpenOrders = prefs.getDouble('cachedLockedBalance')  ?? 0.0;
     });
-    await _fetchTransactions();
+    // Run both calls in parallel
+    await Future.wait([_fetchBalance(), _fetchTransactions()]);
   }
 
   @override
@@ -63,27 +64,22 @@ class _TransactionsScreensState extends State<TransactionsScreens>
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  API – Transactions (GET with query param)
+  //  API 1 – Wallet balance
   // ─────────────────────────────────────────────────────────────
 
-  Future<void> _fetchTransactions() async {
+  Future<void> _fetchBalance() async {
     if (!mounted) return;
     setState(() {
       _isLoadingBalance = true;
-      _isLoadingTx      = true;
-      _txError          = null;
+      _balanceError     = null;
     });
 
     try {
-      final prefs  = await SharedPreferences.getInstance();
-      final token  = prefs.getString('token') ?? '';
-      final cds    = _cdsAccount.isNotEmpty
-          ? _cdsAccount
-          : (prefs.getString('CDSAccount') ?? '');
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
 
       final uri = Uri.parse(
-        'https://zamagm.escrowagm.com/MainAPI/Home/GetMyRecentTransactions'
-            '?cdsNumber=${Uri.encodeComponent(cds)}',
+        'https://zamagm.escrowagm.com/MainAPI/Home/GetMainWalletBalance',
       );
 
       final response = await http.get(
@@ -99,50 +95,107 @@ class _TransactionsScreensState extends State<TransactionsScreens>
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
 
-        final balance = double.tryParse(
-            data['totalAccountBalance']?.toString() ?? '0') ??
-            0.0;
-        final locked = double.tryParse(
-            data['lockedInOpenOrders']?.toString() ?? '0') ??
-            0.0;
+        if (data['responseCode'] == 0) {
+          final balance = double.tryParse(
+              data['mainWalletBalance']?.toString() ?? '0') ?? 0.0;
+          final locked  = double.tryParse(
+              data['totalLockedInOpenOrders']?.toString() ?? '0') ?? 0.0;
 
-        await prefs.setDouble('cachedCashBalance', balance);
-        await prefs.setDouble('cachedLockedBalance', locked);
+          await prefs.setDouble('cachedCashBalance',  balance);
+          await prefs.setDouble('cachedLockedBalance', locked);
 
-        final raw = (data['transactions'] as List<dynamic>? ?? []);
-        final txList = raw.whereType<Map>().map((item) {
-          return <String, dynamic>{
-            'reference':    item['reference']?.toString()      ?? 'N/A',
-            'provider':     item['provider']?.toString()       ?? '-',
-            'source':       item['source']?.toString()         ?? '-',
-            'status':       item['status']?.toString()         ?? 'UNKNOWN',
-            'type':         item['transactionType']?.toString() ?? '-',
-            'amount': double.tryParse(
-                item['amount']?.toString() ?? '0') ??
-                0.0,
-            'currency':     item['currency']?.toString()       ?? 'BWP',
-            'date':         item['createdAt']?.toString()      ?? 'N/A',
-          };
-        }).toList();
+          if (mounted) {
+            setState(() {
+              _totalCashBalance   = balance;
+              _lockedInOpenOrders = locked;
+            });
+          }
+        } else {
+          setState(() => _balanceError = 'Could not load balance');
+        }
+      } else {
+        setState(() => _balanceError = 'Balance error ${response.statusCode}');
+      }
+    } catch (e) {
+      if (mounted) setState(() => _balanceError = 'Could not load balance');
+    } finally {
+      if (mounted) setState(() => _isLoadingBalance = false);
+    }
+  }
 
-        setState(() {
-          _totalCashBalance   = balance;
-          _lockedInOpenOrders = locked;
-          _transactions       = txList;
-        });
+  // ─────────────────────────────────────────────────────────────
+  //  API 2 – Transactions
+  // ─────────────────────────────────────────────────────────────
+
+  Future<void> _fetchTransactions() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoadingTx = true;
+      _txError     = null;
+    });
+
+    try {
+      final prefs      = await SharedPreferences.getInstance();
+      final token      = prefs.getString('token') ?? '';
+      final brokerCode = _brokerCode.isNotEmpty
+          ? _brokerCode
+          : (prefs.getString('BrokerCode') ?? '');
+
+      final uri = Uri.parse(
+        'https://zamagm.escrowagm.com/MainAPI/Home/GetMyRecentTransactions'
+            '?brokerCode=${Uri.encodeComponent(brokerCode)}&limit=20',
+      );
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 30));
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+        // responseCode 0 = success for this API
+        if (data['responseCode'] == 0) {
+          final raw = (data['transactions'] as List<dynamic>? ?? []);
+          final txList = raw.whereType<Map>().map((item) {
+            return <String, dynamic>{
+              'reference': item['reference']?.toString()       ?? 'N/A',
+              'provider':  item['provider']?.toString()        ?? '-',
+              'source':    item['source']?.toString()          ?? '-',
+              'status':    item['status']?.toString()          ?? 'UNKNOWN',
+              'type':      item['transactionType']?.toString() ?? '-',
+              'amount': double.tryParse(
+                  item['amount']?.toString() ?? '0') ?? 0.0,
+              'currency':  item['currency']?.toString()        ?? 'BWP',
+              'date':      item['createdAt']?.toString()       ?? 'N/A',
+            };
+          }).toList();
+
+          if (mounted) setState(() => _transactions = txList);
+        } else {
+          setState(() => _txError = 'No transactions available');
+        }
       } else {
         setState(() => _txError = 'Server error ${response.statusCode}');
       }
     } catch (e) {
       if (mounted) setState(() => _txError = 'Could not load transactions');
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoadingBalance = false;
-          _isLoadingTx      = false;
-        });
-      }
+      if (mounted) setState(() => _isLoadingTx = false);
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  Refresh both
+  // ─────────────────────────────────────────────────────────────
+
+  Future<void> _refresh() async {
+    await Future.wait([_fetchBalance(), _fetchTransactions()]);
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -153,11 +206,10 @@ class _TransactionsScreensState extends State<TransactionsScreens>
       .toStringAsFixed(2)
       .replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+\.)'), (m) => '${m[1]},');
 
-  /// Formats "2026-04-23 14:00:00" → "23 Apr, 14:00"
   String _formatDate(String raw) {
     try {
       final dt = DateTime.parse(raw.replaceFirst(' ', 'T'));
-      final months = [
+      const months = [
         '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
       ];
@@ -171,19 +223,42 @@ class _TransactionsScreensState extends State<TransactionsScreens>
 
   Color _statusColor(String status) {
     switch (status.toUpperCase()) {
-      case 'SUCCESSFUL': return const Color(0xFF4CAF50);
-      case 'FAILED':     return const Color(0xFFEF5350);
-      case 'PAUSED':     return const Color(0xFFFFB300);
-      default:           return Colors.grey;
+      case 'SUCCESSFUL':
+        return const Color(0xFF4CAF50);
+      case 'FAILED':
+        return const Color(0xFFEF5350);
+      case 'REJECTED':
+        return const Color(0xFFE53935);
+      case 'PENDING':
+        return const Color(0xFFFFB300);
+      case 'PAUSED':
+        return const Color(0xFFFFB300);
+      default:
+      // Catches long strings like "INSUFFICIENT BALANCE OR DAILY LIMIT REACHED"
+        if (status.toUpperCase().contains('INSUFFICIENT') ||
+            status.toUpperCase().contains('LIMIT')) {
+          return const Color(0xFFFF7043);
+        }
+        return Colors.grey;
     }
+  }
+
+  /// Short label for statuses that are too long to fit in the badge
+  String _statusLabel(String status) {
+    final upper = status.toUpperCase();
+    if (upper.contains('INSUFFICIENT') || upper.contains('LIMIT')) {
+      return 'LIMIT HIT';
+    }
+    return upper;
   }
 
   Color _typeColor(String type) {
     switch (type.toUpperCase()) {
-      case 'COLLECTION': return const Color(0xFF29B6F6);
-      case 'DISBURSEMENT': return const Color(0xFFFF7043);
-      case 'DEPOSIT':    return const Color(0xFF4CAF50);
-      default:           return Colors.grey;
+      case 'DEPOSIT':      return const Color(0xFF4CAF50);
+      case 'WITHDRAWAL':   return const Color(0xFFFF7043);
+      case 'COLLECTION':   return const Color(0xFF29B6F6);
+      case 'DISBURSEMENT': return const Color(0xFFAB47BC);
+      default:             return Colors.grey;
     }
   }
 
@@ -195,13 +270,12 @@ class _TransactionsScreensState extends State<TransactionsScreens>
   Widget build(BuildContext context) {
     return Consumer<ThemeProvider>(
       builder: (context, themeProvider, _) {
-        final isDark = themeProvider.isDarkMode;
-
-        final bgColor      = isDark ? const Color(0xFF0D0D0D) : const Color(0xFFF5F5F5);
-        final borderColor  = isDark ? const Color(0xFF2E2E2E) : const Color(0xFFE0E0E0);
-        final textColor    = isDark ? Colors.white            : Colors.black87;
-        final subColor     = isDark ? Colors.white38          : Colors.black38;
-        const goldLight    = Color(0xFFFFB300);
+        final isDark      = themeProvider.isDarkMode;
+        final bgColor     = isDark ? const Color(0xFF0D0D0D) : const Color(0xFFF5F5F5);
+        final borderColor = isDark ? const Color(0xFF2E2E2E) : const Color(0xFFE0E0E0);
+        final textColor   = isDark ? Colors.white            : Colors.black87;
+        final subColor    = isDark ? Colors.white38          : Colors.black38;
+        const goldLight   = Color(0xFFFFB300);
 
         return Scaffold(
           backgroundColor: bgColor,
@@ -214,26 +288,22 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                   Expanded(
                     child: RefreshIndicator(
                       color: goldLight,
-                      onRefresh: _fetchTransactions,
+                      onRefresh: _refresh,
                       child: ListView(
                         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                         children: [
-                          // ── Balance card ──
                           _buildBalanceCard(),
                           const SizedBox(height: 20),
 
-                          // ── Account info row ──
                           if (_cdsAccount.isNotEmpty || _brokerCode.isNotEmpty)
                             _buildAccountInfoRow(isDark, textColor, subColor),
                           if (_cdsAccount.isNotEmpty || _brokerCode.isNotEmpty)
                             const SizedBox(height: 20),
 
-                          // ── Table header ──
                           _buildTableHeader(isDark, textColor),
                           Divider(color: borderColor, height: 1),
                           const SizedBox(height: 4),
 
-                          // ── Rows ──
                           _buildTransactionRows(
                               isDark, borderColor, textColor, subColor),
                         ],
@@ -282,9 +352,8 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.3)),
           ),
-          // Refresh button
           GestureDetector(
-            onTap: _fetchTransactions,
+            onTap: _refresh,
             child: Container(
               padding: const EdgeInsets.all(9),
               decoration: BoxDecoration(
@@ -293,7 +362,7 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                     : Colors.black.withOpacity(0.05),
                 shape: BoxShape.circle,
               ),
-              child: _isLoadingTx
+              child: (_isLoadingTx || _isLoadingBalance)
                   ? const SizedBox(
                   width: 20,
                   height: 20,
@@ -333,11 +402,10 @@ class _TransactionsScreensState extends State<TransactionsScreens>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Label + loading
           Row(
             children: [
               const Expanded(
-                child: Text('Total Account Balance',
+                child: Text('Main Wallet Balance',
                     style: TextStyle(
                         color: Colors.white70,
                         fontSize: 14,
@@ -353,19 +421,23 @@ class _TransactionsScreensState extends State<TransactionsScreens>
           ),
           const SizedBox(height: 14),
 
-          // Main amount
-          Text(
-            'BWP ${_formatAmount(_totalCashBalance)}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 36,
-              fontWeight: FontWeight.w300,
-              letterSpacing: 0.5,
+          // Show error or amount
+          if (_balanceError != null)
+            Text(_balanceError!,
+                style: const TextStyle(color: Colors.white54, fontSize: 14))
+          else
+            Text(
+              'BWP ${_formatAmount(_totalCashBalance)}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 36,
+                fontWeight: FontWeight.w300,
+                letterSpacing: 0.5,
+              ),
             ),
-          ),
+
           const SizedBox(height: 12),
 
-          // Locked in open orders
           Row(
             children: [
               const Icon(Icons.lock_outline_rounded,
@@ -386,11 +458,10 @@ class _TransactionsScreensState extends State<TransactionsScreens>
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  Account info row (CDS + Broker)
+  //  Account info row
   // ─────────────────────────────────────────────────────────────
 
-  Widget _buildAccountInfoRow(
-      bool isDark, Color textColor, Color subColor) {
+  Widget _buildAccountInfoRow(bool isDark, Color textColor, Color subColor) {
     final chipBg = isDark
         ? Colors.white.withOpacity(0.07)
         : Colors.black.withOpacity(0.04);
@@ -432,7 +503,7 @@ class _TransactionsScreensState extends State<TransactionsScreens>
 
     return Row(
       children: [
-        chip(Icons.credit_card_rounded, 'CDS Account', _cdsAccount),
+        chip(Icons.credit_card_rounded,  'CDS Account', _cdsAccount),
         const SizedBox(width: 10),
         chip(Icons.business_rounded, 'Broker Code', _brokerCode),
       ],
@@ -450,7 +521,6 @@ class _TransactionsScreensState extends State<TransactionsScreens>
       fontWeight: FontWeight.w700,
       letterSpacing: 0.2,
     );
-
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
@@ -470,12 +540,7 @@ class _TransactionsScreensState extends State<TransactionsScreens>
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildTransactionRows(
-      bool isDark,
-      Color borderColor,
-      Color textColor,
-      Color subColor,
-      ) {
-    // Loading
+      bool isDark, Color borderColor, Color textColor, Color subColor) {
     if (_isLoadingTx && _transactions.isEmpty) {
       return const Padding(
         padding: EdgeInsets.only(top: 60),
@@ -483,7 +548,6 @@ class _TransactionsScreensState extends State<TransactionsScreens>
       );
     }
 
-    // Error
     if (_txError != null && _transactions.isEmpty) {
       return Padding(
         padding: const EdgeInsets.only(top: 60),
@@ -491,8 +555,7 @@ class _TransactionsScreensState extends State<TransactionsScreens>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.error_outline,
-                  color: Colors.red.shade300, size: 40),
+              Icon(Icons.error_outline, color: Colors.red.shade300, size: 40),
               const SizedBox(height: 10),
               Text(_txError!,
                   style: TextStyle(color: subColor, fontSize: 13),
@@ -510,7 +573,6 @@ class _TransactionsScreensState extends State<TransactionsScreens>
       );
     }
 
-    // Empty
     if (_transactions.isEmpty) {
       return Padding(
         padding: const EdgeInsets.only(top: 60),
@@ -552,6 +614,14 @@ class _TransactionsScreensState extends State<TransactionsScreens>
 
     final statusColor = _statusColor(status);
     final typeColor   = _typeColor(type);
+    final statusLabel = _statusLabel(status);
+
+    // Amount colour: green for deposits, red/orange for withdrawals
+    final amountColor = type.toUpperCase() == 'DEPOSIT'
+        ? const Color(0xFF4CAF50)
+        : type.toUpperCase() == 'WITHDRAWAL'
+        ? const Color(0xFFFF7043)
+        : textColor;
 
     return Column(
       children: [
@@ -565,8 +635,7 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                 flex: 2,
                 child: Text(
                   _formatDate(tx['date'] as String),
-                  style: TextStyle(
-                      color: subColor, fontSize: 11, height: 1.4),
+                  style: TextStyle(color: subColor, fontSize: 11, height: 1.4),
                 ),
               ),
 
@@ -596,7 +665,7 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      type,
+                      type.isEmpty ? '-' : type,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                           color: typeColor,
@@ -620,8 +689,10 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      status,
+                      statusLabel,
                       textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                           color: statusColor,
                           fontSize: 10,
@@ -639,7 +710,7 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                   '$currency\n${_formatAmount(amount)}',
                   textAlign: TextAlign.right,
                   style: TextStyle(
-                      color: textColor,
+                      color: amountColor,
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                       height: 1.4),

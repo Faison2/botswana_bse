@@ -57,14 +57,17 @@ class _DepositScreenState extends State<DepositScreen>
     super.dispose();
   }
 
-  // ── Reference ID ──
+  // ── Reference ID: timestamp-based, unique per transaction ──
 
-  Future<String> _nextReferenceID() async {
-    final prefs   = await SharedPreferences.getInstance();
-    final current = prefs.getInt('lastReferenceID') ?? 79;
-    final next    = current + 1;
-    await prefs.setInt('lastReferenceID', next);
-    return next.toString().padLeft(5, '0');
+  String _generateReferenceID() {
+    final now = DateTime.now();
+    final yy  = now.year.toString();
+    final mo  = now.month.toString().padLeft(2, '0');
+    final dd  = now.day.toString().padLeft(2, '0');
+    final hh  = now.hour.toString().padLeft(2, '0');
+    final mm  = now.minute.toString().padLeft(2, '0');
+    final ss  = now.second.toString().padLeft(2, '0');
+    return '$yy$mo$dd$hh$mm$ss'; // e.g. 20260521143022
   }
 
   // ── Submit ──
@@ -72,10 +75,12 @@ class _DepositScreenState extends State<DepositScreen>
   Future<void> _submitDeposit() async {
     final amount = _amountController.text.trim();
     if (amount.isEmpty) {
-      _showSnack('Please enter an amount', isError: true); return;
+      _showSnack('Please enter an amount', isError: true);
+      return;
     }
     if (double.tryParse(amount) == null || double.parse(amount) <= 0) {
-      _showSnack('Please enter a valid amount', isError: true); return;
+      _showSnack('Please enter a valid amount', isError: true);
+      return;
     }
 
     setState(() => _isLoading = true);
@@ -83,21 +88,22 @@ class _DepositScreenState extends State<DepositScreen>
     try {
       final prefs       = await SharedPreferences.getInstance();
       final token       = prefs.getString('token') ?? '';
-      final referenceID = await _nextReferenceID();
+      final referenceID = _generateReferenceID();
 
       final response = await http.post(
-        Uri.parse('http://192.168.3.201/mainapi/home/MascomTransactions'),
+        Uri.parse('https://zamagm.escrowagm.com/MainAPI/Home/MascomTransactions'),
         headers: {
           'Content-Type': 'application/json',
           if (token.isNotEmpty) 'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
-          'Amount':          amount,
-          'ReferenceID':     referenceID,
-          'CDSNumber':       _cdsAccount,
-          'TransactionType': 'COLLECTION',
-          'MobileNumber':    _mobileNumber,
-          'BrokerCode':      _brokerCode,
+          'IncomingTransaction': {
+            'MobileNumber':    _mobileNumber,
+            'Amount':          amount,
+            'ReferenceID':     referenceID,
+            'TransactionType': 'COLLECTION',
+            'BrokerCode':      _brokerCode,
+          },
         }),
       ).timeout(const Duration(seconds: 30));
 
@@ -105,11 +111,14 @@ class _DepositScreenState extends State<DepositScreen>
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
-        final data    = decoded is List ? decoded.first as Map : decoded as Map;
+        // Response is always a list — grab the first element
+        final data = decoded is List
+            ? decoded.first as Map<String, dynamic>
+            : decoded as Map<String, dynamic>;
+
         if (data['responseCode'] == 0) {
           _showSnack(
-            data['responseMessage'] ??
-                'Transaction submitted, please check prompt on your mobile',
+            data['responseMessage'] ?? 'Deposit submitted successfully',
             isError: false,
           );
           Future.delayed(const Duration(milliseconds: 2000), () {
@@ -156,7 +165,6 @@ class _DepositScreenState extends State<DepositScreen>
         final textColor    = isDark ? Colors.white            : Colors.black87;
         final hintColor    = isDark ? Colors.white30          : Colors.black26;
         final iconColor    = isDark ? Colors.white38          : Colors.black26;
-        final subTextColor = isDark ? Colors.white38          : Colors.black38;
         const gold         = Color(0xFFB8860B);
         const goldLight    = Color(0xFFFFB300);
 
@@ -184,8 +192,11 @@ class _DepositScreenState extends State<DepositScreen>
                             const SizedBox(height: 8),
                             _buildLockedField(
                               value: _cdsAccount.isNotEmpty ? _cdsAccount : 'Not set',
-                              isDark: isDark, fieldColor: fieldColor,
-                              borderColor: borderColor, textColor: textColor, iconColor: iconColor,
+                              isDark: isDark,
+                              fieldColor: fieldColor,
+                              borderColor: borderColor,
+                              textColor: textColor,
+                              iconColor: iconColor,
                             ),
                             const SizedBox(height: 16),
 
@@ -193,8 +204,11 @@ class _DepositScreenState extends State<DepositScreen>
                             const SizedBox(height: 8),
                             _buildLockedField(
                               value: _brokerCode.isNotEmpty ? _brokerCode : 'Not set',
-                              isDark: isDark, fieldColor: fieldColor,
-                              borderColor: borderColor, textColor: textColor, iconColor: iconColor,
+                              isDark: isDark,
+                              fieldColor: fieldColor,
+                              borderColor: borderColor,
+                              textColor: textColor,
+                              iconColor: iconColor,
                             ),
                             const SizedBox(height: 16),
 
@@ -202,11 +216,13 @@ class _DepositScreenState extends State<DepositScreen>
                             const SizedBox(height: 8),
                             _buildLockedField(
                               value: _mobileNumber.isNotEmpty ? _mobileNumber : 'Not set',
-                              isDark: isDark, fieldColor: fieldColor,
-                              borderColor: borderColor, textColor: textColor, iconColor: iconColor,
+                              isDark: isDark,
+                              fieldColor: fieldColor,
+                              borderColor: borderColor,
+                              textColor: textColor,
+                              iconColor: iconColor,
                             ),
                             const SizedBox(height: 16),
-
                           ],
                         ),
                       ),
@@ -237,15 +253,18 @@ class _DepositScreenState extends State<DepositScreen>
                     : Colors.black.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(Icons.arrow_back_ios_new_rounded, color: textColor, size: 18),
+              child: Icon(Icons.arrow_back_ios_new_rounded,
+                  color: textColor, size: 18),
             ),
           ),
           const SizedBox(width: 16),
           Expanded(
             child: Text('Deposit Funds',
                 style: TextStyle(
-                    color: textColor, fontSize: 20,
-                    fontWeight: FontWeight.bold, letterSpacing: 0.3)),
+                    color: textColor,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.3)),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -261,8 +280,10 @@ class _DepositScreenState extends State<DepositScreen>
                 SizedBox(width: 4),
                 Text('ADD FUNDS',
                     style: TextStyle(
-                        color: Colors.white, fontSize: 10,
-                        fontWeight: FontWeight.w800, letterSpacing: 0.8)),
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8)),
               ],
             ),
           ),
@@ -286,7 +307,9 @@ class _DepositScreenState extends State<DepositScreen>
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: gold.withOpacity(0.25), width: 1.2),
         boxShadow: [
-          BoxShadow(color: gold.withOpacity(0.08), blurRadius: 20,
+          BoxShadow(
+              color: gold.withOpacity(0.08),
+              blurRadius: 20,
               offset: const Offset(0, 6)),
         ],
       ),
@@ -305,7 +328,8 @@ class _DepositScreenState extends State<DepositScreen>
               Text('Enter Amount (BWP)',
                   style: TextStyle(
                       color: isDark ? Colors.white60 : Colors.black54,
-                      fontSize: 13, fontWeight: FontWeight.w500)),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500)),
             ],
           ),
           const SizedBox(height: 16),
@@ -316,8 +340,10 @@ class _DepositScreenState extends State<DepositScreen>
               FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))
             ],
             style: TextStyle(
-                color: textColor, fontSize: 36,
-                fontWeight: FontWeight.w300, letterSpacing: 1),
+                color: textColor,
+                fontSize: 36,
+                fontWeight: FontWeight.w300,
+                letterSpacing: 1),
             decoration: InputDecoration(
               hintText: '0.00',
               hintStyle: TextStyle(
@@ -338,15 +364,19 @@ class _DepositScreenState extends State<DepositScreen>
                 onTap: () => setState(
                         () => _amountController.text = amt.replaceAll(',', '')),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: gold.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: gold.withOpacity(0.3), width: 1),
+                    border:
+                    Border.all(color: gold.withOpacity(0.3), width: 1),
                   ),
                   child: Text('P $amt',
                       style: TextStyle(
-                          color: gold, fontSize: 12, fontWeight: FontWeight.w600)),
+                          color: gold,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600)),
                 ),
               );
             }).toList(),
@@ -376,7 +406,9 @@ class _DepositScreenState extends State<DepositScreen>
           Expanded(
             child: Text(value,
                 style: TextStyle(
-                    color: textColor, fontSize: 15, fontWeight: FontWeight.w500)),
+                    color: textColor,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500)),
           ),
           Icon(Icons.lock_outline_rounded, color: iconColor, size: 18),
         ],
@@ -384,13 +416,13 @@ class _DepositScreenState extends State<DepositScreen>
     );
   }
 
-
-
   Widget _buildLabel(String text, Color color) {
     return Text(text,
         style: TextStyle(
-            color: color, fontSize: 13.5,
-            fontWeight: FontWeight.w600, letterSpacing: 0.2));
+            color: color,
+            fontSize: 13.5,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2));
   }
 
   Widget _buildBottomButtons(
@@ -402,10 +434,12 @@ class _DepositScreenState extends State<DepositScreen>
         boxShadow: [
           BoxShadow(
               color: Colors.black.withOpacity(isDark ? 0.4 : 0.08),
-              blurRadius: 20, offset: const Offset(0, -6)),
+              blurRadius: 20,
+              offset: const Offset(0, -6)),
         ],
         borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24), topRight: Radius.circular(24),
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
         ),
       ),
       child: Row(
@@ -430,7 +464,8 @@ class _DepositScreenState extends State<DepositScreen>
                 child: Text('CLOSE',
                     style: TextStyle(
                         color: isDark ? Colors.white70 : Colors.black54,
-                        fontSize: 14, fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
                         letterSpacing: 1.2)),
               ),
             ),
@@ -456,24 +491,29 @@ class _DepositScreenState extends State<DepositScreen>
                       : [
                     BoxShadow(
                         color: gold.withOpacity(0.45),
-                        blurRadius: 16, offset: const Offset(0, 5)),
+                        blurRadius: 16,
+                        offset: const Offset(0, 5)),
                   ],
                 ),
                 alignment: Alignment.center,
                 child: _isLoading
                     ? const SizedBox(
-                    width: 22, height: 22,
+                    width: 22,
+                    height: 22,
                     child: CircularProgressIndicator(
                         strokeWidth: 2.5, color: Colors.white))
                     : const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.bolt_rounded, color: Colors.white, size: 20),
+                    Icon(Icons.bolt_rounded,
+                        color: Colors.white, size: 20),
                     SizedBox(width: 6),
                     Text('DEPOSIT',
                         style: TextStyle(
-                            color: Colors.white, fontSize: 15,
-                            fontWeight: FontWeight.w800, letterSpacing: 1.4)),
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.4)),
                   ],
                 ),
               ),

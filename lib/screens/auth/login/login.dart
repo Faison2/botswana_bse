@@ -56,16 +56,83 @@ class _LoginScreenState extends State<LoginScreen> {
         final responseData = jsonDecode(response.body);
 
         if (responseData['responseCode'] == 200) {
-          // Save to SharedPreferences
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('token', responseData['token']);
-          await prefs.setString('username', responseData['username']);
-          await prefs.setString('email', responseData['email']);
-          await prefs.setString('fullName', responseData['fullName']);
-          await prefs.setString('CDSAccount', responseData['CDSAccount'] ?? '');
-          await prefs.setString('BrokerCode', responseData['BrokerCode'] ?? '');
 
-          // Check if password change is required
+          // ── Top-level profile fields ──────────────────────────────
+          await prefs.setString('token',        responseData['token']       ?? '');
+          await prefs.setString('username',     responseData['username']    ?? '');
+          await prefs.setString('email',        responseData['email']       ?? '');
+          await prefs.setString('fullName',     responseData['fullName']    ?? '');
+          await prefs.setString('userId',       responseData['userId']?.toString() ?? '');
+          await prefs.setString('phoneNumber',  responseData['phoneNumber'] ?? '');
+          await prefs.setString('cdsNumber',    responseData['cdsNumber']   ?? '');
+          await prefs.setString('status',       responseData['status']      ?? '');
+          await prefs.setString('lastLoginDate', responseData['lastLoginDate'] ?? '');
+          await prefs.setString('dateCreated',   responseData['dateCreated']   ?? '');
+
+          // ── Personal / KYC fields ─────────────────────────────────
+          await prefs.setString('title',         responseData['title']         ?? '');
+          await prefs.setString('forenames',     responseData['forenames']     ?? '');
+          await prefs.setString('middlename',    responseData['middlename']    ?? '');
+          await prefs.setString('surname',       responseData['surname']       ?? '');
+          await prefs.setString('gender',        responseData['gender']        ?? '');
+          await prefs.setString('dob',           responseData['dob']           ?? '');
+          await prefs.setString('nationality',   responseData['nationality']   ?? '');
+          await prefs.setString('idType',        responseData['idType']        ?? '');
+          await prefs.setString('idNumber',      responseData['idNumber']      ?? '');
+          await prefs.setString('placeOfBirth',  responseData['placeOfBirth']  ?? '');
+          await prefs.setString('maritalStatus', responseData['maritalStatus'] ?? '');
+
+          // ── Address ───────────────────────────────────────────────
+          await prefs.setString('address1', responseData['address1'] ?? '');
+          await prefs.setString('address2', responseData['address2'] ?? '');
+          await prefs.setString('address3', responseData['address3'] ?? '');
+          await prefs.setString('address4', responseData['address4'] ?? '');
+          await prefs.setString('city',     responseData['city']     ?? '');
+          await prefs.setString('country',  responseData['country']  ?? '');
+          await prefs.setString('postCode', responseData['postCode'] ?? '');
+
+          // ── Employment / financial ────────────────────────────────
+          await prefs.setString('occupation',       responseData['occupation']       ?? '');
+          await prefs.setString('employmentStatus', responseData['employmentStatus'] ?? '');
+          await prefs.setString('employerName',     responseData['employerName']     ?? '');
+          await prefs.setString('industry',         responseData['industry']         ?? '');
+          await prefs.setString('sourceOfIncome',   responseData['sourceOfIncome']   ?? '');
+          await prefs.setString('tin',              responseData['tin']              ?? '');
+          await prefs.setBool('taxExempt',          responseData['taxExempt']        ?? false);
+
+          // ── Banking / settlement ──────────────────────────────────
+          await prefs.setString('dividendBank',       responseData['dividendBank']       ?? '');
+          await prefs.setString('dividendBranch',     responseData['dividendBranch']     ?? '');
+          await prefs.setString('dividendAccountNo',  responseData['dividendAccountNo']  ?? '');
+          await prefs.setString('cashAccountNo',      responseData['cashAccountNo']      ?? '');
+          await prefs.setString('iban',               responseData['iban']               ?? '');
+          await prefs.setString('mobileMoneyProvider', responseData['mobileMoneyProvider'] ?? '');
+          await prefs.setString('mobileMoneyNumber',   responseData['mobileMoneyNumber']   ?? '');
+
+          // ── Trading ───────────────────────────────────────────────
+          await prefs.setString('accountType',         responseData['accountType']         ?? '');
+          await prefs.setString('tradingStatus',        responseData['tradingStatus']        ?? '');
+          await prefs.setString('tradingAccountNumber', responseData['tradingAccountNumber'] ?? '');
+          await prefs.setString('csdAccountNumber',     responseData['csdAccountNumber']     ?? '');
+
+          // ── Brokers: save full list + extract active broker fields ─
+          final List<dynamic> brokers = responseData['brokers'] ?? [];
+
+          // Store the full list as a JSON string for use anywhere in the app
+          await prefs.setString('brokersList', jsonEncode(brokers));
+
+          // Find the first ACTIVE broker; fallback to first in list
+          final activeBroker = brokers.firstWhere(
+                (b) => (b['status'] ?? '').toString().toUpperCase() == 'ACTIVE',
+            orElse: () => brokers.isNotEmpty ? brokers.first : null,
+          );
+
+          await prefs.setString('BrokerCode', activeBroker?['brokerCode'] ?? '');
+          await prefs.setString('CDSAccount', activeBroker?['CDSAccount'] ?? '');
+          await prefs.setString('BrokerName', activeBroker?['brokerName'] ?? '');
+
+          // ── Navigate or prompt password change ────────────────────
           if (responseData['requirePasswordChange'] == true) {
             _showPasswordChangeDialog(responseData['email']);
           } else {
@@ -178,9 +245,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             child: const Text(
               'Change Password',
-              style: TextStyle(
-                color: Colors.white,
-              ),
+              style: TextStyle(color: Colors.white),
             ),
           ),
         ],
@@ -280,14 +345,14 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFFFFF8DC),
-              const Color(0xFFFFF4D6),
-              const Color(0xFFFFEFCC),
+              Color(0xFFFFF8DC),
+              Color(0xFFFFF4D6),
+              Color(0xFFFFEFCC),
             ],
           ),
         ),
