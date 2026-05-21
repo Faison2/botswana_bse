@@ -38,12 +38,13 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
 
   // Shared
   String? _cdsNumber;
+  String  _brokerCode = '';
 
   @override
   void initState() {
     super.initState();
     _loadFromCacheThenRefresh();
-    _startAutoRetryOrders();
+    _loadOrdersFromApi();
   }
 
   @override
@@ -53,14 +54,11 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
     super.dispose();
   }
 
-  /// Instantly populate the UI from the cache the Dashboard wrote,
-  /// then silently refresh from the API in the background.
   Future<void> _loadFromCacheThenRefresh() async {
     await _loadPortfolioFromCache();
     await _loadPortfolioFromApiWithRetry();
   }
 
-  /// Retries up to 5 times (every 800ms) if CDS number isn't ready yet.
   Future<void> _loadPortfolioFromApiWithRetry() async {
     const maxAttempts = 5;
     const retryDelay  = Duration(milliseconds: 800);
@@ -74,18 +72,15 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
         return;
       }
 
-      // CDS not ready yet – wait and try again silently
       debugPrint('Portfolio: CDS not ready, attempt $attempt/$maxAttempts – retrying...');
       if (!mounted) return;
       await Future.delayed(retryDelay);
     }
 
-    // All retries exhausted and still no CDS - start auto-retry timer
     if (!mounted) return;
     _startAutoRetryPortfolio();
   }
 
-  /// Automatically retry portfolio loading with exponential backoff
   void _startAutoRetryPortfolio() {
     _portfolioRetryTimer?.cancel();
 
@@ -101,46 +96,37 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
 
     _portfolioRetryTimer = Timer(_autoRetryDelay, () async {
       if (!mounted) return;
-
       _portfolioRetryCount++;
-      debugPrint('Portfolio auto-retry attempt ${_portfolioRetryCount}/$_maxAutoRetries');
-
-      // Try to load from API
       await _loadPortfolioFromApi();
-
-      // If still has error, schedule another retry
       if (_portfolioError != null && mounted) {
         _startAutoRetryPortfolio();
       } else {
-        _portfolioRetryCount = 0; // Reset on success
+        _portfolioRetryCount = 0;
       }
     });
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  SharedPreferences cache (written by DashboardScreen)
+  //  SharedPreferences cache
   // ─────────────────────────────────────────────────────────────
 
-  static const _kHoldingsKey      = 'cachedPortfolioHoldings';
-  static const _kTotalValueKey    = 'cachedPortfolioValue';
-  static const _kTotalSharesKey   = 'cachedTotalShares';
+  static const _kHoldingsKey   = 'cachedPortfolioHoldings';
+  static const _kTotalValueKey  = 'cachedPortfolioValue';
+  static const _kTotalSharesKey = 'cachedTotalShares';
 
   Future<void> _loadPortfolioFromCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_kHoldingsKey);
+      final raw   = prefs.getString(_kHoldingsKey);
       if (raw == null || raw.isEmpty) return;
 
       final List<dynamic> decoded = jsonDecode(raw);
-      final holdings = decoded
-          .whereType<Map>()
-          .map((item) => <String, dynamic>{
-        'company':      item['company']?.toString() ?? '-',
-        'cdsNumber':    item['cdsNumber']?.toString() ?? '-',
-        'totalShares':  (item['totalShares'] as num?)?.toDouble() ?? 0.0,
+      final holdings = decoded.whereType<Map>().map((item) => <String, dynamic>{
+        'company':      item['company']?.toString()               ?? '-',
+        'cdsNumber':    item['cdsNumber']?.toString()             ?? '-',
+        'totalShares':  (item['totalShares']  as num?)?.toDouble() ?? 0.0,
         'currentValue': (item['currentValue'] as num?)?.toDouble() ?? 0.0,
-      })
-          .toList();
+      }).toList();
 
       if (!mounted) return;
       setState(() {
@@ -148,6 +134,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
         _totalPortfolioValue = prefs.getDouble(_kTotalValueKey)  ?? 0.0;
         _totalShares         = prefs.getDouble(_kTotalSharesKey) ?? 0.0;
         _cdsNumber           = prefs.getString('cdsNumber');
+        _brokerCode          = prefs.getString('BrokerCode') ?? '';
       });
     } catch (e) {
       debugPrint('Cache load error: $e');
@@ -162,54 +149,39 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
     if (decoded is List) return decoded;
     if (decoded is Map) {
       const wrapperKeys = [
-        'data', 'Data',
-        'portfolio', 'Portfolio',
-        'transactions', 'Transactions',
-        'orders', 'Orders',
-        'result', 'Result',
-        'results', 'Results',
-        'records', 'Records',
-        'items', 'Items',
-        'response', 'Response',
-        'value', 'Value',
-        'list', 'List',
-        'content', 'Content',
+        'data', 'Data', 'portfolio', 'Portfolio',
+        'transactions', 'Transactions', 'orders', 'Orders',
+        'result', 'Result', 'results', 'Results',
+        'records', 'Records', 'items', 'Items',
+        'response', 'Response', 'value', 'Value',
+        'list', 'List', 'content', 'Content',
       ];
       for (final key in wrapperKeys) {
         if (decoded.containsKey(key) && decoded[key] is List) {
-          debugPrint('_extractList: found list under key "$key"');
           return decoded[key] as List<dynamic>;
         }
       }
       for (final key in decoded.keys) {
-        if (decoded[key] is List) {
-          final list = decoded[key] as List<dynamic>;
-          debugPrint('_extractList: found list under dynamic key "$key" (${list.length} items)');
-          return list;
-        }
+        if (decoded[key] is List) return decoded[key] as List<dynamic>;
       }
-      debugPrint('_extractList: no list key found, wrapping single map. Keys: ${decoded.keys.toList()}');
       return [decoded];
     }
     return [];
   }
 
-  String _formatAmount(double amount) {
-    return amount.toStringAsFixed(2).replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+\.)'),
-          (m) => '${m[1]},',
-    );
-  }
+  String _formatAmount(double amount) => amount
+      .toStringAsFixed(2)
+      .replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+\.)'), (m) => '${m[1]},');
 
   String _formatDatetime(String rawDate) {
     try {
-      final parts = rawDate.split(' ');
+      final parts     = rawDate.split(' ');
       final dateParts = parts[0].split('/');
       if (dateParts.length == 3) {
         final month = dateParts[0].padLeft(2, '0');
-        final day = dateParts[1].padLeft(2, '0');
-        final year = dateParts[2];
-        final time = parts.length >= 3 ? ' ${parts[1]} ${parts[2]}' : '';
+        final day   = dateParts[1].padLeft(2, '0');
+        final year  = dateParts[2];
+        final time  = parts.length >= 3 ? ' ${parts[1]} ${parts[2]}' : '';
         return '$year-$month-$day$time';
       }
     } catch (_) {}
@@ -220,16 +192,30 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
     switch (status.toUpperCase()) {
       case 'CAPTURED':
         return const Color(0xFF4CAF50);
+      case 'MATCHED ORDER':
+        return const Color(0xFF00BCD4);
+      case 'POSTED':
+        return const Color(0xFFFFB300);
+      case 'NEW':
+        return const Color(0xFF42A5F5);
       case 'PENDING':
         return const Color(0xFFFFC107);
-      case 'CANCELLED':
-      case 'REJECTED':
-        return const Color(0xFFF44336);
       case 'EXECUTED':
       case 'FILLED':
         return const Color(0xFF2196F3);
+      case 'CANCELLED':
+      case 'REJECTED':
+        return const Color(0xFFF44336);
       default:
         return const Color(0xFF9E9E9E);
+    }
+  }
+
+  Color _orderTypeColor(String type) {
+    switch (type.toUpperCase()) {
+      case 'BUY':  return const Color(0xFF4CAF50);
+      case 'SELL': return const Color(0xFFEF5350);
+      default:     return const Color(0xFF9E9E9E);
     }
   }
 
@@ -238,18 +224,14 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
   // ─────────────────────────────────────────────────────────────
 
   Future<void> _loadPortfolioFromApi() async {
-    // Only show spinner if we have nothing cached to display yet
-    if (_portfolioData.isEmpty) {
-      setState(() => _isLoadingPortfolio = true);
-    }
+    if (_portfolioData.isEmpty) setState(() => _isLoadingPortfolio = true);
     setState(() => _portfolioError = null);
 
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs     = await SharedPreferences.getInstance();
       final cdsNumber = prefs.getString('cdsNumber');
 
       if (cdsNumber == null || cdsNumber.isEmpty) {
-        // Only show the error if we have no cached data to fall back on
         if (_portfolioData.isEmpty) {
           setState(() {
             _portfolioError = 'CDS number not found. Please log in again.';
@@ -261,77 +243,62 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
         return;
       }
 
-      _cdsNumber = cdsNumber;
-
+      _cdsNumber  = cdsNumber;
       final token = prefs.getString('token');
 
-      final portfolioHeaders = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      };
-
-      if (token != null && token.isNotEmpty) {
-        portfolioHeaders['Authorization'] = 'Bearer $token';
-      }
+      final headers = {'Content-Type': 'application/json', 'Accept': 'application/json'};
+      if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
 
       final response = await http.post(
         Uri.parse('https://zamagm.escrowagm.com/MainAPI/Home/GetMyPortfolio'),
-        headers: portfolioHeaders,
+        headers: headers,
         body: jsonEncode({'CDSNumber': cdsNumber}),
       );
 
-      debugPrint('=== Portfolio API Response ===');
-      debugPrint('Status: ${response.statusCode}');
-      debugPrint('Body: ${response.body}');
-      debugPrint('==============================');
+      debugPrint('Portfolio Status: ${response.statusCode}');
+      debugPrint('Portfolio Body: ${response.body}');
 
       if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
+        final decoded          = jsonDecode(response.body);
         final List<dynamic> data = _extractList(decoded);
 
         if (data.isEmpty) {
           setState(() {
-            _portfolioData = [];
+            _portfolioData       = [];
             _totalPortfolioValue = 0.0;
-            _totalShares = 0.0;
-            _isLoadingPortfolio = false;
+            _totalShares         = 0.0;
+            _isLoadingPortfolio  = false;
           });
           return;
         }
 
-        double totalValue = 0.0;
+        double totalValue  = 0.0;
         double totalShares = 0.0;
 
         final parsed = data.where((item) => item is Map).map((item) {
-          final currentValue =
-              double.tryParse(item['CurrentValue']?.toString() ?? '0') ?? 0.0;
-          final shares =
-              double.tryParse(item['Total_Shares']?.toString() ?? '0') ?? 0.0;
-
-          totalValue += currentValue;
+          final currentValue = double.tryParse(item['CurrentValue']?.toString() ?? '0') ?? 0.0;
+          final shares       = double.tryParse(item['Total_Shares']?.toString()  ?? '0') ?? 0.0;
+          totalValue  += currentValue;
           totalShares += shares;
-
           return <String, dynamic>{
-            'company': item['Company']?.toString() ?? '-',
-            'cdsNumber': item['CDS_Number']?.toString() ?? '-',
-            'totalShares': shares,
+            'company':      item['Company']?.toString()    ?? '-',
+            'cdsNumber':    item['CDS_Number']?.toString() ?? '-',
+            'totalShares':  shares,
             'currentValue': currentValue,
           };
         }).toList();
 
         setState(() {
-          _portfolioData = parsed;
+          _portfolioData       = parsed;
           _totalPortfolioValue = totalValue;
-          _totalShares = totalShares;
-          _isLoadingPortfolio = false;
+          _totalShares         = totalShares;
+          _isLoadingPortfolio  = false;
         });
       } else {
         setState(() {
-          _portfolioError =
-          'Server error: ${response.statusCode}\n${response.body}';
+          _portfolioError     = 'Server error: ${response.statusCode}';
           _isLoadingPortfolio = false;
         });
-        // Schedule automatic retry
         if (_portfolioRetryCount < _maxAutoRetries && mounted) {
           _startAutoRetryPortfolio();
         }
@@ -339,142 +306,133 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
     } catch (e, stack) {
       debugPrint('Portfolio error: $e\n$stack');
       setState(() {
-        _portfolioError = 'Failed to load data: $e';
+        _portfolioError     = 'Failed to load data: $e';
         _isLoadingPortfolio = false;
       });
-      // Schedule automatic retry
       if (_portfolioRetryCount < _maxAutoRetries && mounted) {
         _startAutoRetryPortfolio();
       }
     }
   }
 
+  // ─────────────────────────────────────────────────────────────
+  //  Orders API — body: { BrokerCode } | response key: "orders"
+  // ─────────────────────────────────────────────────────────────
+
   Future<void> _loadOrdersFromApi() async {
-    // Retry up to 5 times if CDS not ready yet
-    const maxAttempts = 5;
-    const retryDelay  = Duration(milliseconds: 800);
-    String cdsNumber  = '';
-
-    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-      final prefs = await SharedPreferences.getInstance();
-      cdsNumber = prefs.getString('cdsNumber') ?? '';
-      if (cdsNumber.isNotEmpty) break;
-      debugPrint('Orders: CDS not ready, attempt $attempt/$maxAttempts – retrying...');
-      if (!mounted) return;
-      await Future.delayed(retryDelay);
-    }
-
     if (!mounted) return;
 
-    // Only show spinner if we have nothing cached to display yet
-    if (_ordersData.isEmpty) {
-      setState(() => _isLoadingOrders = true);
-    }
+    if (_ordersData.isEmpty) setState(() => _isLoadingOrders = true);
     setState(() => _ordersError = null);
 
-    if (cdsNumber.isEmpty) {
-      if (_ordersData.isEmpty) {
+    try {
+      final prefs      = await SharedPreferences.getInstance();
+      final token      = prefs.getString('token') ?? '';
+      final brokerCode = _brokerCode.isNotEmpty
+          ? _brokerCode
+          : (prefs.getString('BrokerCode') ?? '');
+
+      if (brokerCode.isEmpty) {
         setState(() {
-          _ordersError = 'CDS number not found. Please log in again.';
+          _ordersError     = 'Broker code not found. Please log in again.';
           _isLoadingOrders = false;
         });
-      } else {
-        setState(() => _isLoadingOrders = false);
+        return;
       }
-      // Start auto-retry since CDS is not available
-      if (mounted) {
-        _startAutoRetryOrders();
-      }
-      return;
-    }
 
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
-      _cdsNumber  = cdsNumber;
+      _brokerCode = brokerCode;
 
-      final headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      };
-
-      if (token != null && token.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $token';
-      }
+      final headers = {'Content-Type': 'application/json', 'Accept': 'application/json'};
+      if (token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
 
       final response = await http.post(
         Uri.parse('https://zamagm.escrowagm.com/MainAPI/Home/GetMyOrders'),
         headers: headers,
-        body: jsonEncode({'CDSNumber': cdsNumber}),
+        body: jsonEncode({'BrokerCode': brokerCode}),
       );
+
       debugPrint('Orders Status: ${response.statusCode}');
       debugPrint('Orders Body: ${response.body}');
-      debugPrint('===========================');
+
+      if (!mounted) return;
 
       if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
-        final List<dynamic> data = _extractList(decoded);
+        final decoded = jsonDecode(response.body) as Map<String, dynamic>;
 
-        if (data.isEmpty) {
+        // Orders live under the "orders" key
+        final List<dynamic> raw =
+        (decoded['orders'] as List<dynamic>? ?? []);
+
+        if (raw.isEmpty) {
           setState(() {
-            _ordersData = [];
+            _ordersData      = [];
             _isLoadingOrders = false;
           });
-          _ordersRetryCount = 0; // Reset on success
+          _ordersRetryCount = 0;
           return;
         }
 
-        final parsed = data.where((item) => item is Map).map((item) {
+        final parsed = raw.whereType<Map>().map((item) {
+          // Prefer CompanyName when available, fallback to Company ticker
+          final companyTicker = item['Company']?.toString()     ?? '-';
+          final companyName   = item['CompanyName']?.toString() ?? '';
+          final displayName   = companyName.isNotEmpty ? companyName : companyTicker;
+
           return <String, dynamic>{
-            'orderNo':   item['OrderNo']?.toString() ?? '-',
-            'orderType': item['OrderType']?.toString() ?? '-',
-            'company':   item['Company']?.toString() ?? '-',
-            'brokerCode': item['Broker_Code']?.toString() ?? '-',
-            'status':    item['OrderStatus']?.toString() ?? '-',
-            'createDate': _formatDatetime(item['Create_date']?.toString() ?? ''),
-            'quantity':  item['Quantity']?.toString() ?? '-',
-            'basePrice': double.tryParse(item['BasePrice']?.toString() ?? '0') ?? 0.0,
-            'total':     double.tryParse(item['Total']?.toString() ?? '0') ?? 0.0,
+            'orderNo':          item['OrderNo']?.toString()          ?? '-',
+            'orderNumber':      item['OrderNumber']?.toString()       ?? '-',
+            'orderType':        item['OrderType']?.toString()         ?? '-',
+            'company':          displayName,
+            'companyTicker':    companyTicker,
+            'brokerCode':       item['Broker_Code']?.toString()       ?? '-',
+            'status':           item['OrderStatus']?.toString()       ?? '-',
+            'createDate':       _formatDatetime(item['Create_date']?.toString() ?? ''),
+            'settlementDate':   _formatDatetime(item['SettlementDate']?.toString() ?? ''),
+            'quantity':         item['Quantity']?.toString()          ?? '-',
+            'timeInForce':      item['TimeInForce']?.toString()       ?? '-',
+            'basePrice':        double.tryParse(item['BasePrice']?.toString() ?? '0') ?? 0.0,
+            'total':            double.tryParse(item['Total']?.toString()     ?? '0') ?? 0.0,
+            'matchedPrice':     item['MatchedPrice']?.toString()      ?? '',
+            'matchedDate':      _formatDatetime(item['MatchedDate']?.toString() ?? ''),
+            'settlementAmount': double.tryParse(item['SettlementAmount']?.toString() ?? '0') ?? 0.0,
+            'rejectionReason':  item['RejectionReason']?.toString()   ?? '',
+            'currency':         item['Currency']?.toString()          ?? 'BWP',
           };
         }).toList();
 
         setState(() {
-          _ordersData = parsed;
+          _ordersData      = parsed;
           _isLoadingOrders = false;
         });
-        _ordersRetryCount = 0; // Reset on success
+        _ordersRetryCount = 0;
       } else {
         setState(() {
-          _ordersError =
-          'Server error: ${response.statusCode}\n${response.body}';
+          _ordersError     = 'Server error: ${response.statusCode}';
           _isLoadingOrders = false;
         });
-        // Schedule automatic retry
         if (_ordersRetryCount < _maxAutoRetries && mounted) {
           _startAutoRetryOrders();
         }
       }
     } catch (e, stack) {
       debugPrint('Orders error: $e\n$stack');
-      setState(() {
-        _ordersError = 'Failed to load orders: $e';
-        _isLoadingOrders = false;
-      });
-      // Schedule automatic retry
-      if (_ordersRetryCount < _maxAutoRetries && mounted) {
-        _startAutoRetryOrders();
+      if (mounted) {
+        setState(() {
+          _ordersError     = 'Failed to load orders: $e';
+          _isLoadingOrders = false;
+        });
+        if (_ordersRetryCount < _maxAutoRetries) _startAutoRetryOrders();
       }
     }
   }
 
-  /// Automatically retry orders loading
   void _startAutoRetryOrders() {
     _ordersRetryTimer?.cancel();
 
     if (_ordersRetryCount >= _maxAutoRetries) {
       if (_ordersData.isEmpty) {
         setState(() {
-          _ordersError = 'Failed to load orders. Please check your connection.';
+          _ordersError     = 'Failed to load orders. Please check your connection.';
           _isLoadingOrders = false;
         });
       }
@@ -483,18 +441,12 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
 
     _ordersRetryTimer = Timer(_autoRetryDelay, () async {
       if (!mounted) return;
-
       _ordersRetryCount++;
-      debugPrint('Orders auto-retry attempt ${_ordersRetryCount}/$_maxAutoRetries');
-
-      // Try to load from API
       await _loadOrdersFromApi();
-
-      // If still has error, schedule another retry
       if (_ordersError != null && mounted) {
         _startAutoRetryOrders();
       } else {
-        _ordersRetryCount = 0; // Reset on success
+        _ordersRetryCount = 0;
       }
     });
   }
@@ -514,7 +466,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final isDark = themeProvider.isDarkMode;
+    final isDark        = themeProvider.isDarkMode;
 
     final bgGradient = isDark
         ? const LinearGradient(
@@ -555,9 +507,9 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildTabSelector(bool isDark) {
-    final accentColor = isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855);
+    final accentColor   = isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855);
     final inactiveColor = isDark ? Colors.white54 : Colors.black45;
-    final bgColor = isDark ? Colors.transparent : Colors.white.withOpacity(0.3);
+    final bgColor       = isDark ? Colors.transparent : Colors.white.withOpacity(0.3);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -582,7 +534,12 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
             final isSelected = _selectedTab == tab;
             return Expanded(
               child: GestureDetector(
-                onTap: () => setState(() => _selectedTab = tab),
+                onTap: () {
+                  setState(() => _selectedTab = tab);
+                  if (tab == 'ORDERS' && _ordersData.isEmpty && _ordersError == null) {
+                    _loadOrdersFromApi();
+                  }
+                },
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   decoration: BoxDecoration(
@@ -641,8 +598,8 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
   }
 
   Widget _buildPortfolioCard(bool isDark, LinearGradient gradient) {
-    final isLoading = _isLoadingPortfolio;
-    final hasError = _portfolioError != null;
+    final isLoading   = _isLoadingPortfolio;
+    final hasError    = _portfolioError != null;
     final subtextColor = Colors.white.withOpacity(0.85);
 
     final valueText = (isLoading && _totalPortfolioValue == 0)
@@ -674,13 +631,9 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Total Portfolio Value',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500),
-              ),
+              const Text('Total Portfolio Value',
+                  style: TextStyle(
+                      color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500)),
               if (_cdsNumber != null)
                 Text(_cdsNumber!,
                     style: TextStyle(
@@ -704,8 +657,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
               ),
               GestureDetector(
                 onTap: _refreshCurrentTab,
-                child:
-                const Icon(Icons.refresh, color: Colors.white, size: 28),
+                child: const Icon(Icons.refresh, color: Colors.white, size: 28),
               ),
             ],
           ),
@@ -721,10 +673,8 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
               const SizedBox(width: 16),
               const Icon(Icons.bar_chart, color: Colors.white70, size: 14),
               const SizedBox(width: 6),
-              Text(
-                '${_formatAmount(_totalShares)} total shares',
-                style: TextStyle(color: subtextColor, fontSize: 13),
-              ),
+              Text('${_formatAmount(_totalShares)} total shares',
+                  style: TextStyle(color: subtextColor, fontSize: 13)),
             ],
           ),
         ],
@@ -733,8 +683,11 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
   }
 
   Widget _buildOrdersCard(bool isDark, LinearGradient gradient) {
-    final capturedCount = _ordersData
-        .where((o) => (o['status'] as String).toUpperCase() == 'CAPTURED')
+    final matchedCount  = _ordersData
+        .where((o) => (o['status'] as String).toUpperCase() == 'MATCHED ORDER')
+        .length;
+    final rejectedCount = _ordersData
+        .where((o) => (o['status'] as String).toUpperCase() == 'REJECTED')
         .length;
     final totalOrderValue = _ordersData.fold<double>(
         0.0, (sum, o) => sum + (o['total'] as double? ?? 0.0));
@@ -771,19 +724,17 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
               Container(width: 1, height: 40, color: Colors.white24),
               Expanded(
                 child: _summaryTile(
-                  label: 'Captured',
-                  value: _isLoadingOrders ? '—' : '$capturedCount',
+                  label: 'Matched',
+                  value: _isLoadingOrders ? '—' : '$matchedCount',
                   icon: Icons.check_circle_outline,
                 ),
               ),
               Container(width: 1, height: 40, color: Colors.white24),
               Expanded(
                 child: _summaryTile(
-                  label: 'Other',
-                  value: _isLoadingOrders
-                      ? '—'
-                      : '${_ordersData.length - capturedCount}',
-                  icon: Icons.pending_outlined,
+                  label: 'Rejected',
+                  value: _isLoadingOrders ? '—' : '$rejectedCount',
+                  icon: Icons.cancel_outlined,
                 ),
               ),
             ],
@@ -820,18 +771,14 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
   }
 
   Widget _summaryTile(
-      {required String label,
-        required String value,
-        required IconData icon}) {
+      {required String label, required String value, required IconData icon}) {
     return Column(
       children: [
         Icon(icon, color: Colors.white70, size: 18),
         const SizedBox(height: 6),
         Text(value,
             style: const TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.w600)),
+                color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
         const SizedBox(height: 2),
         Text(label,
             style:
@@ -845,16 +792,15 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildPortfolioList(bool isDark) {
-    final textColor = isDark ? Colors.white : Colors.black87;
-    final cardBg = isDark
+    final textColor   = isDark ? Colors.white : Colors.black87;
+    final cardBg      = isDark
         ? const Color(0xFF2A2A2A).withOpacity(0.6)
         : Colors.white.withOpacity(0.85);
     final borderColor = isDark
         ? Colors.white.withOpacity(0.07)
         : Colors.grey.withOpacity(0.15);
     final subtleColor = isDark ? Colors.white54 : Colors.black45;
-    final accentColor =
-    isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855);
+    final accentColor = isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855);
 
     if (_isLoadingPortfolio && _portfolioData.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -870,8 +816,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
               Icon(Icons.error_outline, color: Colors.red.shade300, size: 44),
               const SizedBox(height: 12),
               Text(_portfolioError!,
-                  style: TextStyle(color: textColor),
-                  textAlign: TextAlign.center),
+                  style: TextStyle(color: textColor), textAlign: TextAlign.center),
               const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: _loadPortfolioFromApi,
@@ -899,7 +844,6 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
       );
     }
 
-    // Compute max value for the relative bar
     final maxValue = _portfolioData
         .map((h) => h['currentValue'] as double)
         .reduce((a, b) => a > b ? a : b);
@@ -908,14 +852,13 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
       itemCount: _portfolioData.length,
       itemBuilder: (context, index) {
-        final holding = _portfolioData[index];
-        final company = holding['company'] as String;
-        final shares = holding['totalShares'] as double;
-        final value = holding['currentValue'] as double;
-        final cds = holding['cdsNumber'] as String;
+        final holding  = _portfolioData[index];
+        final company  = holding['company']      as String;
+        final shares   = holding['totalShares']  as double;
+        final value    = holding['currentValue'] as double;
+        final cds      = holding['cdsNumber']    as String;
         final barFraction = maxValue > 0 ? value / maxValue : 0.0;
 
-        // Pick a color per index for the company avatar
         final avatarColors = [
           const Color(0xFFD4A855),
           const Color(0xFF4CAF50),
@@ -942,15 +885,12 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
             ],
           ),
           child: Padding(
-            padding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Row 1: Avatar + Company name + Value ──
                 Row(
                   children: [
-                    // Company initial avatar
                     Container(
                       width: 42,
                       height: 42,
@@ -966,65 +906,45 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                               ? company.substring(0, 1).toUpperCase()
                               : '?',
                           style: TextStyle(
-                            color: avatarColor,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
+                              color: avatarColor,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700),
                         ),
                       ),
                     ),
                     const SizedBox(width: 12),
-
-                    // Company name + CDS
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            company,
-                            style: TextStyle(
-                              color: textColor,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
+                          Text(company,
+                              style: TextStyle(
+                                  color: textColor,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.3)),
                           const SizedBox(height: 2),
-                          Text(
-                            cds,
-                            style: TextStyle(
-                                color: subtleColor, fontSize: 10),
-                          ),
+                          Text(cds,
+                              style: TextStyle(color: subtleColor, fontSize: 10)),
                         ],
                       ),
                     ),
-
-                    // Current Value
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text(
-                          _formatAmount(value),
-                          style: TextStyle(
-                            color: textColor,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                        Text(_formatAmount(value),
+                            style: TextStyle(
+                                color: textColor,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700)),
                         const SizedBox(height: 2),
-                        Text(
-                          'Current Value',
-                          style:
-                          TextStyle(color: subtleColor, fontSize: 9),
-                        ),
+                        Text('Current Value',
+                            style: TextStyle(color: subtleColor, fontSize: 9)),
                       ],
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 14),
-
-                // ── Row 2: Shares stat ──
                 Row(
                   children: [
                     _holdingStatChip(
@@ -1036,7 +956,6 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                       subtleColor: subtleColor,
                     ),
                     const Spacer(),
-                    // Percentage of total portfolio
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 4),
@@ -1051,18 +970,14 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                             ? '${(value / _totalPortfolioValue * 100).toStringAsFixed(1)}% of portfolio'
                             : '0.0% of portfolio',
                         style: TextStyle(
-                          color: accentColor,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
+                            color: accentColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 12),
-
-                // ── Relative value bar ──
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
@@ -1071,8 +986,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                     backgroundColor: isDark
                         ? Colors.white.withOpacity(0.08)
                         : Colors.grey.withOpacity(0.15),
-                    valueColor:
-                    AlwaysStoppedAnimation<Color>(avatarColor),
+                    valueColor: AlwaysStoppedAnimation<Color>(avatarColor),
                   ),
                 ),
               ],
@@ -1099,8 +1013,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label,
-                style: TextStyle(color: subtleColor, fontSize: 9)),
+            Text(label, style: TextStyle(color: subtleColor, fontSize: 9)),
             Text(value,
                 style: TextStyle(
                     color: textColor,
@@ -1117,8 +1030,8 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildOrdersList(bool isDark) {
-    final textColor = isDark ? Colors.white : Colors.black87;
-    final cardBg = isDark
+    final textColor   = isDark ? Colors.white : Colors.black87;
+    final cardBg      = isDark
         ? const Color(0xFF2A2A2A).withOpacity(0.6)
         : Colors.white.withOpacity(0.85);
     final borderColor = isDark
@@ -1173,10 +1086,19 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
       itemCount: _ordersData.length,
       itemBuilder: (context, index) {
-        final order       = _ordersData[index];
-        final statusColor = _statusColor(order['status'] as String);
-        final total       = order['total'] as double? ?? 0.0;
-        final basePrice   = order['basePrice'] as double? ?? 0.0;
+        final order            = _ordersData[index];
+        final status           = order['status']          as String;
+        final orderType        = order['orderType']       as String;
+        final statusColor      = _statusColor(status);
+        final typeColor        = _orderTypeColor(orderType);
+        final total            = order['total']           as double? ?? 0.0;
+        final basePrice        = order['basePrice']       as double? ?? 0.0;
+        final settlementAmount = order['settlementAmount'] as double? ?? 0.0;
+        final matchedPrice     = order['matchedPrice']    as String;
+        final matchedDate      = order['matchedDate']     as String;
+        final rejectionReason  = order['rejectionReason'] as String;
+        final isRejected       = status.toUpperCase() == 'REJECTED';
+        final isMatched        = status.toUpperCase() == 'MATCHED ORDER';
 
         return Container(
           margin: const EdgeInsets.only(bottom: 14),
@@ -1198,7 +1120,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Row 1: Company name + Status badge ──
+                // ── Row 1: Company + type badge + status badge ──
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1209,25 +1131,45 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                           Text(
                             order['company'] as String,
                             style: TextStyle(
-                              color: textColor,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                            ),
+                                color: textColor,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            'Order #${order['orderNo']}',
+                            'Order #${order['orderNo']}  ·  ${order['companyTicker']}',
                             style: TextStyle(color: subtleColor, fontSize: 10),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
+                    // BUY / SELL badge
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: typeColor.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: typeColor.withOpacity(0.4), width: 1),
+                      ),
+                      child: Text(
+                        orderType,
+                        style: TextStyle(
+                            color: typeColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    // Status badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: statusColor.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(20),
@@ -1235,13 +1177,12 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                             color: statusColor.withOpacity(0.4), width: 1),
                       ),
                       child: Text(
-                        order['status'] as String,
+                        status,
                         style: TextStyle(
-                          color: statusColor,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                        ),
+                            color: statusColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5),
                       ),
                     ),
                   ],
@@ -1251,16 +1192,9 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                 Divider(color: borderColor, height: 1),
                 const SizedBox(height: 12),
 
-                // ── Row 2: Order Type + Broker Code ──
+                // ── Row 2: Broker + Quantity + Time in Force ──
                 Row(
                   children: [
-                    Expanded(
-                      child: _orderField(
-                          label: 'Order Type',
-                          value: order['orderType'] as String,
-                          textColor: textColor,
-                          subtleColor: subtleColor),
-                    ),
                     Expanded(
                       child: _orderField(
                           label: 'Broker',
@@ -1275,14 +1209,6 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                           textColor: textColor,
                           subtleColor: subtleColor),
                     ),
-                  ],
-                ),
-
-                const SizedBox(height: 10),
-
-                // ── Row 3: Base Price + Total + Date ──
-                Row(
-                  children: [
                     Expanded(
                       child: _orderField(
                           label: 'Base Price',
@@ -1290,9 +1216,17 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                           textColor: textColor,
                           subtleColor: subtleColor),
                     ),
+                  ],
+                ),
+
+                const SizedBox(height: 10),
+
+                // ── Row 3: Total + Settlement Amount + Date ──
+                Row(
+                  children: [
                     Expanded(
                       child: _orderField(
-                          label: 'Total',
+                          label: 'Order Total',
                           value: _formatAmount(total),
                           textColor: const Color(0xFF4CAF50),
                           subtleColor: subtleColor,
@@ -1300,13 +1234,84 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                     ),
                     Expanded(
                       child: _orderField(
-                          label: 'Date',
+                          label: 'Settlement Amt',
+                          value: _formatAmount(settlementAmount),
+                          textColor: textColor,
+                          subtleColor: subtleColor),
+                    ),
+                    Expanded(
+                      child: _orderField(
+                          label: 'Created',
                           value: order['createDate'] as String,
                           textColor: subtleColor,
                           subtleColor: subtleColor),
                     ),
                   ],
                 ),
+
+                // ── Matched info (only when matched) ──
+                if (isMatched && matchedPrice.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00BCD4).withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: const Color(0xFF00BCD4).withOpacity(0.2),
+                          width: 1),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.handshake_outlined,
+                            color: Color(0xFF00BCD4), size: 14),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Matched at $matchedPrice  ·  $matchedDate',
+                            style: const TextStyle(
+                                color: Color(0xFF00BCD4),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                // ── Rejection reason (only when rejected) ──
+                if (isRejected && rejectionReason.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF44336).withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: const Color(0xFFF44336).withOpacity(0.2),
+                          width: 1),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline,
+                            color: Color(0xFFF44336), size: 14),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            rejectionReason,
+                            style: const TextStyle(
+                                color: Color(0xFFF44336),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
