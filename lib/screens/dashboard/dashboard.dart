@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:bse/contants/constants.dart';
 import 'package:bse/screens/buy_sell/buy_sell.dart';
 import 'package:bse/screens/buy_sell/transactions.dart';
@@ -369,6 +371,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return Scaffold(
           key: _scaffoldKey,
           backgroundColor: Colors.transparent,
+          extendBody: true,
           drawer: AppDrawer(
             onMenuItemTapped:    (i) => setState(() => _selectedIndex = i),
             onMarketWatchTapped: () => _navigateWithDebounce(const MarketWatchScreen()),
@@ -810,30 +813,59 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildBottomNavBar(bool isDark) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
-        borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(20), topRight: Radius.circular(20)),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 10,
-              offset: const Offset(0, -5)),
-        ],
-      ),
-      child: BottomAppBar(
-        color: Colors.transparent,
-        elevation: 0,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildNavItem(Icons.home_outlined,        0, isDark),
-            _buildNavItem(Icons.bar_chart_outlined,   1, isDark),
-            const SizedBox(width: 50),
-            _buildNavItem(Icons.shopping_bag_outlined, 3, isDark),
-            _buildNavItem(Icons.person_outlined, 4, isDark),
-          ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(32),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: Container(
+            height: 70,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? [
+                  Colors.white.withOpacity(0.10),
+                  Colors.white.withOpacity(0.05),
+                ]
+                    : [
+                  Colors.white.withOpacity(0.75),
+                  Colors.white.withOpacity(0.45),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(32),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withOpacity(0.12)
+                    : Colors.white.withOpacity(0.90),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(isDark ? 0.35 : 0.12),
+                  blurRadius: 30,
+                  offset: const Offset(0, 8),
+                ),
+                BoxShadow(
+                  color: Colors.amber.withOpacity(0.06),
+                  blurRadius: 20,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildNavItem(Icons.home_rounded,         0, isDark),
+                _buildNavItem(Icons.bar_chart_rounded,    1, isDark),
+                const SizedBox(width: 60), // FAB gap
+                _buildNavItem(Icons.shopping_bag_rounded, 3, isDark),
+                _buildNavItem(Icons.person_rounded,       4, isDark),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -841,41 +873,102 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildNavItem(IconData icon, int index, bool isDark) {
     final isSelected = _selectedIndex == index;
+
     return GestureDetector(
-      onTap: () { if (index != 2) setState(() => _selectedIndex = index); },
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        child: Icon(icon,
+      onTap: () {
+        if (index != 2) setState(() => _selectedIndex = index);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
+          gradient: isSelected
+              ? LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? [
+              Colors.amber.withOpacity(0.28),
+              Colors.amber.withOpacity(0.10),
+            ]
+                : [
+              Colors.amber.withOpacity(0.35),
+              Colors.amber.withOpacity(0.15),
+            ],
+          )
+              : null,
+          border: isSelected
+              ? Border.all(
+            color: Colors.amber.withOpacity(isDark ? 0.35 : 0.50),
+            width: 1,
+          )
+              : null,
+          boxShadow: isSelected
+              ? [
+            BoxShadow(
+              color: Colors.amber.withOpacity(0.25),
+              blurRadius: 14,
+              offset: const Offset(0, 3),
+            ),
+          ]
+              : null,
+        ),
+        child: AnimatedScale(
+          scale: isSelected ? 1.12 : 1.0,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutBack,
+          child: Icon(
+            icon,
             color: isSelected
                 ? Colors.amber
-                : (isDark ? Colors.white54 : Colors.black45),
-            size: 28),
+                : (isDark ? Colors.white38 : Colors.black38),
+            size: 26,
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildFloatingActionButton() {
-    return Container(
-      width: 65, height: 65,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFFB300), Color(0xFFFF8F00)],
+    return ClipOval(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          width: 62,
+          height: 62,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFFFFCA28), Color(0xFFFF8F00)],
+            ),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.35),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.amber.withOpacity(0.55),
+                blurRadius: 20,
+                offset: const Offset(0, 6),
+              ),
+              BoxShadow(
+                color: Colors.amber.withOpacity(0.20),
+                blurRadius: 40,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: FloatingActionButton(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            onPressed: () => _navigateWithDebounce(const MarketWatchScreen()),
+            child: const Icon(Icons.trending_up, size: 28, color: Colors.white),
+          ),
         ),
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-              color: Colors.amber.withOpacity(0.5),
-              blurRadius: 2,
-              offset: const Offset(0, 1)),
-        ],
-      ),
-      child: FloatingActionButton(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        onPressed: () => _navigateWithDebounce(const MarketWatchScreen()),
-        child: const Icon(Icons.trending_up, size: 30, color: Colors.white),
       ),
     );
   }
