@@ -17,6 +17,7 @@ import '../portifolio/portifolio.dart';
 import '../drawer/drawer.dart';
 import 'package:provider/provider.dart';
 import '../../theme_provider.dart';
+import '../profile/profile.dart';
 import '../transactions /transactions.dart';
 import 'widgets/market_watch_widget.dart';
 
@@ -70,9 +71,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _bootstrap();
   }
 
-  /// 1. Load cached data instantly
-  /// 2. Fetch fresh profile (gets latest CDS number)
-  /// 3. Fetch portfolio with that CDS
   Future<void> _bootstrap() async {
     await _loadCachedUserData();
     await _fetchProfileData();
@@ -389,8 +387,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         _buildDashboardTab(isDark),   // 0 – home
                         const TradingPage(),           // 1
                         Container(),                   // 2 – FAB
-                        const TransactionsScreen(),    // 3
-                        const PortfolioScreen(),       // 4
+                        const PortfolioScreen(),
+                        const ProfileScreen(),// 4
                       ],
                     ),
                   ),
@@ -833,8 +831,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _buildNavItem(Icons.home_outlined,        0, isDark),
             _buildNavItem(Icons.bar_chart_outlined,   1, isDark),
             const SizedBox(width: 50),
-            _buildNavItem(Icons.attach_money,         3, isDark),
-            _buildNavItem(Icons.shopping_bag_outlined, 4, isDark),
+            _buildNavItem(Icons.shopping_bag_outlined, 3, isDark),
+            _buildNavItem(Icons.person_outlined, 4, isDark),
           ],
         ),
       ),
