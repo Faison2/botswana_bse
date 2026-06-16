@@ -26,6 +26,10 @@ class _TransactionsScreensState extends State<TransactionsScreens>
   String  _cdsAccount  = '';
   String  _brokerCode  = '';
 
+  // ── Multi-broker ──
+  List<Map<String, String>> _activeBrokers    = [];
+  int                       _selectedBrokerIndex = 0;
+
   List<Map<String, dynamic>> _transactions = [];
 
   // ── Animation ──
@@ -47,14 +51,61 @@ class _TransactionsScreensState extends State<TransactionsScreens>
   Future<void> _bootstrap() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
+
+    // ── Load all active brokers ──
+    final int count = prefs.getInt('activeBrokersCount') ?? 0;
+    final List<Map<String, String>> brokers = [];
+
+    if (count > 0) {
+      for (int i = 0; i < count; i++) {
+        brokers.add({
+          'brokerCode': prefs.getString('broker_${i}_BrokerCode') ?? '',
+          'cdsAccount': prefs.getString('broker_${i}_CDSAccount') ?? '',
+          'brokerName': prefs.getString('broker_${i}_BrokerName') ?? '',
+          'status':     prefs.getString('broker_${i}_Status')     ?? '',
+        });
+      }
+    } else {
+      // Fallback: legacy single-broker keys
+      final code = prefs.getString('BrokerCode') ?? '';
+      final cds  = prefs.getString('CDSAccount') ?? '';
+      final name = prefs.getString('BrokerName') ?? '';
+      if (code.isNotEmpty) {
+        brokers.add({
+          'brokerCode': code,
+          'cdsAccount': cds,
+          'brokerName': name,
+          'status': 'ACTIVE',
+        });
+      }
+    }
+
     setState(() {
-      _cdsAccount         = prefs.getString('CDSAccount')  ?? '';
-      _brokerCode         = prefs.getString('BrokerCode')  ?? '';
-      _totalCashBalance   = prefs.getDouble('cachedCashBalance')   ?? 0.0;
-      _lockedInOpenOrders = prefs.getDouble('cachedLockedBalance')  ?? 0.0;
+      _activeBrokers        = brokers;
+      _selectedBrokerIndex  = 0;
+      _totalCashBalance     = prefs.getDouble('cachedCashBalance')  ?? 0.0;
+      _lockedInOpenOrders   = prefs.getDouble('cachedLockedBalance') ?? 0.0;
+      _applyBroker(0);
     });
-    // Run both calls in parallel
+
     await Future.wait([_fetchBalance(), _fetchTransactions()]);
+  }
+
+  void _applyBroker(int index) {
+    if (_activeBrokers.isEmpty) return;
+    final b = _activeBrokers[index];
+    _brokerCode = b['brokerCode'] ?? '';
+    _cdsAccount = b['cdsAccount'] ?? '';
+  }
+
+  void _onBrokerChanged(int? index) {
+    if (index == null) return;
+    setState(() {
+      _selectedBrokerIndex = index;
+      _applyBroker(index);
+    });
+    // Reload transactions for the newly selected broker
+    _fetchTransactions();
   }
 
   @override
@@ -78,12 +129,8 @@ class _TransactionsScreensState extends State<TransactionsScreens>
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? '';
 
-      final uri = Uri.parse(
-        'https://zamagm.escrowagm.com/MainAPI/Home/GetMainWalletBalance',
-      );
-
       final response = await http.get(
-        uri,
+        Uri.parse('https://zamagm.escrowagm.com/MainAPI/Home/GetMainWalletBalance'),
         headers: {
           'Content-Type': 'application/json',
           if (token.isNotEmpty) 'Authorization': 'Bearer $token',
@@ -159,7 +206,6 @@ class _TransactionsScreensState extends State<TransactionsScreens>
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
 
-        // responseCode 0 = success for this API
         if (data['responseCode'] == 0) {
           final raw = (data['transactions'] as List<dynamic>? ?? []);
           final txList = raw.whereType<Map>().map((item) {
@@ -223,18 +269,12 @@ class _TransactionsScreensState extends State<TransactionsScreens>
 
   Color _statusColor(String status) {
     switch (status.toUpperCase()) {
-      case 'SUCCESSFUL':
-        return const Color(0xFF4CAF50);
-      case 'FAILED':
-        return const Color(0xFFEF5350);
-      case 'REJECTED':
-        return const Color(0xFFE53935);
-      case 'PENDING':
-        return const Color(0xFFFFB300);
-      case 'PAUSED':
-        return const Color(0xFFFFB300);
+      case 'SUCCESSFUL': return const Color(0xFF4CAF50);
+      case 'FAILED':     return const Color(0xFFEF5350);
+      case 'REJECTED':   return const Color(0xFFE53935);
+      case 'PENDING':    return const Color(0xFFFFB300);
+      case 'PAUSED':     return const Color(0xFFFFB300);
       default:
-      // Catches long strings like "INSUFFICIENT BALANCE OR DAILY LIMIT REACHED"
         if (status.toUpperCase().contains('INSUFFICIENT') ||
             status.toUpperCase().contains('LIMIT')) {
           return const Color(0xFFFF7043);
@@ -243,7 +283,6 @@ class _TransactionsScreensState extends State<TransactionsScreens>
     }
   }
 
-  /// Short label for statuses that are too long to fit in the badge
   String _statusLabel(String status) {
     final upper = status.toUpperCase();
     if (upper.contains('INSUFFICIENT') || upper.contains('LIMIT')) {
@@ -295,6 +334,12 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                           _buildBalanceCard(),
                           const SizedBox(height: 20),
 
+                          // ── Broker dropdown (only when multiple brokers) ──
+                          if (_activeBrokers.length > 1) ...[
+                            _buildBrokerDropdown(isDark, textColor, subColor),
+                            const SizedBox(height: 16),
+                          ],
+
                           if (_cdsAccount.isNotEmpty || _brokerCode.isNotEmpty)
                             _buildAccountInfoRow(isDark, textColor, subColor),
                           if (_cdsAccount.isNotEmpty || _brokerCode.isNotEmpty)
@@ -316,6 +361,182 @@ class _TransactionsScreensState extends State<TransactionsScreens>
           ),
         );
       },
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  Broker dropdown
+  // ─────────────────────────────────────────────────────────────
+
+  Widget _buildBrokerDropdown(bool isDark, Color textColor, Color subColor) {
+    const gold       = Color(0xFFB8860B);
+    const goldLight  = Color(0xFFFFB300);
+    final fieldColor = isDark ? const Color(0xFF1C1C1C) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF3A3A3A) : const Color(0xFFDDDDDD);
+
+    final selected = _activeBrokers[_selectedBrokerIndex];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Broker',
+          style: TextStyle(
+            color: subColor,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          decoration: BoxDecoration(
+            color: fieldColor,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: borderColor, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<int>(
+              value: _selectedBrokerIndex,
+              isExpanded: true,
+              dropdownColor: fieldColor,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                  color: goldLight, size: 22),
+              onChanged: _onBrokerChanged,
+              selectedItemBuilder: (context) {
+                return List.generate(_activeBrokers.length, (i) {
+                  final b = _activeBrokers[i];
+                  return Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: gold.withOpacity(0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.business_rounded,
+                            color: goldLight, size: 14),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              b['brokerName'] ?? '',
+                              style: TextStyle(
+                                color: textColor,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              b['brokerCode'] ?? '',
+                              style: TextStyle(
+                                color: subColor,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                });
+              },
+              items: List.generate(_activeBrokers.length, (i) {
+                final b        = _activeBrokers[i];
+                final isActive = i == _selectedBrokerIndex;
+                return DropdownMenuItem<int>(
+                  value: i,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color: borderColor.withOpacity(0.5),
+                          width: i < _activeBrokers.length - 1 ? 1 : 0,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? goldLight.withOpacity(0.18)
+                                : gold.withOpacity(0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.business_rounded,
+                            color: isActive ? goldLight : gold,
+                            size: 14,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                b['brokerName'] ?? '',
+                                style: TextStyle(
+                                  color: isActive ? goldLight : textColor,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${b['brokerCode']}  ·  ${b['cdsAccount']}',
+                                style: TextStyle(
+                                  color: subColor,
+                                  fontSize: 11,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (isActive)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: goldLight.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text(
+                              'ACTIVE',
+                              style: TextStyle(
+                                color: goldLight,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -420,8 +641,6 @@ class _TransactionsScreensState extends State<TransactionsScreens>
             ],
           ),
           const SizedBox(height: 14),
-
-          // Show error or amount
           if (_balanceError != null)
             Text(_balanceError!,
                 style: const TextStyle(color: Colors.white54, fontSize: 14))
@@ -435,9 +654,7 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                 letterSpacing: 0.5,
               ),
             ),
-
           const SizedBox(height: 12),
-
           Row(
             children: [
               const Icon(Icons.lock_outline_rounded,
@@ -616,7 +833,6 @@ class _TransactionsScreensState extends State<TransactionsScreens>
     final typeColor   = _typeColor(type);
     final statusLabel = _statusLabel(status);
 
-    // Amount colour: green for deposits, red/orange for withdrawals
     final amountColor = type.toUpperCase() == 'DEPOSIT'
         ? const Color(0xFF4CAF50)
         : type.toUpperCase() == 'WITHDRAWAL'
@@ -630,7 +846,6 @@ class _TransactionsScreensState extends State<TransactionsScreens>
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Date
               Expanded(
                 flex: 2,
                 child: Text(
@@ -638,8 +853,6 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                   style: TextStyle(color: subColor, fontSize: 11, height: 1.4),
                 ),
               ),
-
-              // Provider
               Expanded(
                 flex: 2,
                 child: Text(
@@ -652,8 +865,6 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-
-              // Type badge
               Expanded(
                 flex: 2,
                 child: Center(
@@ -676,8 +887,6 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                   ),
                 ),
               ),
-
-              // Status badge
               Expanded(
                 flex: 2,
                 child: Center(
@@ -702,8 +911,6 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                   ),
                 ),
               ),
-
-              // Amount
               Expanded(
                 flex: 2,
                 child: Text(

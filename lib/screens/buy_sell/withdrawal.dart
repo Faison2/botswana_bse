@@ -21,9 +21,14 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
   bool _isLoading = false;
 
   String _brokerCode       = '';
+  String _brokerName       = '';
   String _mobileNumber     = '';
   String _cdsAccount       = '';
   double _availableBalance = 0.0;
+
+  // All active brokers loaded from prefs
+  List<Map<String, String>> _activeBrokers = [];
+  int _selectedBrokerIndex = 0;
 
   late AnimationController _animController;
   late Animation<double>   _fadeAnim;
@@ -44,11 +49,56 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
+
+    // Load all active brokers saved by login
+    final int count = prefs.getInt('activeBrokersCount') ?? 0;
+    final List<Map<String, String>> brokers = [];
+
+    if (count > 0) {
+      for (int i = 0; i < count; i++) {
+        brokers.add({
+          'brokerCode': prefs.getString('broker_${i}_BrokerCode') ?? '',
+          'cdsAccount': prefs.getString('broker_${i}_CDSAccount') ?? '',
+          'brokerName': prefs.getString('broker_${i}_BrokerName') ?? '',
+          'status':     prefs.getString('broker_${i}_Status')     ?? '',
+        });
+      }
+    } else {
+      // Fallback: legacy single-broker keys
+      final code = prefs.getString('BrokerCode') ?? '';
+      final cds  = prefs.getString('CDSAccount') ?? '';
+      final name = prefs.getString('BrokerName') ?? '';
+      if (code.isNotEmpty) {
+        brokers.add({
+          'brokerCode': code,
+          'cdsAccount': cds,
+          'brokerName': name,
+          'status': 'ACTIVE',
+        });
+      }
+    }
+
     setState(() {
-      _brokerCode       = prefs.getString('BrokerCode')        ?? '';
+      _activeBrokers    = brokers;
       _mobileNumber     = prefs.getString('phoneNumber')       ?? '';
-      _cdsAccount       = prefs.getString('CDSAccount')        ?? '';
       _availableBalance = prefs.getDouble('cachedCashBalance') ?? 0.0;
+      _selectedBrokerIndex = 0;
+      _applyBroker(0);
+    });
+  }
+
+  void _applyBroker(int index) {
+    if (_activeBrokers.isEmpty) return;
+    final b = _activeBrokers[index];
+    _brokerCode  = b['brokerCode'] ?? '';
+    _brokerName  = b['brokerName'] ?? '';
+    _cdsAccount  = b['cdsAccount'] ?? '';
+  }
+
+  void _selectBroker(int index) {
+    setState(() {
+      _selectedBrokerIndex = index;
+      _applyBroker(index);
     });
   }
 
@@ -59,8 +109,6 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
     super.dispose();
   }
 
-  // ── Reference ID: timestamp-based, unique per transaction ──
-
   String _generateReferenceID() {
     final now = DateTime.now();
     final yy  = now.year.toString();
@@ -69,10 +117,8 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
     final hh  = now.hour.toString().padLeft(2, '0');
     final mm  = now.minute.toString().padLeft(2, '0');
     final ss  = now.second.toString().padLeft(2, '0');
-    return '$yy$mo$dd$hh$mm$ss'; // e.g. 20260521143022
+    return '$yy$mo$dd$hh$mm$ss';
   }
-
-  // ── Submit ──
 
   Future<void> _submitWithdrawal() async {
     final amount = _amountController.text.trim();
@@ -118,7 +164,6 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
-        // Response is always a list — grab the first element
         final data = decoded is List
             ? decoded.first as Map<String, dynamic>
             : decoded as Map<String, dynamic>;
@@ -203,6 +248,14 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
                                 isDark, fieldColor, hintColor, textColor, red, redLight),
                             const SizedBox(height: 24),
 
+                            // ── Broker selector (only when multiple brokers) ──
+                            if (_activeBrokers.length > 1) ...[
+                              _buildLabel('Select Broker', labelColor),
+                              const SizedBox(height: 8),
+                              _buildBrokerSelector(isDark, fieldColor, borderColor, textColor, red),
+                              const SizedBox(height: 16),
+                            ],
+
                             _buildLabel('CDS Account', labelColor),
                             const SizedBox(height: 8),
                             _buildLockedField(
@@ -250,6 +303,104 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
           ),
         );
       },
+    );
+  }
+
+  // ── Broker selector chips ──────────────────────────────────────────────────
+
+  Widget _buildBrokerSelector(
+      bool isDark,
+      Color fieldColor,
+      Color borderColor,
+      Color textColor,
+      Color red,
+      ) {
+    return Column(
+      children: List.generate(_activeBrokers.length, (i) {
+        final broker   = _activeBrokers[i];
+        final selected = i == _selectedBrokerIndex;
+        return GestureDetector(
+          onTap: () => _selectBroker(i),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: selected
+                  ? red.withOpacity(isDark ? 0.18 : 0.08)
+                  : fieldColor,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: selected ? red : borderColor,
+                width: selected ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                // Radio indicator
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: selected ? red : borderColor,
+                      width: 2,
+                    ),
+                    color: selected ? red : Colors.transparent,
+                  ),
+                  child: selected
+                      ? const Icon(Icons.check, color: Colors.white, size: 12)
+                      : null,
+                ),
+                const SizedBox(width: 14),
+                // Broker info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        broker['brokerName'] ?? '',
+                        style: TextStyle(
+                          color: selected ? red : textColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${broker['brokerCode']}  ·  ${broker['cdsAccount']}',
+                        style: TextStyle(
+                          color: isDark ? Colors.white38 : Colors.black38,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (selected)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: red.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'SELECTED',
+                      style: TextStyle(
+                        color: red,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      }),
     );
   }
 

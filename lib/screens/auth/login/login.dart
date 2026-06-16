@@ -59,14 +59,14 @@ class _LoginScreenState extends State<LoginScreen> {
           final prefs = await SharedPreferences.getInstance();
 
           // ── Top-level profile fields ──────────────────────────────
-          await prefs.setString('token',        responseData['token']       ?? '');
-          await prefs.setString('username',     responseData['username']    ?? '');
-          await prefs.setString('email',        responseData['email']       ?? '');
-          await prefs.setString('fullName',     responseData['fullName']    ?? '');
-          await prefs.setString('userId',       responseData['userId']?.toString() ?? '');
-          await prefs.setString('phoneNumber',  responseData['phoneNumber'] ?? '');
-          await prefs.setString('cdsNumber',    responseData['cdsNumber']   ?? '');
-          await prefs.setString('status',       responseData['status']      ?? '');
+          await prefs.setString('token',         responseData['token']         ?? '');
+          await prefs.setString('username',      responseData['username']      ?? '');
+          await prefs.setString('email',         responseData['email']         ?? '');
+          await prefs.setString('fullName',      responseData['fullName']      ?? '');
+          await prefs.setString('userId',        responseData['userId']?.toString() ?? '');
+          await prefs.setString('phoneNumber',   responseData['phoneNumber']   ?? '');
+          await prefs.setString('cdsNumber',     responseData['cdsNumber']     ?? '');
+          await prefs.setString('status',        responseData['status']        ?? '');
           await prefs.setString('lastLoginDate', responseData['lastLoginDate'] ?? '');
           await prefs.setString('dateCreated',   responseData['dateCreated']   ?? '');
 
@@ -102,35 +102,50 @@ class _LoginScreenState extends State<LoginScreen> {
           await prefs.setBool('taxExempt',          responseData['taxExempt']        ?? false);
 
           // ── Banking / settlement ──────────────────────────────────
-          await prefs.setString('dividendBank',       responseData['dividendBank']       ?? '');
-          await prefs.setString('dividendBranch',     responseData['dividendBranch']     ?? '');
-          await prefs.setString('dividendAccountNo',  responseData['dividendAccountNo']  ?? '');
-          await prefs.setString('cashAccountNo',      responseData['cashAccountNo']      ?? '');
-          await prefs.setString('iban',               responseData['iban']               ?? '');
+          await prefs.setString('dividendBank',        responseData['dividendBank']        ?? '');
+          await prefs.setString('dividendBranch',      responseData['dividendBranch']      ?? '');
+          await prefs.setString('dividendAccountNo',   responseData['dividendAccountNo']   ?? '');
+          await prefs.setString('cashAccountNo',       responseData['cashAccountNo']       ?? '');
+          await prefs.setString('iban',                responseData['iban']                ?? '');
           await prefs.setString('mobileMoneyProvider', responseData['mobileMoneyProvider'] ?? '');
           await prefs.setString('mobileMoneyNumber',   responseData['mobileMoneyNumber']   ?? '');
 
           // ── Trading ───────────────────────────────────────────────
-          await prefs.setString('accountType',         responseData['accountType']         ?? '');
+          await prefs.setString('accountType',          responseData['accountType']          ?? '');
           await prefs.setString('tradingStatus',        responseData['tradingStatus']        ?? '');
           await prefs.setString('tradingAccountNumber', responseData['tradingAccountNumber'] ?? '');
           await prefs.setString('csdAccountNumber',     responseData['csdAccountNumber']     ?? '');
 
-          // ── Brokers: save full list + extract active broker fields ─
+          // ── Brokers: save full list + each active broker individually ─
           final List<dynamic> brokers = responseData['brokers'] ?? [];
 
           // Store the full list as a JSON string for use anywhere in the app
           await prefs.setString('brokersList', jsonEncode(brokers));
 
-          // Find the first ACTIVE broker; fallback to first in list
-          final activeBroker = brokers.firstWhere(
-                (b) => (b['status'] ?? '').toString().toUpperCase() == 'ACTIVE',
-            orElse: () => brokers.isNotEmpty ? brokers.first : null,
-          );
+          // Filter to only ACTIVE brokers
+          final List<dynamic> activeBrokers = brokers
+              .where((b) => (b['status'] ?? '').toString().toUpperCase() == 'ACTIVE')
+              .toList();
 
-          await prefs.setString('BrokerCode', activeBroker?['brokerCode'] ?? '');
-          await prefs.setString('CDSAccount', activeBroker?['CDSAccount'] ?? '');
-          await prefs.setString('BrokerName', activeBroker?['brokerName'] ?? '');
+          // Save count of active brokers
+          await prefs.setInt('activeBrokersCount', activeBrokers.length);
+
+          // Save each active broker with index-based keys (broker_0, broker_1, ...)
+          for (int i = 0; i < activeBrokers.length; i++) {
+            final broker = activeBrokers[i];
+            await prefs.setString('broker_${i}_BrokerCode', broker['brokerCode'] ?? '');
+            await prefs.setString('broker_${i}_CDSAccount', broker['CDSAccount'] ?? '');
+            await prefs.setString('broker_${i}_BrokerName', broker['brokerName'] ?? '');
+            await prefs.setString('broker_${i}_Status',     broker['status']     ?? '');
+          }
+
+          // Also keep the first active broker under legacy single-broker keys
+          // so any existing screens that read BrokerCode/CDSAccount/BrokerName still work
+          if (activeBrokers.isNotEmpty) {
+            await prefs.setString('BrokerCode', activeBrokers[0]['brokerCode'] ?? '');
+            await prefs.setString('CDSAccount', activeBrokers[0]['CDSAccount'] ?? '');
+            await prefs.setString('BrokerName', activeBrokers[0]['brokerName'] ?? '');
+          }
 
           // ── Navigate or prompt password change ────────────────────
           if (responseData['requirePasswordChange'] == true) {
