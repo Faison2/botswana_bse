@@ -18,13 +18,20 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
     with SingleTickerProviderStateMixin {
 
   final TextEditingController _amountController = TextEditingController();
-  bool _isLoading = false;
+  bool _isLoading        = false;
+  bool _isLoadingBalance = false;
 
   String _brokerCode       = '';
   String _brokerName       = '';
   String _mobileNumber     = '';
   String _cdsAccount       = '';
-  double _availableBalance = 0.0;
+  String _mainCurrency     = 'BWP';
+
+  // Main wallet total (fallback)
+  double _mainWalletBalance = 0.0;
+
+  // Per-broker balances keyed by brokerCode
+  Map<String, Map<String, dynamic>> _perBrokerBalance = {};
 
   // All active brokers loaded from prefs
   List<Map<String, String>> _activeBrokers = [];
@@ -79,13 +86,95 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
     }
 
     setState(() {
-      _activeBrokers    = brokers;
-      _mobileNumber     = prefs.getString('phoneNumber')       ?? '';
-      _availableBalance = prefs.getDouble('cachedCashBalance') ?? 0.0;
+      _activeBrokers       = brokers;
+      _mobileNumber        = prefs.getString('phoneNumber')       ?? '';
+      _mainWalletBalance   = prefs.getDouble('cachedCashBalance') ?? 0.0;
       _selectedBrokerIndex = 0;
       _applyBroker(0);
     });
+
+    // Fetch live balance (populates _perBrokerBalance)
+    await _fetchBalance();
   }
+
+  // ─────────────────────────────────────────────────────────────
+  //  API – wallet balance (same endpoint as TransactionsScreen)
+  // ─────────────────────────────────────────────────────────────
+
+  Future<void> _fetchBalance() async {
+    if (!mounted) return;
+    setState(() => _isLoadingBalance = true);
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+
+      final response = await http.get(
+        Uri.parse('https://zamagm.escrowagm.com/MainAPI/Home/GetMainWalletBalance'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 30));
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        if (data['responseCode'] == 0) {
+          final mainBalance = (data['mainWalletBalance'] as num?)?.toDouble() ?? 0.0;
+          final currency    = data['currency']?.toString() ?? 'BWP';
+
+          // Parse perBroker array
+          final Map<String, Map<String, dynamic>> perBroker = {};
+          final rawList = data['perBroker'];
+          if (rawList is List) {
+            for (final item in rawList) {
+              if (item is Map) {
+                final code = item['brokerCode']?.toString() ?? '';
+                if (code.isNotEmpty) {
+                  perBroker[code] = {
+                    'brokerCode':         code,
+                    'cdsAccount':         item['cdsAccount']?.toString() ?? '',
+                    'balance':            (item['balance']             as num?)?.toDouble() ?? 0.0,
+                    'lockedInOpenOrders': (item['lockedInOpenOrders']  as num?)?.toDouble() ?? 0.0,
+                  };
+                }
+              }
+            }
+          }
+
+          await prefs.setDouble('cachedCashBalance', mainBalance);
+
+          if (mounted) {
+            setState(() {
+              _mainWalletBalance = mainBalance;
+              _mainCurrency      = currency;
+              _perBrokerBalance  = perBroker;
+            });
+          }
+        }
+      }
+    } catch (_) {
+      // silently fall back to cached value
+    } finally {
+      if (mounted) setState(() => _isLoadingBalance = false);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  Derived: balance for the currently selected broker
+  // ─────────────────────────────────────────────────────────────
+
+  double get _availableBalance {
+    if (_perBrokerBalance.isNotEmpty && _brokerCode.isNotEmpty) {
+      final d = _perBrokerBalance[_brokerCode];
+      if (d != null) return (d['balance'] as num?)?.toDouble() ?? 0.0;
+    }
+    return _mainWalletBalance;
+  }
+
+  bool get _isMultiBroker => _perBrokerBalance.length > 1;
 
   void _applyBroker(int index) {
     if (_activeBrokers.isEmpty) return;
@@ -99,6 +188,8 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
     setState(() {
       _selectedBrokerIndex = index;
       _applyBroker(index);
+      // Clear amount when switching broker so MAX stays accurate
+      _amountController.clear();
     });
   }
 
@@ -205,7 +296,7 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
       .toStringAsFixed(2)
       .replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+\.)'), (m) => '${m[1]},');
 
-  // ── Build ──
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -252,7 +343,8 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
                             if (_activeBrokers.length > 1) ...[
                               _buildLabel('Select Broker', labelColor),
                               const SizedBox(height: 8),
-                              _buildBrokerSelector(isDark, fieldColor, borderColor, textColor, red),
+                              _buildBrokerSelector(
+                                  isDark, fieldColor, borderColor, textColor, red),
                               const SizedBox(height: 16),
                             ],
 
@@ -306,6 +398,127 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
     );
   }
 
+  // ── Balance banner ─────────────────────────────────────────────────────────
+
+  Widget _buildBalanceBanner(bool isDark, Color red, Color subTextColor) {
+    // Label: show broker name when a specific broker is selected
+    String balanceLabel = 'Available Balance';
+    if (_isMultiBroker && _brokerName.isNotEmpty) {
+      balanceLabel = '$_brokerName Balance';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withOpacity(0.04)
+            : Colors.black.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withOpacity(0.08)
+              : Colors.black.withOpacity(0.06),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                    color: red.withOpacity(0.12), shape: BoxShape.circle),
+                child: _isLoadingBalance
+                    ? SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: red))
+                    : Icon(Icons.account_balance_wallet_outlined,
+                    color: red, size: 18),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(balanceLabel,
+                        style: TextStyle(color: subTextColor, fontSize: 11)),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$_mainCurrency ${_formatAmount(_availableBalance)}',
+                      style: TextStyle(
+                          color: isDark ? Colors.white : Colors.black87,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5),
+                    ),
+                  ],
+                ),
+              ),
+              GestureDetector(
+                onTap: () => setState(() =>
+                _amountController.text =
+                    _availableBalance.toStringAsFixed(2)),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border:
+                    Border.all(color: red.withOpacity(0.25), width: 1),
+                  ),
+                  child: Text('MAX',
+                      style: TextStyle(
+                          color: red,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8)),
+                ),
+              ),
+            ],
+          ),
+
+          // ── Total across all brokers (multi-broker only) ──
+          if (_isMultiBroker) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withOpacity(0.04)
+                    : Colors.black.withOpacity(0.03),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.account_balance_wallet_outlined,
+                      color: subTextColor, size: 13),
+                  const SizedBox(width: 6),
+                  Text('Total across all brokers:',
+                      style:
+                      TextStyle(color: subTextColor, fontSize: 11)),
+                  const Spacer(),
+                  Text(
+                    '$_mainCurrency ${_formatAmount(_mainWalletBalance)}',
+                    style: TextStyle(
+                        color: subTextColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   // ── Broker selector chips ──────────────────────────────────────────────────
 
   Widget _buildBrokerSelector(
@@ -317,8 +530,14 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
       ) {
     return Column(
       children: List.generate(_activeBrokers.length, (i) {
-        final broker   = _activeBrokers[i];
-        final selected = i == _selectedBrokerIndex;
+        final broker    = _activeBrokers[i];
+        final bCode     = broker['brokerCode'] ?? '';
+        final selected  = i == _selectedBrokerIndex;
+        final bData     = _perBrokerBalance[bCode];
+        final bBalance  = bData != null
+            ? (bData['balance'] as num?)?.toDouble() ?? 0.0
+            : null;
+
         return GestureDetector(
           onTap: () => _selectBroker(i),
           child: AnimatedContainer(
@@ -355,7 +574,8 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
                       : null,
                 ),
                 const SizedBox(width: 14),
-                // Broker info
+
+                // Broker info + balance
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -376,12 +596,28 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
                           fontSize: 11.5,
                         ),
                       ),
+                      // ── Per-broker balance ──
+                      if (bBalance != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '$_mainCurrency ${_formatAmount(bBalance)}',
+                          style: TextStyle(
+                            color: selected
+                                ? red
+                                : red.withOpacity(0.65),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
+
                 if (selected)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: red.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(20),
@@ -403,6 +639,8 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
       }),
     );
   }
+
+  // ── Remaining widgets (unchanged layout, updated currency label) ───────────
 
   Widget _buildTopBar(bool isDark, Color textColor, Color red) {
     return Container(
@@ -458,69 +696,6 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
     );
   }
 
-  Widget _buildBalanceBanner(bool isDark, Color red, Color subTextColor) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withOpacity(0.04)
-            : Colors.black.withOpacity(0.03),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withOpacity(0.08)
-              : Colors.black.withOpacity(0.06),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-                color: red.withOpacity(0.12), shape: BoxShape.circle),
-            child: Icon(Icons.account_balance_wallet_outlined,
-                color: red, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Available Balance',
-                  style: TextStyle(color: subTextColor, fontSize: 11)),
-              const SizedBox(height: 2),
-              Text('P ${_formatAmount(_availableBalance)}',
-                  style: TextStyle(
-                      color: isDark ? Colors.white : Colors.black87,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.5)),
-            ],
-          ),
-          const Spacer(),
-          GestureDetector(
-            onTap: () => setState(() =>
-            _amountController.text = _availableBalance.toStringAsFixed(2)),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: red.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: red.withOpacity(0.25), width: 1),
-              ),
-              child: Text('MAX',
-                  style: TextStyle(
-                      color: red,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.8)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildAmountHeroCard(bool isDark, Color fieldColor, Color hintColor,
       Color textColor, Color red, Color redLight) {
     return Container(
@@ -554,7 +729,7 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
                 child: Icon(Icons.payments_outlined, color: red, size: 20),
               ),
               const SizedBox(width: 12),
-              Text('Enter Amount (BWP)',
+              Text('Enter Amount ($_mainCurrency)',
                   style: TextStyle(
                       color: isDark ? Colors.white60 : Colors.black54,
                       fontSize: 13,
@@ -564,7 +739,8 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
           const SizedBox(height: 16),
           TextField(
             controller: _amountController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            keyboardType:
+            const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))
             ],
@@ -576,8 +752,10 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
             decoration: InputDecoration(
               hintText: '0.00',
               hintStyle: TextStyle(
-                  color: hintColor, fontSize: 36, fontWeight: FontWeight.w300),
-              prefixText: 'P  ',
+                  color: hintColor,
+                  fontSize: 36,
+                  fontWeight: FontWeight.w300),
+              prefixText: '${_mainCurrency.isNotEmpty ? _mainCurrency[0] : 'P'}  ',
               prefixStyle: TextStyle(
                   color: red, fontSize: 28, fontWeight: FontWeight.w500),
               border: InputBorder.none,
@@ -593,14 +771,15 @@ class _WithdrawalScreenState extends State<WithdrawalScreen>
                 onTap: () => setState(
                         () => _amountController.text = amt.replaceAll(',', '')),
                 child: Container(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: red.withOpacity(0.10),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: red.withOpacity(0.28), width: 1),
+                    border:
+                    Border.all(color: red.withOpacity(0.28), width: 1),
                   ),
-                  child: Text('P $amt',
+                  child: Text('$_mainCurrency $amt',
                       style: TextStyle(
                           color: red,
                           fontSize: 12,

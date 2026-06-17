@@ -19,6 +19,7 @@ class _TransactionsScreensState extends State<TransactionsScreens>
   // ── State ──
   double  _totalCashBalance   = 0.0;
   double  _lockedInOpenOrders = 0.0;
+  String  _mainCurrency       = 'BWP';
   bool    _isLoadingBalance   = false;
   bool    _isLoadingTx        = false;
   String? _balanceError;
@@ -27,8 +28,12 @@ class _TransactionsScreensState extends State<TransactionsScreens>
   String  _brokerCode  = '';
 
   // ── Multi-broker ──
-  List<Map<String, String>> _activeBrokers    = [];
+  List<Map<String, String>> _activeBrokers     = [];
   int                       _selectedBrokerIndex = 0;
+
+  // ── Per-broker balances from API ──
+  // keyed by brokerCode
+  Map<String, Map<String, dynamic>> _perBrokerBalance = {};
 
   List<Map<String, dynamic>> _transactions = [];
 
@@ -81,10 +86,10 @@ class _TransactionsScreensState extends State<TransactionsScreens>
     }
 
     setState(() {
-      _activeBrokers        = brokers;
-      _selectedBrokerIndex  = 0;
-      _totalCashBalance     = prefs.getDouble('cachedCashBalance')  ?? 0.0;
-      _lockedInOpenOrders   = prefs.getDouble('cachedLockedBalance') ?? 0.0;
+      _activeBrokers       = brokers;
+      _selectedBrokerIndex = 0;
+      _totalCashBalance    = prefs.getDouble('cachedCashBalance')   ?? 0.0;
+      _lockedInOpenOrders  = prefs.getDouble('cachedLockedBalance') ?? 0.0;
       _applyBroker(0);
     });
 
@@ -104,7 +109,6 @@ class _TransactionsScreensState extends State<TransactionsScreens>
       _selectedBrokerIndex = index;
       _applyBroker(index);
     });
-    // Reload transactions for the newly selected broker
     _fetchTransactions();
   }
 
@@ -113,6 +117,33 @@ class _TransactionsScreensState extends State<TransactionsScreens>
     _animController.dispose();
     super.dispose();
   }
+
+  // ─────────────────────────────────────────────────────────────
+  //  Derived: selected broker's balance (falls back to main)
+  // ─────────────────────────────────────────────────────────────
+
+  /// Returns the per-broker entry for the currently selected broker,
+  /// or null if the API didn't return one (single-broker accounts).
+  Map<String, dynamic>? get _selectedBrokerData {
+    if (_perBrokerBalance.isEmpty) return null;
+    return _perBrokerBalance[_brokerCode];
+  }
+
+  double get _displayBalance {
+    final d = _selectedBrokerData;
+    if (d != null) return (d['balance'] as num?)?.toDouble() ?? 0.0;
+    return _totalCashBalance;
+  }
+
+  double get _displayLocked {
+    final d = _selectedBrokerData;
+    if (d != null) {
+      return (d['lockedInOpenOrders'] as num?)?.toDouble() ?? 0.0;
+    }
+    return _lockedInOpenOrders;
+  }
+
+  bool get _isMultiBroker => _perBrokerBalance.length > 1;
 
   // ─────────────────────────────────────────────────────────────
   //  API 1 – Wallet balance
@@ -143,18 +174,38 @@ class _TransactionsScreensState extends State<TransactionsScreens>
         final data = jsonDecode(response.body) as Map<String, dynamic>;
 
         if (data['responseCode'] == 0) {
-          final balance = double.tryParse(
-              data['mainWalletBalance']?.toString() ?? '0') ?? 0.0;
-          final locked  = double.tryParse(
-              data['totalLockedInOpenOrders']?.toString() ?? '0') ?? 0.0;
+          final balance  = (data['mainWalletBalance']       as num?)?.toDouble() ?? 0.0;
+          final locked   = (data['totalLockedInOpenOrders'] as num?)?.toDouble() ?? 0.0;
+          final currency = data['currency']?.toString() ?? 'BWP';
 
           await prefs.setDouble('cachedCashBalance',  balance);
           await prefs.setDouble('cachedLockedBalance', locked);
+
+          // ── Parse perBroker array ──
+          final Map<String, Map<String, dynamic>> perBroker = {};
+          final rawList = data['perBroker'];
+          if (rawList is List) {
+            for (final item in rawList) {
+              if (item is Map) {
+                final code = item['brokerCode']?.toString() ?? '';
+                if (code.isNotEmpty) {
+                  perBroker[code] = {
+                    'brokerCode':         code,
+                    'cdsAccount':         item['cdsAccount']?.toString() ?? '',
+                    'balance':            (item['balance']             as num?)?.toDouble() ?? 0.0,
+                    'lockedInOpenOrders': (item['lockedInOpenOrders']  as num?)?.toDouble() ?? 0.0,
+                  };
+                }
+              }
+            }
+          }
 
           if (mounted) {
             setState(() {
               _totalCashBalance   = balance;
               _lockedInOpenOrders = locked;
+              _mainCurrency       = currency;
+              _perBrokerBalance   = perBroker;
             });
           }
         } else {
@@ -365,16 +416,139 @@ class _TransactionsScreensState extends State<TransactionsScreens>
   }
 
   // ─────────────────────────────────────────────────────────────
+  //  Balance card  (per-broker + optional main total footer)
+  // ─────────────────────────────────────────────────────────────
+
+  Widget _buildBalanceCard() {
+    final brokerData   = _selectedBrokerData;
+    final showPerBroker = brokerData != null;
+
+    // Label: broker name if available, else generic
+    String cardTitle = 'Wallet Balance';
+    if (showPerBroker && _activeBrokers.isNotEmpty) {
+      final name = _activeBrokers[_selectedBrokerIndex]['brokerName'] ?? '';
+      cardTitle = name.isNotEmpty ? '$name Balance' : '${_brokerCode} Balance';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF8B6914), Color(0xFF5C4400)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.35),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Title row ──
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  cardTitle,
+                  style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500),
+                ),
+              ),
+              if (_isLoadingBalance)
+                const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white70)),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // ── Primary balance ──
+          if (_balanceError != null)
+            Text(_balanceError!,
+                style: const TextStyle(color: Colors.white54, fontSize: 14))
+          else
+            Text(
+              '$_mainCurrency ${_formatAmount(_displayBalance)}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 36,
+                fontWeight: FontWeight.w300,
+                letterSpacing: 0.5,
+              ),
+            ),
+          const SizedBox(height: 10),
+
+          // ── Locked in orders ──
+          Row(
+            children: [
+              const Icon(Icons.lock_outline_rounded,
+                  color: Colors.white54, size: 15),
+              const SizedBox(width: 5),
+              Text(
+                'Locked in orders: $_mainCurrency ${_formatAmount(_displayLocked)}',
+                style: const TextStyle(
+                    color: Colors.white60,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+
+          // ── Main wallet total (only shown for multi-broker) ──
+          if (_isMultiBroker) ...[
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.25),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.account_balance_wallet_outlined,
+                      color: Colors.white38, size: 15),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Total across all brokers:',
+                    style: const TextStyle(
+                        color: Colors.white38, fontSize: 12),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '$_mainCurrency ${_formatAmount(_totalCashBalance)}',
+                    style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
   //  Broker dropdown
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildBrokerDropdown(bool isDark, Color textColor, Color subColor) {
     const gold       = Color(0xFFB8860B);
     const goldLight  = Color(0xFFFFB300);
-    final fieldColor = isDark ? const Color(0xFF1C1C1C) : Colors.white;
+    final fieldColor  = isDark ? const Color(0xFF1C1C1C) : Colors.white;
     final borderColor = isDark ? const Color(0xFF3A3A3A) : const Color(0xFFDDDDDD);
-
-    final selected = _activeBrokers[_selectedBrokerIndex];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -413,7 +587,13 @@ class _TransactionsScreensState extends State<TransactionsScreens>
               onChanged: _onBrokerChanged,
               selectedItemBuilder: (context) {
                 return List.generate(_activeBrokers.length, (i) {
-                  final b = _activeBrokers[i];
+                  final b        = _activeBrokers[i];
+                  final bCode    = b['brokerCode'] ?? '';
+                  final bData    = _perBrokerBalance[bCode];
+                  final bBalance = bData != null
+                      ? '$_mainCurrency ${_formatAmount((bData['balance'] as num?)?.toDouble() ?? 0.0)}'
+                      : '';
+
                   return Row(
                     children: [
                       Container(
@@ -442,21 +622,29 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                             ),
                             Text(
                               b['brokerCode'] ?? '',
-                              style: TextStyle(
-                                color: subColor,
-                                fontSize: 11,
-                              ),
+                              style: TextStyle(color: subColor, fontSize: 11),
                             ),
                           ],
                         ),
                       ),
+                      if (bBalance.isNotEmpty)
+                        Text(
+                          bBalance,
+                          style: const TextStyle(
+                              color: goldLight,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700),
+                        ),
                     ],
                   );
                 });
               },
               items: List.generate(_activeBrokers.length, (i) {
                 final b        = _activeBrokers[i];
+                final bCode    = b['brokerCode'] ?? '';
                 final isActive = i == _selectedBrokerIndex;
+                final bData    = _perBrokerBalance[bCode];
+
                 return DropdownMenuItem<int>(
                   value: i,
                   child: Container(
@@ -501,12 +689,23 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                               const SizedBox(height: 2),
                               Text(
                                 '${b['brokerCode']}  ·  ${b['cdsAccount']}',
-                                style: TextStyle(
-                                  color: subColor,
-                                  fontSize: 11,
-                                ),
+                                style: TextStyle(color: subColor, fontSize: 11),
                                 overflow: TextOverflow.ellipsis,
                               ),
+                              // ── Per-broker balance inline in dropdown ──
+                              if (bData != null) ...[
+                                const SizedBox(height: 3),
+                                Text(
+                                  '$_mainCurrency ${_formatAmount((bData['balance'] as num?)?.toDouble() ?? 0.0)}',
+                                  style: TextStyle(
+                                    color: isActive
+                                        ? goldLight
+                                        : const Color(0xFFFFB300).withOpacity(0.7),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -592,82 +791,6 @@ class _TransactionsScreensState extends State<TransactionsScreens>
                   : const Icon(Icons.refresh_rounded,
                   color: Color(0xFF29B6F6), size: 20),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  //  Balance card
-  // ─────────────────────────────────────────────────────────────
-
-  Widget _buildBalanceCard() {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF8B6914), Color(0xFF5C4400)],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.35),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text('Main Wallet Balance',
-                    style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500)),
-              ),
-              if (_isLoadingBalance)
-                const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white70)),
-            ],
-          ),
-          const SizedBox(height: 14),
-          if (_balanceError != null)
-            Text(_balanceError!,
-                style: const TextStyle(color: Colors.white54, fontSize: 14))
-          else
-            Text(
-              'BWP ${_formatAmount(_totalCashBalance)}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 36,
-                fontWeight: FontWeight.w300,
-                letterSpacing: 0.5,
-              ),
-            ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Icon(Icons.lock_outline_rounded,
-                  color: Colors.white54, size: 15),
-              const SizedBox(width: 5),
-              Text(
-                'Locked in orders: BWP ${_formatAmount(_lockedInOpenOrders)}',
-                style: const TextStyle(
-                    color: Colors.white60,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500),
-              ),
-            ],
           ),
         ],
       ),
