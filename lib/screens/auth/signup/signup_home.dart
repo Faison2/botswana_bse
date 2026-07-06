@@ -37,20 +37,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _addressController = TextEditingController();
   final _physicalAddressController = TextEditingController();
   final _postalCodeController = TextEditingController();
-  final _villageController = TextEditingController();
-  final _villageTownCityController = TextEditingController();
-  final _residentInController = TextEditingController();
   final _tinController = TextEditingController();
 
   // Contact & Work (Individual only)
-  final _phoneController = TextEditingController();
+  final _phoneController = TextEditingController(); // reused as mobile wallet number (individual) / company phone (corporate)
   final _faxController = TextEditingController();
   final _emailController = TextEditingController();
   final _occupationController = TextEditingController();
   final _natureOfBusinessController = TextEditingController();
+  final _otherEmploymentController = TextEditingController(); // #6 - "specify" when Employment Status = Other
 
   // Banking (shared)
   final _ibanController = TextEditingController();
+  final _accountNameController = TextEditingController(); // #9 - Account Name
+
+  // Employee declaration (#10)
+  bool _isBseEmployeeOrRelative = false;
+  final _employeeDeclarationDetailsController = TextEditingController();
 
   // Signatories (Corporate only) – each row holds a name + identification controller
   List<Map<String, TextEditingController>> _signatories = [
@@ -63,9 +66,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
   String _selectedIdType = 'National Id';
   String _selectedNationality = 'Botswana';
   String _selectedCountry = 'Botswana';
-  String _selectedEmploymentStatus = 'Full-time';
+  String _selectedEmploymentStatus = 'Employed';
   String _selectedSourceOfIncome = 'Employment';
   String _selectedMNO = 'Mascom- MyZaka';
+
+  // #8 - Mobile number country code
+  String _selectedMobileCountryCode = '+267';
+  final List<Map<String, String>> _countryCodes = const [
+    {'code': '+267', 'label': 'Botswana (+267)'},
+    {'code': '+27', 'label': 'South Africa (+27)'},
+    {'code': '+263', 'label': 'Zimbabwe (+263)'},
+    {'code': '+260', 'label': 'Zambia (+260)'},
+    {'code': '+264', 'label': 'Namibia (+264)'},
+    {'code': '+255', 'label': 'Tanzania (+255)'},
+  ];
 
   // Broker
   String? _selectedBrokerCode;
@@ -144,16 +158,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _addressController.dispose();
     _physicalAddressController.dispose();
     _postalCodeController.dispose();
-    _villageController.dispose();
-    _villageTownCityController.dispose();
-    _residentInController.dispose();
     _tinController.dispose();
     _phoneController.dispose();
     _faxController.dispose();
     _emailController.dispose();
     _occupationController.dispose();
     _natureOfBusinessController.dispose();
+    _otherEmploymentController.dispose();
     _ibanController.dispose();
+    _accountNameController.dispose();
+    _employeeDeclarationDetailsController.dispose();
     for (final row in _signatories) {
       row['name']?.dispose();
       row['id']?.dispose();
@@ -567,20 +581,25 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _showSnackBar('Please enter postal address');
       return false;
     }
-    if (_villageTownCityController.text.isEmpty) {
-      _showSnackBar('Please enter town or city');
-      return false;
-    }
-    if (_residentInController.text.isEmpty) {
-      _showSnackBar('Please enter place of residence');
+    // #5 - TIN/Tax code is mandatory when ID Type is Passport (individual only)
+    if (_selectedAccountType == 'I' &&
+        _selectedIdType == 'Passport' &&
+        _tinController.text.trim().isEmpty) {
+      _showSnackBar('Tax code / TIN is mandatory when ID Type is Passport');
       return false;
     }
     return true;
   }
 
   bool _validateStep3() {
-    if (_emailController.text.isEmpty || _phoneController.text.isEmpty) {
-      _showSnackBar('Please fill email and phone number');
+    if (_emailController.text.isEmpty) {
+      _showSnackBar('Please fill in email');
+      return false;
+    }
+    // #6 - specify field required when Employment Status is "Other"
+    if (_selectedEmploymentStatus == 'Other' &&
+        _otherEmploymentController.text.trim().isEmpty) {
+      _showSnackBar('Please specify your employment status');
       return false;
     }
     return true;
@@ -609,6 +628,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _showSnackBar('Please agree to the Terms & Conditions');
       return false;
     }
+    // #10 - Employee declaration
+    if (_isBseEmployeeOrRelative &&
+        _employeeDeclarationDetailsController.text.trim().isEmpty) {
+      _showSnackBar(
+          'Please provide details of the BSE employee / relationship');
+      return false;
+    }
     if (_selectedAccountType == 'I') {
       if (_isNewClient) {
         if (_idDocument == null) {
@@ -620,7 +646,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
           return false;
         }
         if (_proofOfEmploymentDocument == null) {
-          _showSnackBar('Please upload Proof of Employment/Income document');
+          _showSnackBar('Please upload Proof of Address document');
           return false;
         }
       }
@@ -654,19 +680,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
       "Address1": _addressController.text,
       "PostalAddress": _postalCodeController.text,
       "City": _physicalAddressController.text,
-      "Village": _villageController.text,
-      "Town": _villageTownCityController.text,
-      "ResidesIn": _residentInController.text,
+      "Village": "",
+      "Town": "",
+      "ResidesIn": "",
       "myRegion": "",
       "myDistrict": "",
       "Landmark": "",
       "Tel": _phoneController.text,
+      "TelCountryCode": _selectedMobileCountryCode,
       "MNO": _getMNOCode(_selectedMNO),
       "Fax": _faxController.text,
       "Email": _emailController.text,
       "Country": _selectedCountry,
       "TIN": _tinController.text,
       "IBAN": _ibanController.text,
+      "AccountName": _accountNameController.text,
       "BankDiv": _selectedBankCode ?? '',
       "BankBranch": _selectedBranchCode ?? '',
       "SwiftCode": _selectedBankSwiftCode ?? '',
@@ -682,6 +710,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
       "Payee2": "",
       "AgreementDate": agreementDate,
       "CreatedBy": "MOBILE",
+      "IsBseEmployeeOrRelative": _isBseEmployeeOrRelative,
+      "EmployeeDeclarationDetails":
+      _isBseEmployeeOrRelative ? _employeeDeclarationDetailsController.text : "",
     };
 
     if (_selectedAccountType == 'C') {
@@ -715,6 +746,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       "Nationality": _selectedNationality,
       "Occupation": _occupationController.text,
       "EmploymentStatus": _selectedEmploymentStatus,
+      "EmploymentStatusOther": _otherEmploymentController.text,
       "EmployerName": "",
       "EmployerAddress": "",
       "Designation": "",
@@ -1363,6 +1395,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
             ),
           ]),
+          if (_selectedIdType == 'Passport') ...[
+            const SizedBox(height: 6),
+            const Text(
+              'Tax code / TIN will be required in the Address step.',
+              style: TextStyle(color: Color(0xFFD4A855), fontSize: 11),
+            ),
+          ],
         ],
       ),
     );
@@ -1409,6 +1448,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   // ── Step 2: Address (shared) ───────────────────────────────────────────────
+  // #4 - Village, Town/City and Resides In fields removed
   Widget _buildStep2() {
     return SingleChildScrollView(
       child: Column(
@@ -1422,31 +1462,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
               _buildTextField(
                   'Enter physical address', _physicalAddressController)),
           const SizedBox(height: 15),
-          Row(children: [
-            Expanded(
-                child: _buildLabelWithField(
-                    'Postal Code',
-                    _buildTextField(
-                        'Enter postal code', _postalCodeController))),
-            const SizedBox(width: 10),
-            Expanded(
-                child: _buildLabelWithField('Village',
-                    _buildTextField('Enter village', _villageController))),
-          ]),
-          const SizedBox(height: 15),
-          Row(children: [
-            Expanded(
-                child: _buildLabelWithField(
-                    'Town / City *',
-                    _buildTextField(
-                        'Enter town or city', _villageTownCityController))),
-            const SizedBox(width: 10),
-            Expanded(
-                child: _buildLabelWithField(
-                    'Resides In *',
-                    _buildTextField(
-                        'e.g. Gaborone', _residentInController))),
-          ]),
+          _buildLabelWithField('Postal Code',
+              _buildTextField('Enter postal code', _postalCodeController)),
           if (_selectedAccountType == 'I') ...[
             const SizedBox(height: 15),
             _buildLabelWithField(
@@ -1458,7 +1475,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         (val) => setState(() => _selectedCountry = val!))),
           ],
           const SizedBox(height: 15),
-          _buildLabelWithField('TIN / Tax Code',
+          _buildLabelWithField(
+              _selectedIdType == 'Passport' ? 'TIN / Tax Code *' : 'TIN / Tax Code',
               _buildTextField('Enter TIN number', _tinController)),
         ],
       ),
@@ -1466,52 +1484,57 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   // ── Step 3 (Individual): Contact & Work ────────────────────────────────────
+  // #3 - Occupation hidden for Student/Unemployed
+  // #6 - "Other" employment status with specify field
+  // #7 - Mobile wallet fields moved to Banking step
   Widget _buildStep3() {
+    final bool showOccupation = _selectedEmploymentStatus != 'Student' &&
+        _selectedEmploymentStatus != 'Unemployed';
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildLabelWithField(
-            'Mobile Wallet Provider *',
-            _buildDropdownField(
-              'Select MNO',
-              _selectedMNO,
-              ['Mascom- MyZaka', 'Orange Money', 'BTC Mobile Money/ Smega'],
-                  (val) => setState(() => _selectedMNO = val!),
-            ),
-          ),
-          const SizedBox(height: 15),
-          _buildLabelWithField(
-              'Mobile Number *',
-              _buildTextField('Enter phone number', _phoneController,
-                  keyboardType: TextInputType.phone)),
-          const SizedBox(height: 15),
-          _buildLabelWithField(
               'Email *',
               _buildTextField('Enter email address', _emailController,
                   keyboardType: TextInputType.emailAddress)),
           const SizedBox(height: 15),
-          Row(children: [
-            Expanded(
-                child: _buildLabelWithField(
-                    'Employment Status *',
-                    _buildDropdownField(
-                        'Employment Status',
-                        _selectedEmploymentStatus,
-                        [
-                          'Student',
-                          'Employed',
-                          'Unemployed'
-                        ],
-                            (val) => setState(
-                                () => _selectedEmploymentStatus = val!)))),
-            const SizedBox(width: 10),
-            Expanded(
-                child: _buildLabelWithField(
-                    'Occupation',
-                    _buildTextField(
-                        'Enter occupation', _occupationController))),
-          ]),
+          if (showOccupation) ...[
+            Row(children: [
+              Expanded(
+                  child: _buildLabelWithField(
+                      'Employment Status *',
+                      _buildDropdownField(
+                          'Employment Status',
+                          _selectedEmploymentStatus,
+                          ['Student', 'Employed', 'Unemployed', 'Other'],
+                              (val) => setState(
+                                  () => _selectedEmploymentStatus = val!)))),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: _buildLabelWithField(
+                      'Occupation',
+                      _buildTextField(
+                          'Enter occupation', _occupationController))),
+            ]),
+          ] else ...[
+            _buildLabelWithField(
+                'Employment Status *',
+                _buildDropdownField(
+                    'Employment Status',
+                    _selectedEmploymentStatus,
+                    ['Student', 'Employed', 'Unemployed', 'Other'],
+                        (val) =>
+                        setState(() => _selectedEmploymentStatus = val!))),
+          ],
+          if (_selectedEmploymentStatus == 'Other') ...[
+            const SizedBox(height: 15),
+            _buildLabelWithField(
+                'Please specify *',
+                _buildTextField(
+                    'Specify employment status', _otherEmploymentController)),
+          ],
           const SizedBox(height: 15),
           _buildLabelWithField(
               'Source of Income / Funds *',
@@ -1532,11 +1555,32 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   // ── Banking (shared) ───────────────────────────────────────────────────────
+  // #7 - Mobile Wallet Provider + Mobile Number now live here (individual)
+  // #8 - Mobile number with country code
+  // #9 - Account Name field
   Widget _buildStep4() {
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_selectedAccountType == 'I') ...[
+            _buildLabelWithField(
+              'Mobile Wallet Provider *',
+              _buildDropdownField(
+                'Select MNO',
+                _selectedMNO,
+                ['Mascom- MyZaka', 'Orange Money', 'BTC Mobile Money/ Smega'],
+                    (val) => setState(() => _selectedMNO = val!),
+              ),
+            ),
+            const SizedBox(height: 15),
+            _buildLabelWithField(
+              'Mobile Number *',
+              _buildPhoneFieldWithCountryCode(),
+            ),
+            const SizedBox(height: 15),
+          ],
+
           // Bank Name Dropdown
           _buildLabelWithField('Bank Name', _buildBankDropdown()),
           const SizedBox(height: 15),
@@ -1588,6 +1632,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
           _buildLabelWithField('Bank Branch', _buildBranchDropdown()),
           const SizedBox(height: 15),
 
+          // Account Name (#9)
+          _buildLabelWithField(
+              'Account Name',
+              _buildTextField(
+                  'Enter account holder name', _accountNameController)),
+          const SizedBox(height: 15),
+
           // Account Number
           _buildLabelWithField(
               'Account Number',
@@ -1595,6 +1646,65 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   keyboardType: TextInputType.number)),
         ],
       ),
+    );
+  }
+
+  // #8 - Mobile number field with country code selector
+  Widget _buildPhoneFieldWithCountryCode() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          height: 50,
+          width: 110,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE8D7B8)),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 5,
+                  offset: const Offset(0, 2))
+            ],
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _selectedMobileCountryCode,
+              isExpanded: true,
+              dropdownColor: Colors.white,
+              style: const TextStyle(color: Colors.black87, fontSize: 13),
+              icon: Icon(Icons.arrow_drop_down,
+                  color: Colors.grey[600], size: 18),
+              items: _countryCodes
+                  .map((c) => DropdownMenuItem<String>(
+                value: c['code'],
+                child: Text(c['code']!,
+                    overflow: TextOverflow.ellipsis),
+              ))
+                  .toList(),
+              onChanged: (val) {
+                if (val == null) return;
+                setState(() => _selectedMobileCountryCode = val);
+              },
+              selectedItemBuilder: (context) => _countryCodes
+                  .map((c) => Align(
+                alignment: Alignment.centerLeft,
+                child: Text(c['code']!,
+                    style: const TextStyle(fontSize: 13)),
+              ))
+                  .toList(),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _buildTextField(
+              'Enter phone number', _phoneController,
+              keyboardType: TextInputType.phone),
+        ),
+      ],
     );
   }
 
@@ -1685,6 +1795,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   // ── Step 5: Documents & Final ──────────────────────────────────────────────
+  // #10 - Employee declaration added before terms checkbox
   Widget _buildStep5() {
     return SingleChildScrollView(
       child: Column(
@@ -1729,6 +1840,76 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 '4. Tax Certificate', _taxCertificateDocument, 'TaxCertificate'),
             const SizedBox(height: 25),
           ],
+
+          // #10 - Employee declaration
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE8D7B8)),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 5,
+                    offset: const Offset(0, 2))
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Employee Declaration *',
+                  style: TextStyle(
+                      color: Color(0xFF6B5D4F),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Are you a BSE employee, or a relative of a BSE employee?',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: RadioListTile<bool>(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        title: const Text('Yes', style: TextStyle(fontSize: 13)),
+                        value: true,
+                        groupValue: _isBseEmployeeOrRelative,
+                        activeColor: const Color(0xFFD4A855),
+                        onChanged: (val) =>
+                            setState(() => _isBseEmployeeOrRelative = val!),
+                      ),
+                    ),
+                    Expanded(
+                      child: RadioListTile<bool>(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        title: const Text('No', style: TextStyle(fontSize: 13)),
+                        value: false,
+                        groupValue: _isBseEmployeeOrRelative,
+                        activeColor: const Color(0xFFD4A855),
+                        onChanged: (val) =>
+                            setState(() => _isBseEmployeeOrRelative = val!),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_isBseEmployeeOrRelative) ...[
+                  const SizedBox(height: 4),
+                  _buildTextField(
+                      'Employee name & relationship (e.g. self, spouse of John Doe)',
+                      _employeeDeclarationDetailsController),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
