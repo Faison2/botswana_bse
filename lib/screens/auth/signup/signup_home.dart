@@ -19,14 +19,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool _agreeToTerms = false;
   bool _isNewClient = true;
 
-  // Step 1 – Basic Info (KYC)
+  // Step 0 – Account Type ('I' = Individual, 'C' = Corporate)
+  String _selectedAccountType = 'I';
+
+  // Step 1 (Individual) – Basic Info (KYC)
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _idNumberController = TextEditingController();
   final _dobController = TextEditingController();
   final _cdsNumberController = TextEditingController();
 
-  // Step 2 – Address
+  // Step 1 (Corporate) – Company Info
+  final _companyNameController = TextEditingController();
+  final _bRegNoController = TextEditingController();
+
+  // Step 2 – Address (shared)
   final _addressController = TextEditingController();
   final _physicalAddressController = TextEditingController();
   final _postalCodeController = TextEditingController();
@@ -35,15 +42,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _residentInController = TextEditingController();
   final _tinController = TextEditingController();
 
-  // Step 3 – Contact & Work
+  // Contact & Work (Individual only)
   final _phoneController = TextEditingController();
   final _faxController = TextEditingController();
   final _emailController = TextEditingController();
   final _occupationController = TextEditingController();
   final _natureOfBusinessController = TextEditingController();
 
-  // Step 4 – Banking
+  // Banking (shared)
   final _ibanController = TextEditingController();
+
+  // Signatories (Corporate only) – each row holds a name + identification controller
+  List<Map<String, TextEditingController>> _signatories = [
+    {'name': TextEditingController(), 'id': TextEditingController()},
+  ];
 
   // Dropdown values
   String _selectedTitle = 'Mr.';
@@ -51,7 +63,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
   String _selectedIdType = 'National Id';
   String _selectedNationality = 'Botswana';
   String _selectedCountry = 'Botswana';
-  String _selectedAccountType = 'I';
   String _selectedEmploymentStatus = 'Full-time';
   String _selectedSourceOfIncome = 'Employment';
   String _selectedMNO = 'Mascom- MyZaka';
@@ -75,14 +86,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
   String? _selectedBranchCode;
   String? _selectedBranchName;
 
-  // Documents
+  // Documents – Individual
   File? _idDocument;
   File? _proofOfAddressDocument;
   File? _proofOfEmploymentDocument;
 
+  // Documents – Corporate
+  File? _certificateOfIncorporationDocument;
+  File? _boardResolutionDocument;
+  File? _taxCertificateDocument;
+
   // Hardcoded
   final String _branchCode = "HRE001";
   final String _preFunding = "1";
+
+  List<String> get _stepNames => _selectedAccountType == 'I'
+      ? ['Type', 'Basic Info', 'Address', 'Contact', 'Banking', 'Final']
+      : ['Type', 'Company', 'Address', 'Banking', 'Signatories', 'Final'];
 
   @override
   void initState() {
@@ -119,6 +139,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _idNumberController.dispose();
     _dobController.dispose();
     _cdsNumberController.dispose();
+    _companyNameController.dispose();
+    _bRegNoController.dispose();
     _addressController.dispose();
     _physicalAddressController.dispose();
     _postalCodeController.dispose();
@@ -132,6 +154,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _occupationController.dispose();
     _natureOfBusinessController.dispose();
     _ibanController.dispose();
+    for (final row in _signatories) {
+      row['name']?.dispose();
+      row['id']?.dispose();
+    }
     super.dispose();
   }
 
@@ -254,6 +280,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
               break;
             case 'ProofOfEmployment':
               _proofOfEmploymentDocument = file;
+              break;
+            case 'CertificateOfIncorporation':
+              _certificateOfIncorporationDocument = file;
+              break;
+            case 'BoardResolution':
+              _boardResolutionDocument = file;
+              break;
+            case 'TaxCertificate':
+              _taxCertificateDocument = file;
               break;
           }
         });
@@ -381,6 +416,45 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   Future<List<Map<String, dynamic>>> _prepareDocuments() async {
     List<Map<String, dynamic>> documents = [];
+
+    if (_selectedAccountType == 'C') {
+      final certBase64 =
+      await _convertFileToBase64(_certificateOfIncorporationDocument);
+      if (certBase64 != null) {
+        documents.add({
+          "Name": "Certificate of Incorporation",
+          "ContentType": _contentTypeForFile(_certificateOfIncorporationDocument!),
+          "Data": certBase64
+        });
+      }
+      final resolutionBase64 =
+      await _convertFileToBase64(_boardResolutionDocument);
+      if (resolutionBase64 != null) {
+        documents.add({
+          "Name": "Board Resolution",
+          "ContentType": _contentTypeForFile(_boardResolutionDocument!),
+          "Data": resolutionBase64
+        });
+      }
+      final addressBase64 = await _convertFileToBase64(_proofOfAddressDocument);
+      if (addressBase64 != null) {
+        documents.add({
+          "Name": "Proof of Address",
+          "ContentType": _contentTypeForFile(_proofOfAddressDocument!),
+          "Data": addressBase64
+        });
+      }
+      final taxCertBase64 = await _convertFileToBase64(_taxCertificateDocument);
+      if (taxCertBase64 != null) {
+        documents.add({
+          "Name": "Tax Certificate",
+          "ContentType": _contentTypeForFile(_taxCertificateDocument!),
+          "Data": taxCertBase64
+        });
+      }
+      return documents;
+    }
+
     final idBase64 = await _convertFileToBase64(_idDocument);
     if (idBase64 != null) {
       documents.add({
@@ -410,12 +484,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   void _handleNext() {
-    if (_currentStep == 0 && !_validateStep1()) return;
-    if (_currentStep == 1 && !_validateStep2()) return;
-    if (_currentStep == 2 && !_validateStep3()) return;
-    if (_currentStep == 4 && !_validateStep5()) return;
+    if (_currentStep == 1) {
+      if (_selectedAccountType == 'I') {
+        if (!_validateStep1()) return;
+      } else {
+        if (!_validateCompanyInfo()) return;
+      }
+    } else if (_currentStep == 2) {
+      if (!_validateStep2()) return;
+    } else if (_currentStep == 3) {
+      if (_selectedAccountType == 'I' && !_validateStep3()) return;
+    } else if (_currentStep == 4) {
+      if (_selectedAccountType == 'C' && !_validateSignatories()) return;
+    } else if (_currentStep == 5) {
+      if (!_validateStep5()) return;
+    }
 
-    if (_currentStep < 4) {
+    if (_currentStep < 5) {
       setState(() => _currentStep++);
     } else {
       _submitForm();
@@ -457,6 +542,26 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return true;
   }
 
+  bool _validateCompanyInfo() {
+    if (_selectedBrokerCode == null || _selectedBrokerCode!.isEmpty) {
+      _showSnackBar('Please select a broker');
+      return false;
+    }
+    if (_companyNameController.text.isEmpty) {
+      _showSnackBar('Please enter the company name');
+      return false;
+    }
+    if (_bRegNoController.text.isEmpty) {
+      _showSnackBar('Please enter the registration/certificate number');
+      return false;
+    }
+    if (_emailController.text.isEmpty) {
+      _showSnackBar('Please enter the company email');
+      return false;
+    }
+    return true;
+  }
+
   bool _validateStep2() {
     if (_addressController.text.isEmpty) {
       _showSnackBar('Please enter postal address');
@@ -481,89 +586,151 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return true;
   }
 
-  bool _validateStep5() {
-    if (!_agreeToTerms) {
-      _showSnackBar('Please agree to the Terms & Conditions');
+  bool _validateSignatories() {
+    if (_signatories.isEmpty) {
+      _showSnackBar('Please add at least one signatory');
       return false;
     }
-    if (_isNewClient) {
-      if (_idDocument == null) {
-        _showSnackBar('Please upload ID document');
+    for (final row in _signatories) {
+      if (row['name']!.text.trim().isEmpty) {
+        _showSnackBar('Please enter the name for all signatories');
         return false;
       }
-      if (_proofOfAddressDocument == null) {
-        _showSnackBar('Please upload Proof of Address document');
-        return false;
-      }
-      if (_proofOfEmploymentDocument == null) {
-        _showSnackBar('Please upload Proof of Employment/Income document');
+      if (row['id']!.text.trim().isEmpty) {
+        _showSnackBar('Please enter an identification number for all signatories');
         return false;
       }
     }
     return true;
   }
 
+  bool _validateStep5() {
+    if (!_agreeToTerms) {
+      _showSnackBar('Please agree to the Terms & Conditions');
+      return false;
+    }
+    if (_selectedAccountType == 'I') {
+      if (_isNewClient) {
+        if (_idDocument == null) {
+          _showSnackBar('Please upload ID document');
+          return false;
+        }
+        if (_proofOfAddressDocument == null) {
+          _showSnackBar('Please upload Proof of Address document');
+          return false;
+        }
+        if (_proofOfEmploymentDocument == null) {
+          _showSnackBar('Please upload Proof of Employment/Income document');
+          return false;
+        }
+      }
+    } else {
+      if (_certificateOfIncorporationDocument == null) {
+        _showSnackBar('Please upload the Certificate of Incorporation');
+        return false;
+      }
+      if (_boardResolutionDocument == null) {
+        _showSnackBar('Please upload the Board Resolution');
+        return false;
+      }
+      if (_proofOfAddressDocument == null) {
+        _showSnackBar('Please upload Proof of Address document');
+        return false;
+      }
+      if (_taxCertificateDocument == null) {
+        _showSnackBar('Please upload the Tax Certificate');
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Map<String, dynamic> _buildPayload() {
+    final now = DateTime.now();
+    final agreementDate =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
+    final common = {
+      "Address1": _addressController.text,
+      "PostalAddress": _postalCodeController.text,
+      "City": _physicalAddressController.text,
+      "Village": _villageController.text,
+      "Town": _villageTownCityController.text,
+      "ResidesIn": _residentInController.text,
+      "myRegion": "",
+      "myDistrict": "",
+      "Landmark": "",
+      "Tel": _phoneController.text,
+      "MNO": _getMNOCode(_selectedMNO),
+      "Fax": _faxController.text,
+      "Email": _emailController.text,
+      "Country": _selectedCountry,
+      "TIN": _tinController.text,
+      "IBAN": _ibanController.text,
+      "BankDiv": _selectedBankCode ?? '',
+      "BankBranch": _selectedBranchCode ?? '',
+      "SwiftCode": _selectedBankSwiftCode ?? '',
+      "InvestorType": "",
+      "AccountType": _selectedAccountType,
+      "accountClass": "",
+      "branchcode": _branchCode,
+      "brokerlink": "0",
+      "BrokerCode": _selectedBrokerCode,
+      "PreFunding": _preFunding,
+      "PrincipalOfficer": "",
+      "myJointName": "",
+      "Payee2": "",
+      "AgreementDate": agreementDate,
+      "CreatedBy": "MOBILE",
+    };
+
+    if (_selectedAccountType == 'C') {
+      return {
+        ...common,
+        "CompanyName": _companyNameController.text,
+        "BRegNo": _bRegNoController.text,
+        "cdsnumber": "",
+        "clientType": "new",
+        "Signatories": _signatories
+            .map((row) => {
+          "Name": row['name']!.text,
+          "Identification": row['id']!.text,
+        })
+            .toList(),
+      };
+    }
+
+    return {
+      ...common,
+      "Othernames": _firstNameController.text,
+      "Surname": _lastNameController.text,
+      "MiddleNames": "",
+      "title": _selectedTitle,
+      "Gender": _selectedGender,
+      "idtype": _selectedIdType,
+      "myIdentification": _idNumberController.text,
+      "IDExpiryDate": "",
+      "DOB": _dobController.text,
+      "BirthPlace": "",
+      "Nationality": _selectedNationality,
+      "Occupation": _occupationController.text,
+      "EmploymentStatus": _selectedEmploymentStatus,
+      "EmployerName": "",
+      "EmployerAddress": "",
+      "Designation": "",
+      "NatureOfBusiness": _natureOfBusinessController.text,
+      "sourceofIncome": _selectedSourceOfIncome,
+      "MaritalStatus": "",
+      "cdsnumber": _isNewClient ? "" : _cdsNumberController.text,
+      "clientType": _isNewClient ? "new" : "existing",
+    };
+  }
+
   Future<void> _submitForm() async {
     try {
       final documents = await _prepareDocuments();
-
-      final now = DateTime.now();
-      final agreementDate =
-          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-
       final payload = {
-        "Othernames": _firstNameController.text,
-        "Surname": _lastNameController.text,
-        "MiddleNames": "",
-        "title": _selectedTitle,
-        "Gender": _selectedGender,
-        "idtype": _selectedIdType,
-        "myIdentification": _idNumberController.text,
-        "IDExpiryDate": "",
-        "DOB": _dobController.text,
-        "BirthPlace": "",
-        "Nationality": _selectedNationality,
-        "Country": _selectedCountry,
-        "Address1": _addressController.text,
-        "PostalAddress": _postalCodeController.text,
-        "City": _physicalAddressController.text,
-        "Village": _villageController.text,
-        "Town": _villageTownCityController.text,
-        "ResidesIn": _residentInController.text,
-        "myRegion": "",
-        "myDistrict": "",
-        "Landmark": "",
-        "Tel": _phoneController.text,
-        "MNO": _getMNOCode(_selectedMNO),
-        "Fax": _faxController.text,
-        "Email": _emailController.text,
-        "Occupation": _occupationController.text,
-        "EmploymentStatus": _selectedEmploymentStatus,
-        "EmployerName": "",
-        "EmployerAddress": "",
-        "Designation": "",
-        "NatureOfBusiness": _natureOfBusinessController.text,
-        "sourceofIncome": _selectedSourceOfIncome,
-        "TIN": _tinController.text,
-        "MaritalStatus": "",
-        "IBAN": _ibanController.text,
-        "BankDiv": _selectedBankCode ?? '',        // bank code from API
-        "BankBranch": _selectedBranchCode ?? '',   // branch code from API
-        "SwiftCode": _selectedBankSwiftCode ?? '', // auto-filled from bank API
-        "InvestorType": "",
-        "AccountType": _selectedAccountType,
-        "accountClass": "",
-        "branchcode": _branchCode,
-        "brokerlink": "0",
-        "BrokerCode": _selectedBrokerCode,
-        "PreFunding": _preFunding,
-        "cdsnumber": _isNewClient ? "" : _cdsNumberController.text,
-        "clientType": _isNewClient ? "new" : "existing",
-        "PrincipalOfficer": "",
-        "myJointName": "",
-        "Payee2": "",
-        "AgreementDate": agreementDate,
-        "CreatedBy": "MOBILE",
+        ..._buildPayload(),
         "Documents": documents,
       };
 
@@ -684,18 +851,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Widget _buildStepIndicator() {
-    List<String> stepNames = ['Basic Info', 'Address', 'Contact', 'Banking', 'Final'];
+    final stepNames = _stepNames;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(5, (index) {
+          children: List.generate(stepNames.length, (index) {
             return Row(
               children: [
                 _buildStepCircle(index, stepNames[index]),
-                if (index < 4) _buildStepLine(),
+                if (index < stepNames.length - 1) _buildStepLine(),
               ],
             );
           }),
@@ -947,7 +1114,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           elevation: 0,
                         ),
                         child: Text(
-                          _currentStep == 4 ? 'Submit' : 'Next',
+                          _currentStep == 5 ? 'Submit' : 'Next',
                           style: const TextStyle(
                               fontSize: 16, fontWeight: FontWeight.w600),
                         ),
@@ -966,21 +1133,131 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Widget _buildCurrentStep() {
     switch (_currentStep) {
       case 0:
-        return _buildStep1();
+        return _buildAccountTypeStep();
       case 1:
-        return _buildStep2();
+        return _selectedAccountType == 'I'
+            ? _buildStep1()
+            : _buildCompanyInfoStep();
       case 2:
-        return _buildStep3();
+        return _buildStep2();
       case 3:
-        return _buildStep4();
+        return _selectedAccountType == 'I' ? _buildStep3() : _buildStep4();
       case 4:
+        return _selectedAccountType == 'I'
+            ? _buildStep4()
+            : _buildSignatoriesStep();
+      case 5:
         return _buildStep5();
       default:
-        return _buildStep1();
+        return _buildAccountTypeStep();
     }
   }
 
-  // ── Step 1: Basic Info (KYC) ───────────────────────────────────────────────
+  // ── Step 0: Account Type ───────────────────────────────────────────────────
+  Widget _buildAccountTypeStep() {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'What type of account would you like to open?',
+            style: TextStyle(
+                color: Color(0xFF2C1810),
+                fontSize: 15,
+                fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 16),
+          _buildAccountTypeCard(
+            type: 'I',
+            title: 'Individual',
+            subtitle: 'For personal trading accounts',
+            icon: Icons.person_outline,
+          ),
+          const SizedBox(height: 12),
+          _buildAccountTypeCard(
+            type: 'C',
+            title: 'Corporate',
+            subtitle: 'For companies, trusts and organisations',
+            icon: Icons.apartment_outlined,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAccountTypeCard({
+    required String type,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+  }) {
+    final bool selected = _selectedAccountType == type;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedAccountType = type),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: selected
+              ? const Color(0xFFD4A855).withOpacity(0.12)
+              : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: selected
+                  ? const Color(0xFFD4A855)
+                  : const Color(0xFFE8D7B8),
+              width: selected ? 2 : 1),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 5,
+                offset: const Offset(0, 2))
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: selected
+                    ? const Color(0xFFD4A855)
+                    : const Color(0xFFF5F5F5),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon,
+                  color: selected ? Colors.white : Colors.grey[500]),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: selected
+                            ? const Color(0xFF2C1810)
+                            : Colors.black87),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+            if (selected)
+              const Icon(Icons.check_circle, color: Color(0xFFD4A855)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Step 1 (Individual): Basic Info (KYC) ──────────────────────────────────
   Widget _buildStep1() {
     return SingleChildScrollView(
       child: Column(
@@ -1086,46 +1363,52 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
             ),
           ]),
-          const SizedBox(height: 15),
-          _buildLabelWithField(
-            'Account Type',
-            Container(
-              height: 50,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFE8D7B8)),
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
-                      blurRadius: 5,
-                      offset: const Offset(0, 2))
-                ],
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedAccountType,
-                  isExpanded: true,
-                  dropdownColor: Colors.white,
-                  style: const TextStyle(color: Colors.black87, fontSize: 14),
-                  icon:
-                  Icon(Icons.arrow_drop_down, color: Colors.grey[600], size: 20),
-                  items: const [
-                    DropdownMenuItem(value: 'I', child: Text('Individual')),
-                  ],
-                  onChanged: (val) =>
-                      setState(() => _selectedAccountType = val!),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
   }
 
-  // ── Step 2: Address ────────────────────────────────────────────────────────
+  // ── Step 1 (Corporate): Company Info ───────────────────────────────────────
+  Widget _buildCompanyInfoStep() {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildLabelWithField('Broker *', _buildBrokerDropdown()),
+          const SizedBox(height: 15),
+          _buildLabelWithField(
+              'Company Name *',
+              _buildTextField(
+                  'Enter registered company name', _companyNameController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField(
+              'Registration / Certificate No. *',
+              _buildTextField(
+                  'Enter registration number', _bRegNoController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField(
+              'Company Email *',
+              _buildTextField('Enter company email', _emailController,
+                  keyboardType: TextInputType.emailAddress)),
+          const SizedBox(height: 15),
+          _buildLabelWithField(
+              'Company Phone',
+              _buildTextField('Enter phone number', _phoneController,
+                  keyboardType: TextInputType.phone)),
+          const SizedBox(height: 15),
+          _buildLabelWithField(
+              'Country *',
+              _buildDropdownField(
+                  'Country',
+                  _selectedCountry,
+                  ['Botswana', 'Other'],
+                      (val) => setState(() => _selectedCountry = val!))),
+        ],
+      ),
+    );
+  }
+
+  // ── Step 2: Address (shared) ───────────────────────────────────────────────
   Widget _buildStep2() {
     return SingleChildScrollView(
       child: Column(
@@ -1164,14 +1447,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     _buildTextField(
                         'e.g. Gaborone', _residentInController))),
           ]),
-          const SizedBox(height: 15),
-          _buildLabelWithField(
-              'Country *',
-              _buildDropdownField(
-                  'Country',
-                  _selectedCountry,
-                  ['Botswana', 'Other'],
-                      (val) => setState(() => _selectedCountry = val!))),
+          if (_selectedAccountType == 'I') ...[
+            const SizedBox(height: 15),
+            _buildLabelWithField(
+                'Country *',
+                _buildDropdownField(
+                    'Country',
+                    _selectedCountry,
+                    ['Botswana', 'Other'],
+                        (val) => setState(() => _selectedCountry = val!))),
+          ],
           const SizedBox(height: 15),
           _buildLabelWithField('TIN / Tax Code',
               _buildTextField('Enter TIN number', _tinController)),
@@ -1180,7 +1465,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  // ── Step 3: Contact & Work ─────────────────────────────────────────────────
+  // ── Step 3 (Individual): Contact & Work ────────────────────────────────────
   Widget _buildStep3() {
     return SingleChildScrollView(
       child: Column(
@@ -1246,7 +1531,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  // ── Step 4: Banking ────────────────────────────────────────────────────────
+  // ── Banking (shared) ───────────────────────────────────────────────────────
   Widget _buildStep4() {
     return SingleChildScrollView(
       child: Column(
@@ -1313,33 +1598,135 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
+  // ── Step 4 (Corporate): Signatories ────────────────────────────────────────
+  Widget _buildSignatoriesStep() {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Signatories *',
+            style: TextStyle(
+                color: Color(0xFF6B5D4F),
+                fontSize: 12,
+                fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Add at least one authorised signatory with their identification number.',
+            style: TextStyle(color: Colors.grey[600], fontSize: 11),
+          ),
+          const SizedBox(height: 12),
+          ..._signatories.asMap().entries.map((entry) {
+            final index = entry.key;
+            final row = entry.value;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE8D7B8)),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withOpacity(0.03),
+                        blurRadius: 5,
+                        offset: const Offset(0, 2))
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Signatory ${index + 1}',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF6B5D4F),
+                                fontSize: 13)),
+                        if (_signatories.length > 1)
+                          GestureDetector(
+                            onTap: () =>
+                                setState(() => _signatories.removeAt(index)),
+                            child: const Icon(Icons.delete_outline,
+                                color: Colors.redAccent, size: 20),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _buildTextField('Full name', row['name']!),
+                    const SizedBox(height: 8),
+                    _buildTextField('Identification number', row['id']!),
+                  ],
+                ),
+              ),
+            );
+          }),
+          const SizedBox(height: 4),
+          OutlinedButton.icon(
+            onPressed: () => setState(() => _signatories.add({
+              'name': TextEditingController(),
+              'id': TextEditingController(),
+            })),
+            icon: const Icon(Icons.add, color: Color(0xFFD4A855), size: 18),
+            label: const Text('Add signatory',
+                style: TextStyle(color: Color(0xFFD4A855))),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Color(0xFFD4A855)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Step 5: Documents & Final ──────────────────────────────────────────────
   Widget _buildStep5() {
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_isNewClient) ...[
-            const Text(
-              'Attachments *',
-              style: TextStyle(
-                  color: Color(0xFF6B5D4F),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 8),
-            _buildDocumentUploadField(
-                '1. Certified Copy of National Identity Card',
-                _idDocument,
-                'ID'),
+          const Text(
+            'Attachments *',
+            style: TextStyle(
+                color: Color(0xFF6B5D4F),
+                fontSize: 12,
+                fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 8),
+          if (_selectedAccountType == 'I') ...[
+            if (_isNewClient) ...[
+              _buildDocumentUploadField(
+                  '1. Certified Copy of National Identity Card',
+                  _idDocument,
+                  'ID'),
+              const SizedBox(height: 15),
+              _buildDocumentUploadField('2. Proof of Address',
+                  _proofOfAddressDocument, 'ProofOfAddress'),
+              const SizedBox(height: 15),
+              _buildDocumentUploadField(
+                  '3. Proof of Source of Income / Employment',
+                  _proofOfEmploymentDocument,
+                  'ProofOfEmployment'),
+              const SizedBox(height: 25),
+            ],
+          ] else ...[
+            _buildDocumentUploadField('1. Certificate of Incorporation',
+                _certificateOfIncorporationDocument,
+                'CertificateOfIncorporation'),
+            const SizedBox(height: 15),
+            _buildDocumentUploadField('2. Board Resolution',
+                _boardResolutionDocument, 'BoardResolution'),
+            const SizedBox(height: 15),
+            _buildDocumentUploadField('3. Proof of Address',
+                _proofOfAddressDocument, 'ProofOfAddress'),
             const SizedBox(height: 15),
             _buildDocumentUploadField(
-                '2. Proof of Address', _proofOfAddressDocument, 'ProofOfAddress'),
-            const SizedBox(height: 15),
-            _buildDocumentUploadField(
-                '3. Proof of Source of Income / Employment',
-                _proofOfEmploymentDocument,
-                'ProofOfEmployment'),
+                '4. Tax Certificate', _taxCertificateDocument, 'TaxCertificate'),
             const SizedBox(height: 25),
           ],
           Row(
