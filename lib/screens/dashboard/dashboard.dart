@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:bse/contants/constants.dart';
 import 'package:bse/screens/buy_sell/buy_sell.dart';
+import 'package:bse/screens/buy_sell/quick_trade.dart';
 import 'package:bse/screens/buy_sell/transactions.dart';
 import 'package:bse/screens/dashboard/widgets/market_ticker.dart';
 import 'package:bse/screens/dashboard/widgets/portifolio_widget.dart';
@@ -35,6 +36,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
   bool _isBalanceVisible = true;
+  bool _isBuySelected = true; // drives the Buy/Sell pill toggle on the dashboard
 
   // ── Chart state (live tickers) ──
   List<List<FlSpot>> _holdingChartData = [];
@@ -421,12 +423,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 20),
           _buildPortfolioCard(isDark),
           const SizedBox(height: 16),
+          _buildBuySellButtons(isDark),
+          const SizedBox(height: 16),
           _buildQuickActions(isDark),
           const SizedBox(height: 30),
-         // _buildSectionHeader('My Portfolio', 'View Details', isDark, null),
-        //  const SizedBox(height: 15),
-       //  _buildHoldingsSection(),
-         // const SizedBox(height: 30),
+          // _buildSectionHeader('My Portfolio', 'View Details', isDark, null),
+          //  const SizedBox(height: 15),
+          //  _buildHoldingsSection(),
+          // const SizedBox(height: 30),
           _buildSectionHeader(
             'Market Watch', 'See All', isDark,
                 () => _navigateWithDebounce(const MarketWatchScreen()),
@@ -668,6 +672,97 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  Buy / Sell action buttons → opens QuickTradeScreen
+  // ─────────────────────────────────────────────────────────────
+
+  Widget _buildBuySellButtons(bool isDark) {
+    final toggleBgColor = isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF0F0F0);
+    final subtextColor  = isDark ? Colors.grey : Colors.grey.shade600;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: toggleBgColor,
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: isDark
+              ? []
+              : [BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10, offset: const Offset(0, 2))],
+        ),
+        padding: const EdgeInsets.all(4),
+        child: Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() => _isBuySelected = true);
+                  _navigateWithDebounce(const QuickTradeScreen(initialIsBuy: true));
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: _isBuySelected
+                      ? BoxDecoration(
+                    gradient: const LinearGradient(
+                        colors: [Colors.green, Colors.black]),
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: [BoxShadow(
+                        color: Colors.green.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2))],
+                  )
+                      : null,
+                  child: Center(
+                    child: Text('BUY',
+                        style: TextStyle(
+                            color: _isBuySelected ? Colors.white : subtextColor,
+                            fontSize: 18,
+                            fontWeight: _isBuySelected
+                                ? FontWeight.bold
+                                : FontWeight.w400)),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() => _isBuySelected = false);
+                  _navigateWithDebounce(const QuickTradeScreen(initialIsBuy: false));
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: !_isBuySelected
+                      ? BoxDecoration(
+                    gradient: const LinearGradient(
+                        colors: [Colors.black, Colors.red]),
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: [BoxShadow(
+                        color: Colors.red.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2))],
+                  )
+                      : null,
+                  child: Center(
+                    child: Text('SELL',
+                        style: TextStyle(
+                            color: !_isBuySelected ? Colors.white : subtextColor,
+                            fontSize: 18,
+                            fontWeight: !_isBuySelected
+                                ? FontWeight.bold
+                                : FontWeight.w400)),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
