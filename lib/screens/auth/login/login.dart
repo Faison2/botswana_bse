@@ -7,6 +7,18 @@ import '../../dashboard/dashboard.dart';
 import '../forgot_password/forgot-password.dart';
 import '../signup/signup_home.dart';
 
+// ── BSE Brand Palette ──────────────────────────────────────────
+class BSEColors {
+  static const marigold = Color(0xFFC6912D);
+  static const marigoldDark = Color(0xFFA97620);
+  static const marigoldLight = Color(0xFFE8C88A);
+  static const ink = Color(0xFF1A1A1A);
+  static const charcoal = Color(0xFF3A3A3A);
+  static const muted = Color(0xFF8A8A8A);
+  static const surface = Color(0xFFFFFFFF);
+  static const canvas = Color(0xFFFAFAF8);
+}
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -119,18 +131,14 @@ class _LoginScreenState extends State<LoginScreen> {
           // ── Brokers: save full list + each active broker individually ─
           final List<dynamic> brokers = responseData['brokers'] ?? [];
 
-          // Store the full list as a JSON string for use anywhere in the app
           await prefs.setString('brokersList', jsonEncode(brokers));
 
-          // Filter to only ACTIVE brokers
           final List<dynamic> activeBrokers = brokers
               .where((b) => (b['status'] ?? '').toString().toUpperCase() == 'ACTIVE')
               .toList();
 
-          // Save count of active brokers
           await prefs.setInt('activeBrokersCount', activeBrokers.length);
 
-          // Save each active broker with index-based keys (broker_0, broker_1, ...)
           for (int i = 0; i < activeBrokers.length; i++) {
             final broker = activeBrokers[i];
             await prefs.setString('broker_${i}_BrokerCode', broker['brokerCode'] ?? '');
@@ -139,8 +147,6 @@ class _LoginScreenState extends State<LoginScreen> {
             await prefs.setString('broker_${i}_Status',     broker['status']     ?? '');
           }
 
-          // Also keep the first active broker under legacy single-broker keys
-          // so any existing screens that read BrokerCode/CDSAccount/BrokerName still work
           if (activeBrokers.isNotEmpty) {
             await prefs.setString('BrokerCode', activeBrokers[0]['brokerCode'] ?? '');
             await prefs.setString('CDSAccount', activeBrokers[0]['CDSAccount'] ?? '');
@@ -182,63 +188,26 @@ class _LoginScreenState extends State<LoginScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Change Password Required'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: BSEColors.surface,
+        title: const Text(
+          'Change Password Required',
+          style: TextStyle(color: BSEColors.ink, fontWeight: FontWeight.w700),
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
                 'Your password needs to be changed before you can continue.',
-                style: TextStyle(fontSize: 14, color: Color(0xFF6B5D4F)),
+                style: TextStyle(fontSize: 14, color: BSEColors.charcoal),
               ),
               const SizedBox(height: 20),
-              TextField(
-                controller: _oldPasswordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: 'Current Password',
-                  hintText: 'Enter your current password',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                ),
-              ),
+              _buildDialogField(_oldPasswordController, 'Current Password', 'Enter your current password'),
               const SizedBox(height: 16),
-              TextField(
-                controller: _newPasswordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: 'New Password',
-                  hintText: 'Enter new password',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                ),
-              ),
+              _buildDialogField(_newPasswordController, 'New Password', 'Enter new password'),
               const SizedBox(height: 16),
-              TextField(
-                controller: _confirmPasswordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: 'Confirm Password',
-                  hintText: 'Confirm new password',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                ),
-              ),
+              _buildDialogField(_confirmPasswordController, 'Confirm Password', 'Confirm new password'),
             ],
           ),
         ),
@@ -248,7 +217,7 @@ class _LoginScreenState extends State<LoginScreen> {
               Navigator.pop(context);
               _clearPasswordFields();
             },
-            child: const Text('Cancel'),
+            child: const Text('Cancel', style: TextStyle(color: BSEColors.muted)),
           ),
           ElevatedButton(
             onPressed: () {
@@ -256,14 +225,40 @@ class _LoginScreenState extends State<LoginScreen> {
               _handlePasswordChange(email);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFD4A855),
+              backgroundColor: BSEColors.marigold,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
             ),
             child: const Text(
               'Change Password',
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDialogField(TextEditingController controller, String label, String hint) {
+    return TextField(
+      controller: controller,
+      obscureText: true,
+      style: const TextStyle(color: BSEColors.ink),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: BSEColors.muted),
+        hintText: hint,
+        filled: true,
+        fillColor: BSEColors.canvas,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: BSEColors.marigold, width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
     );
   }
@@ -348,15 +343,46 @@ class _LoginScreenState extends State<LoginScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
+        backgroundColor: isError ? const Color(0xFFC0392B) : BSEColors.marigoldDark,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         duration: const Duration(seconds: 3),
       ),
+    );
+  }
+
+  InputDecoration _fieldDecoration({
+    required String hint,
+    required IconData icon,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: BSEColors.muted.withOpacity(0.8), fontSize: 15),
+      prefixIcon: Icon(icon, color: BSEColors.marigold, size: 20),
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: BSEColors.canvas,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: Color(0xFFEDEAE3), width: 1),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: BSEColors.marigold, width: 1.6),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: BSEColors.canvas,
       body: Container(
         width: double.infinity,
         height: double.infinity,
@@ -365,9 +391,9 @@ class _LoginScreenState extends State<LoginScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFFFF8DC),
-              Color(0xFFFFF4D6),
-              Color(0xFFFFEFCC),
+              Color(0xFFFDF9F1),
+              BSEColors.canvas,
+              Color(0xFFF7F3EC),
             ],
           ),
         ),
@@ -375,155 +401,121 @@ class _LoginScreenState extends State<LoginScreen> {
           child: SingleChildScrollView(
             child: Column(
               children: [
-                const SizedBox(height: 40),
+                const SizedBox(height: 32),
 
-                // Logo
+                // ── Marigold accent bar + Logo ────────────────────
                 Container(
-                  width: 120,
-                  height: 120,
+                  width: 96,
+                  height: 96,
                   decoration: BoxDecoration(
                     color: Colors.white,
                     shape: BoxShape.circle,
+                    border: Border.all(color: BSEColors.marigoldLight, width: 2),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 15,
+                        color: BSEColors.marigold.withOpacity(0.18),
+                        blurRadius: 24,
                         spreadRadius: 2,
+                        offset: const Offset(0, 8),
                       ),
                     ],
                   ),
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(14),
                   child: Image.asset('assets/logo.png', fit: BoxFit.contain),
                 ),
 
-                const SizedBox(height: 40),
+                const SizedBox(height: 16),
 
-                // Login Card
+                Text(
+                  'BOTSWANA STOCK EXCHANGE',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 2.2,
+                    color: BSEColors.marigoldDark,
+                  ),
+                ),
+
+                const SizedBox(height: 36),
+
+                // ── Login Card ─────────────────────────────────────
                 Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 24),
-                  padding: const EdgeInsets.all(32),
+                  margin: const EdgeInsets.symmetric(horizontal: 22),
+                  padding: const EdgeInsets.fromLTRB(28, 36, 28, 28),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFFBF0).withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: const Color(0xFFE8D7B8),
-                      width: 1,
-                    ),
+                    color: BSEColors.surface,
+                    borderRadius: BorderRadius.circular(28),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 20,
-                        offset: const Offset(0, 4),
+                        color: BSEColors.ink.withOpacity(0.06),
+                        blurRadius: 30,
+                        offset: const Offset(0, 12),
                       ),
                     ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Title
                       const Text(
-                        'Login',
+                        'Welcome back',
                         style: TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF2C1810),
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: BSEColors.ink,
+                          letterSpacing: -0.5,
                         ),
                         textAlign: TextAlign.center,
                       ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Log in to manage your trading account',
+                        style: TextStyle(fontSize: 13.5, color: BSEColors.muted),
+                        textAlign: TextAlign.center,
+                      ),
 
-                      const SizedBox(height: 30),
+                      const SizedBox(height: 32),
 
-                      // Email TextField
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
+                      // Email
+                      TextField(
+                        controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        style: const TextStyle(fontSize: 15.5, color: BSEColors.ink),
+                        decoration: _fieldDecoration(
+                          hint: 'Email address',
+                          icon: Icons.mail_outline_rounded,
                         ),
-                        child: TextField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            color: Colors.black87,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: 'Email',
-                            hintStyle: TextStyle(color: Colors.grey[400]),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      // Password
+                      TextField(
+                        controller: _passwordController,
+                        obscureText: _obscurePassword,
+                        style: const TextStyle(fontSize: 15.5, color: BSEColors.ink),
+                        decoration: _fieldDecoration(
+                          hint: 'Password',
+                          icon: Icons.lock_outline_rounded,
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: BSEColors.muted,
+                              size: 20,
                             ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 18,
-                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
                           ),
                         ),
                       ),
 
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
 
-                      // Password TextField
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: TextField(
-                          controller: _passwordController,
-                          obscureText: _obscurePassword,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            color: Colors.black87,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: 'Password',
-                            hintStyle: TextStyle(
-                              color: Colors.grey[400],
-                              fontSize: 16,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 18,
-                            ),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility_off_outlined
-                                    : Icons.visibility_outlined,
-                                color: Colors.grey[400],
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                });
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Remember me and Forgot Password
+                      // Remember me + Forgot Password
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -540,17 +532,15 @@ class _LoginScreenState extends State<LoginScreen> {
                                     });
                                   },
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(4),
+                                    borderRadius: BorderRadius.circular(5),
                                   ),
-                                  side: BorderSide(
-                                    color: Colors.grey[400]!,
-                                    width: 1.5,
+                                  side: const BorderSide(
+                                    color: BSEColors.muted,
+                                    width: 1.4,
                                   ),
-                                  fillColor: WidgetStateProperty.resolveWith((
-                                      states,
-                                      ) {
+                                  fillColor: WidgetStateProperty.resolveWith((states) {
                                     if (states.contains(WidgetState.selected)) {
-                                      return const Color(0xFFD4A855);
+                                      return BSEColors.marigold;
                                     }
                                     return Colors.transparent;
                                   }),
@@ -559,102 +549,103 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SizedBox(width: 8),
                               const Text(
                                 'Remember me',
-                                style: TextStyle(
-                                  color: Color(0xFF6B5D4F),
-                                  fontSize: 14,
-                                ),
+                                style: TextStyle(color: BSEColors.charcoal, fontSize: 13.5),
                               ),
                             ],
                           ),
                           GestureDetector(
                             onTap: _handleForgotPassword,
                             child: const Text(
-                              'Forgot Password ?',
+                              'Forgot password?',
                               style: TextStyle(
-                                color: Color(0xFFD4A855),
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
+                                color: BSEColors.marigoldDark,
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
                         ],
                       ),
 
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 26),
 
-                      // Login Button
-                      ElevatedButton(
-                        onPressed: _isLoading ? null : _handleLogin,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFD4A855),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                      // Login Button — marigold gradient
+                      Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          gradient: const LinearGradient(
+                            colors: [BSEColors.marigold, BSEColors.marigoldDark],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
                           ),
-                          elevation: 0,
-                        ),
-                        child: _isLoading
-                            ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
+                          boxShadow: [
+                            BoxShadow(
+                              color: BSEColors.marigold.withOpacity(0.35),
+                              blurRadius: 16,
+                              offset: const Offset(0, 8),
                             ),
-                          ),
-                        )
-                            : const Text(
-                          'Log In',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
+                          ],
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(14),
+                            onTap: _isLoading ? null : _handleLogin,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              child: Center(
+                                child: _isLoading
+                                    ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                                    : const Text(
+                                  'Log In',
+                                  style: TextStyle(
+                                    fontSize: 16.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
 
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 28),
 
                       // Divider with text
                       Row(
                         children: [
-                          Expanded(
-                            child: Divider(
-                              color: const Color(0xFFD4A855).withOpacity(0.5),
-                              thickness: 1,
-                            ),
-                          ),
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 16),
+                          Expanded(child: Divider(color: BSEColors.marigoldLight, thickness: 1)),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
                             child: Text(
                               "Don't have an account?",
-                              style: TextStyle(
-                                color: Color(0xFF6B5D4F),
-                                fontSize: 14,
-                              ),
+                              style: TextStyle(color: BSEColors.muted, fontSize: 13),
                             ),
                           ),
-                          Expanded(
-                            child: Divider(
-                              color: const Color(0xFFD4A855).withOpacity(0.5),
-                              thickness: 1,
-                            ),
-                          ),
+                          Expanded(child: Divider(color: BSEColors.marigoldLight, thickness: 1)),
                         ],
                       ),
 
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
 
-                      // Sign Up Button
+                      // Sign Up
                       GestureDetector(
                         onTap: _handleSignUp,
                         child: const Text(
-                          'Sign Up',
+                          'Create an account',
                           style: TextStyle(
-                            color: Color(0xFFD4A855),
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                            color: BSEColors.marigoldDark,
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w700,
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -663,7 +654,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 100),
+                const SizedBox(height: 60),
               ],
             ),
           ),

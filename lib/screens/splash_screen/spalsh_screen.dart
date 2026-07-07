@@ -1,6 +1,21 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:bse/screens/auth/login/login.dart';
 import 'package:flutter/material.dart';
-import 'dart:async';
+
+// ── BSE Brand Palette ──────────────────────────────────────────
+class BSEColors {
+  static const marigold = Color(0xFFC6912D);
+  static const marigoldLight = Color(0xFFE8C88A);
+  static const marigoldDark = Color(0xFFA97620);
+  static const bearish = Color(0xFFB6673F);
+  static const bearishLight = Color(0xFFE3B79A);
+  static const ink = Color(0xFF2C2418);
+  static const charcoal = Color(0xFF4A3F2E);
+  static const muted = Color(0xFF8A7A5F);
+  static const canvas = Color(0xFFFDF9F1);
+}
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -9,10 +24,15 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen>
+    with TickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
+
+  // Drives the live candlestick chart in the background
+  late AnimationController _tickerController;
+  late List<_CandleSpec> _candles;
 
   @override
   void initState() {
@@ -32,6 +52,15 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     );
 
     _animationController.forward();
+
+    // Continuously looping "market" animation — never stops, feels alive
+    _tickerController = AnimationController(
+      duration: const Duration(seconds: 10),
+      vsync: this,
+    )..repeat();
+
+    _candles = _generateCandles(18);
+
     Timer(const Duration(seconds: 4), () {
       Navigator.pushReplacement(
         context,
@@ -40,35 +69,70 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     });
   }
 
+  List<_CandleSpec> _generateCandles(int count) {
+    final rnd = math.Random(7); // fixed seed = consistent look each launch
+    return List.generate(count, (i) {
+      return _CandleSpec(
+        xFraction: i / count,
+        baseHeight: 0.25 + rnd.nextDouble() * 0.35,
+        amplitude: 0.10 + rnd.nextDouble() * 0.12,
+        speed: 0.6 + rnd.nextDouble() * 0.9,
+        phase: rnd.nextDouble() * math.pi * 2,
+        bullish: rnd.nextBool(),
+      );
+    });
+  }
+
   @override
   void dispose() {
     _animationController.dispose();
+    _tickerController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: BSEColors.canvas,
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFFFFF8DC),
-              const Color(0xFFFFF4D6),
-              const Color(0xFFFFEFCC),
+              Color(0xFFFFFDF8),
+              BSEColors.canvas,
+              Color(0xFFF6EFE0),
             ],
           ),
         ),
         child: Stack(
           children: [
-            // Background candlestick pattern
+            // Live, moving candlestick market backdrop
             Positioned.fill(
               child: CustomPaint(
-                painter: CandlestickPainter(),
+                painter: CandlestickPainter(
+                  animation: _tickerController,
+                  candles: _candles,
+                ),
+              ),
+            ),
+
+            // Gentle light-wash so the logo/text area stays crisp
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: Alignment.center,
+                    radius: 0.85,
+                    colors: [
+                      BSEColors.canvas.withOpacity(0.65),
+                      BSEColors.canvas.withOpacity(0.05),
+                    ],
+                  ),
+                ),
               ),
             ),
 
@@ -91,11 +155,16 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                             decoration: BoxDecoration(
                               color: Colors.white,
                               shape: BoxShape.circle,
+                              border: Border.all(
+                                color: BSEColors.marigoldLight,
+                                width: 2,
+                              ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.amber.withOpacity(0.3),
+                                  color: BSEColors.marigold.withOpacity(0.25),
                                   blurRadius: 30,
-                                  spreadRadius: 5,
+                                  spreadRadius: 4,
+                                  offset: const Offset(0, 10),
                                 ),
                               ],
                             ),
@@ -112,7 +181,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
                   const SizedBox(height: 30),
 
-                  // Welcome text with animation
+                  // Welcome text
                   AnimatedBuilder(
                     animation: _animationController,
                     builder: (context, child) {
@@ -123,7 +192,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                           style: TextStyle(
                             fontSize: 32,
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: BSEColors.ink,
                             letterSpacing: 1.5,
                           ),
                         ),
@@ -144,7 +213,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF6B5D4F),
+                            color: BSEColors.marigoldDark,
                             letterSpacing: 2,
                           ),
                         ),
@@ -166,7 +235,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   builder: (context, child) {
                     return FadeTransition(
                       opacity: _fadeAnimation,
-                      child: DashedLineLoader(),
+                      child: const DashedLineLoader(),
                     );
                   },
                 ),
@@ -179,7 +248,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   }
 }
 
-// Beautiful Three Dots Loader Widget
+// ── Pulsing three-dot loader ─────────────────────────────────────
 class DashedLineLoader extends StatefulWidget {
   const DashedLineLoader({super.key});
 
@@ -216,9 +285,8 @@ class _DashedLineLoaderState extends State<DashedLineLoader>
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(3, (index) {
             final delay = index * 0.15;
-            final animationValue =
-                (_controller.value + delay) % 1.0;
-            final scale = 0.5 + (sin(animationValue * 3.14159) * 0.5);
+            final animationValue = (_controller.value + delay) % 1.0;
+            final scale = 0.5 + (math.sin(animationValue * math.pi) * 0.5);
 
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -228,11 +296,11 @@ class _DashedLineLoaderState extends State<DashedLineLoader>
                   width: 12,
                   height: 12,
                   decoration: BoxDecoration(
-                    color: Colors.amber,
+                    color: BSEColors.marigold,
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.amber.withOpacity(0.4),
+                        color: BSEColors.marigold.withOpacity(0.35),
                         blurRadius: 8,
                         spreadRadius: 1,
                       ),
@@ -246,62 +314,109 @@ class _DashedLineLoaderState extends State<DashedLineLoader>
       },
     );
   }
-
-  double sin(double value) {
-    return (value - (value / 6.28318).floor() * 6.28318).sign *
-        (1 - ((value.abs() - 1.5708).abs() / 1.5708)).clamp(0, 1) *
-        2 /
-        3.14159;
-  }
 }
 
-// Custom painter for background candlestick pattern
+// ── Data model for one animated candle ───────────────────────────
+class _CandleSpec {
+  _CandleSpec({
+    required this.xFraction,
+    required this.baseHeight,
+    required this.amplitude,
+    required this.speed,
+    required this.phase,
+    required this.bullish,
+  });
+
+  final double xFraction; // horizontal slot, 0..1
+  final double baseHeight; // resting body height, fraction of chart area
+  final double amplitude; // how much it "breathes" up/down
+  final double speed; // oscillation speed multiplier
+  final double phase; // phase offset so candles don't all move in sync
+  final bool bullish; // base color bias
+}
+
+// ── Live, moving candlestick chart painted behind the logo ───────
 class CandlestickPainter extends CustomPainter {
+  CandlestickPainter({required this.animation, required this.candles})
+      : super(repaint: animation);
+
+  final Animation<double> animation;
+  final List<_CandleSpec> candles;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.fill;
+    final t = animation.value; // loops 0 → 1 forever
+    final spacing = size.width / candles.length;
+    final scrollOffset = t * spacing; // slow continuous horizontal drift
+    final chartCenterY = size.height * 0.34;
 
-    // Draw green and red candlesticks with low opacity
-    final candlesticks = [
-      {'x': 0.15, 'height': 0.3, 'color': Colors.green},
-      {'x': 0.25, 'height': 0.5, 'color': Colors.red},
-      {'x': 0.35, 'height': 0.4, 'color': Colors.green},
-      {'x': 0.45, 'height': 0.6, 'color': Colors.green},
-      {'x': 0.55, 'height': 0.35, 'color': Colors.red},
-      {'x': 0.65, 'height': 0.55, 'color': Colors.green},
-      {'x': 0.75, 'height': 0.4, 'color': Colors.red},
-      {'x': 0.85, 'height': 0.5, 'color': Colors.green},
-    ];
+    final wickPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+    final bodyPaint = Paint()..style = PaintingStyle.fill;
+    final shadowPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
 
-    for (var candle in candlesticks) {
-      paint.color = (candle['color'] as Color).withOpacity(0.1);
+    final topPoints = <Offset>[];
 
-      final x = size.width * (candle['x'] as double);
-      final height = size.height * (candle['height'] as double);
-      final y = size.height * 0.3;
+    for (final c in candles) {
+      // Horizontal drift with wraparound so the chart scrolls infinitely
+      double x = (c.xFraction * size.width - scrollOffset) % size.width;
+      if (x < 0) x += size.width;
 
-      // Draw candlestick body
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(x - 15, y, 30, height),
-          const Radius.circular(4),
-        ),
-        paint,
+      // Simulated live price motion
+      final wave = math.sin(t * 2 * math.pi * c.speed + c.phase);
+      final heightFraction = (c.baseHeight + wave * c.amplitude).clamp(0.10, 0.9);
+      final height = size.height * heightFraction * 0.42;
+      final yDrift = math.sin(t * 2 * math.pi * c.speed * 0.5 + c.phase) * 12;
+      final y = chartCenterY + yDrift;
+
+      // Occasionally flips bullish/bearish as the "price" crosses zero
+      final bullish = wave >= 0 ? c.bullish : !c.bullish;
+      final color = bullish ? BSEColors.marigold : BSEColors.bearish;
+      final strength = 0.16 + wave.abs() * 0.14;
+
+      final bodyRect = Rect.fromCenter(
+        center: Offset(x, y),
+        width: spacing * 0.42,
+        height: height,
       );
+      final bodyRRect = RRect.fromRectAndRadius(bodyRect, const Radius.circular(3));
 
-      // Draw wick
-      paint.strokeWidth = 2;
-      paint.style = PaintingStyle.stroke;
+      // Soft drop shadow so the body reads clearly on the light backdrop
+      shadowPaint.color = BSEColors.charcoal.withOpacity(0.06);
+      canvas.drawRRect(bodyRRect.shift(const Offset(0, 3)), shadowPaint);
+
+      bodyPaint.color = color.withOpacity(strength);
+      canvas.drawRRect(bodyRRect, bodyPaint);
+
+      wickPaint.color = color.withOpacity(strength * 1.6);
       canvas.drawLine(
-        Offset(x, y - 20),
-        Offset(x, y + height + 20),
-        paint,
+        Offset(x, y - height / 2 - 16),
+        Offset(x, y + height / 2 + 16),
+        wickPaint,
       );
-      paint.style = PaintingStyle.fill;
+
+      topPoints.add(Offset(x, y - height / 2));
+    }
+
+    // Faint ticker line tracing across the candle tops
+    topPoints.sort((a, b) => a.dx.compareTo(b.dx));
+    if (topPoints.length > 1) {
+      final path = Path()..moveTo(topPoints.first.dx, topPoints.first.dy);
+      for (final p in topPoints.skip(1)) {
+        path.lineTo(p.dx, p.dy);
+      }
+      final linePaint = Paint()
+        ..color = BSEColors.marigoldDark.withOpacity(0.18)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+      canvas.drawPath(path, linePaint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant CandlestickPainter oldDelegate) => true;
 }
