@@ -61,6 +61,12 @@ class _SplashScreenState extends State<SplashScreen>
 
     _candles = _generateCandles(18);
 
+    // Preload + fully decode the background image before it's shown,
+    // so it never renders soft/blurry mid-decode during the fade-in.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      precacheImage(const AssetImage('assets/splash.png'), context);
+    });
+
     Timer(const Duration(seconds: 4), () {
       Navigator.pushReplacement(
         context,
@@ -97,17 +103,6 @@ class _SplashScreenState extends State<SplashScreen>
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFFFFDF8),
-              BSEColors.canvas,
-              Color(0xFFF6EFE0),
-            ],
-          ),
-        ),
         child: Stack(
           children: [
             // Live, moving candlestick market backdrop
@@ -136,91 +131,132 @@ class _SplashScreenState extends State<SplashScreen>
               ),
             ),
 
-            // Main content
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Animated logo
-                  AnimatedBuilder(
+            // ── Header — logo, then Welcome text, pinned near the top ──
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 32),
+                  child: AnimatedBuilder(
                     animation: _animationController,
                     builder: (context, child) {
                       return FadeTransition(
                         opacity: _fadeAnimation,
-                        child: ScaleTransition(
-                          scale: _scaleAnimation,
-                          child: Container(
-                            width: 120,
-                            height: 120,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: BSEColors.marigoldLight,
-                                width: 2,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: BSEColors.marigold.withOpacity(0.25),
-                                  blurRadius: 30,
-                                  spreadRadius: 4,
-                                  offset: const Offset(0, 10),
+                        child: Column(
+                          children: [
+                            // Animated logo
+                            ScaleTransition(
+                              scale: _scaleAnimation,
+                              child: Container(
+                                width: 100,
+                                height: 100,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: BSEColors.marigoldLight,
+                                    width: 2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: BSEColors.marigold.withOpacity(0.25),
+                                      blurRadius: 30,
+                                      spreadRadius: 4,
+                                      offset: const Offset(0, 10),
+                                    ),
+                                  ],
                                 ),
+                                padding: const EdgeInsets.all(16),
+                                child: Image.asset(
+                                  'assets/logo.png',
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 20),
+
+                            // Gradient-filled headline for a premium feel
+                            ShaderMask(
+                              shaderCallback: (bounds) => const LinearGradient(
+                                colors: [
+                                  BSEColors.marigoldDark,
+                                  BSEColors.marigold,
+                                  BSEColors.marigoldLight,
+                                ],
+                              ).createShader(bounds),
+                              child: const Text(
+                                'Welcome To BSE',
+                                style: TextStyle(
+                                  fontSize: 30,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white, // masked by gradient
+                                  letterSpacing: 1.2,
+                                  height: 1.1,
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 12),
+
+                            // Divider-flanked subtitle for an "official" feel
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _HeaderDivider(),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                  ),
+                                  child: Text(
+                                    'BOTSWANA STOCK EXCHANGE',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: BSEColors.charcoal.withOpacity(0.75),
+                                      letterSpacing: 2.4,
+                                    ),
+                                  ),
+                                ),
+                                _HeaderDivider(flipped: true),
                               ],
                             ),
-                            padding: const EdgeInsets.all(20),
-                            child: Image.asset(
-                              'assets/logo.png',
-                              fit: BoxFit.contain,
-                            ),
-                          ),
+                          ],
                         ),
                       );
                     },
                   ),
+                ),
+              ),
+            ),
 
-                  const SizedBox(height: 30),
-
-                  // Welcome text
-                  AnimatedBuilder(
-                    animation: _animationController,
-                    builder: (context, child) {
-                      return FadeTransition(
-                        opacity: _fadeAnimation,
-                        child: const Text(
-                          'Welcome To BSE',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: BSEColors.ink,
-                            letterSpacing: 1.5,
-                          ),
+            // Main content — splash image, centered below the header
+            Align(
+              alignment: const Alignment(0, 0.3),
+              child: AnimatedBuilder(
+                animation: _animationController,
+                builder: (context, child) {
+                  return FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: ScaleTransition(
+                      scale: _scaleAnimation,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.of(context).size.width * 0.90,
+                          maxHeight: MediaQuery.of(context).size.height * 0.55,
                         ),
-                      );
-                    },
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // Subtitle
-                  AnimatedBuilder(
-                    animation: _animationController,
-                    builder: (context, child) {
-                      return FadeTransition(
-                        opacity: _fadeAnimation,
-                        child: const Text(
-                          'BOTSWANA STOCK EXCHANGE',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: BSEColors.marigoldDark,
-                            letterSpacing: 2,
-                          ),
+                        child: Image.asset(
+                          'assets/splash.png',
+                          fit: BoxFit.contain,
+                          filterQuality: FilterQuality.high,
+                          isAntiAlias: true,
                         ),
-                      );
-                    },
-                  ),
-                ],
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
 
@@ -241,6 +277,31 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Small gradient divider line flanking the header subtitle ─────
+class _HeaderDivider extends StatelessWidget {
+  const _HeaderDivider({this.flipped = false});
+
+  final bool flipped;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 28,
+      height: 1.4,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: flipped ? Alignment.centerRight : Alignment.centerLeft,
+          end: flipped ? Alignment.centerLeft : Alignment.centerRight,
+          colors: [
+            BSEColors.marigold.withOpacity(0.0),
+            BSEColors.marigold.withOpacity(0.7),
           ],
         ),
       ),
