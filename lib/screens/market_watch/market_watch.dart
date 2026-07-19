@@ -433,6 +433,50 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
     );
   }
 
+  Widget _buildCompanyLogo(Map<String, dynamic> stock, {double size = 44, double iconSize = 22}) {
+    final String logoUrl = stock['LogoUrl']?.toString() ?? '';
+    final Color bgColor = stock['iconBg'] is Color ? stock['iconBg'] as Color : Colors.grey;
+    final IconData fallbackIcon = stock['iconData'] is IconData ? stock['iconData'] as IconData : Icons.business;
+
+    return Container(
+      width: size,
+      height: size,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: bgColor,
+        shape: BoxShape.circle,
+      ),
+      child: logoUrl.isNotEmpty
+          ? Image.network(
+        logoUrl,
+        fit: BoxFit.cover,
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return Center(
+            child: SizedBox(
+              width: size * 0.4,
+              height: size * 0.4,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white.withOpacity(0.7),
+              ),
+            ),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) => Icon(
+          fallbackIcon,
+          color: Colors.white,
+          size: iconSize,
+        ),
+      )
+          : Icon(
+        fallbackIcon,
+        color: Colors.white,
+        size: iconSize,
+      ),
+    );
+  }
+
   Widget _buildStockCard(Map<String, dynamic> stock, bool isDark) {
     final priceHistory = stock['priceHistory'] as List<double>;
     // ✅ Changed: ClosingPrice → VwapPrice
@@ -465,6 +509,10 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
           children: [
             Row(
               children: [
+                // Company Logo (from LogoUrl, falls back to generated icon)
+                _buildCompanyLogo(stock),
+                const SizedBox(width: 12),
+
                 // Company Info
                 Expanded(
                   child: Column(
@@ -673,6 +721,10 @@ class _FullScreenStockDetailsState extends State<FullScreenStockDetails> with Si
     final priceChangePercent = openPrice != 0 ? (priceChange / openPrice) * 100 : 0;
     final isPositive = priceChange >= 0;
 
+    final String logoUrl = widget.stock['LogoUrl']?.toString() ?? '';
+    final IconData fallbackIcon =
+    widget.stock['iconData'] is IconData ? widget.stock['iconData'] as IconData : Icons.business;
+
     return Scaffold(
       backgroundColor: bgColor,
       body: SafeArea(
@@ -690,7 +742,46 @@ class _FullScreenStockDetailsState extends State<FullScreenStockDetails> with Si
                         onPressed: () => Navigator.pop(context),
                         icon: const Icon(Icons.arrow_back, color: Colors.white),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 4),
+                      // Company Logo
+                      Container(
+                        width: 40,
+                        height: 40,
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: logoUrl.isNotEmpty
+                            ? Image.network(
+                          logoUrl,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, progress) {
+                            if (progress == null) return child;
+                            return const Center(
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) => Icon(
+                            fallbackIcon,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        )
+                            : Icon(
+                          fallbackIcon,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

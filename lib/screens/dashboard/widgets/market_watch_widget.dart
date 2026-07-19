@@ -96,6 +96,7 @@ class _MarketWatchWidgetState extends State<MarketWatchWidget> {
     String name = item['Company']?.toString() ?? 'Unknown';
     String ticker = item['Symbol']?.toString() ?? 'N/A';
     String code = item['Code']?.toString() ?? '';
+    String logoUrl = item['LogoUrl']?.toString() ?? '';
 
     String closingPrice = item['ClosingPrice']?.toString() ?? '0';
     String openingPrice = item['OpeningPrice']?.toString() ?? '0';
@@ -122,6 +123,7 @@ class _MarketWatchWidgetState extends State<MarketWatchWidget> {
       'demand': demand,
       'icon': _getIconForStock(ticker),
       'color': _getColorForStock(ticker),
+      'logoUrl': logoUrl,
       'status': status,
       'code': code,
       // Add raw numeric values for trading page
@@ -286,6 +288,48 @@ class _MarketWatchWidgetState extends State<MarketWatchWidget> {
     );
   }
 
+  Widget _buildStockLogo(Map<String, dynamic> stockData) {
+    final String logoUrl = stockData['logoUrl']?.toString() ?? '';
+
+    return Container(
+      width: 50,
+      height: 50,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: stockData['color'] as Color,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: logoUrl.isNotEmpty
+          ? Image.network(
+        logoUrl,
+        fit: BoxFit.cover,
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return Center(
+            child: SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white.withOpacity(0.7),
+              ),
+            ),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) => Icon(
+          stockData['icon'] as IconData,
+          color: Colors.white,
+          size: 28,
+        ),
+      )
+          : Icon(
+        stockData['icon'] as IconData,
+        color: Colors.white,
+        size: 28,
+      ),
+    );
+  }
+
   Widget _buildStockCard(
       Map<String, dynamic> stockData,
       bool isDark,
@@ -322,19 +366,8 @@ class _MarketWatchWidgetState extends State<MarketWatchWidget> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: stockData['color'] as Color,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                stockData['icon'] as IconData,
-                color: Colors.white,
-                size: 28,
-              ),
-            ),
+            // Company Logo (from LogoUrl, falls back to generated icon)
+            _buildStockLogo(stockData),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -426,4 +459,3 @@ class _MarketWatchWidgetState extends State<MarketWatchWidget> {
     );
   }
 }
-

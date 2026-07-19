@@ -19,19 +19,22 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool _agreeToTerms = false;
   bool _isNewClient = true;
 
-  // Step 0 – Account Type ('I' = Individual, 'C' = Corporate)
+  // Step 0 – Account Type ('I' = Individual, 'C' = Corporate, 'M' = Minor)
   String _selectedAccountType = 'I';
 
-  // Step 1 (Individual) – Basic Info (KYC)
+  // Step 1 (Individual / Minor) – Basic Info (KYC)
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _idNumberController = TextEditingController();
   final _dobController = TextEditingController();
   final _cdsNumberController = TextEditingController();
+  final _birthPlaceController = TextEditingController(); // Minor only
 
-  // Step 1 (Corporate) – Company Info
+  // Step 1 (Corporate/Institutional) – Company Info
   final _companyNameController = TextEditingController();
   final _bRegNoController = TextEditingController();
+  final _placeOfIncorporationController = TextEditingController();
+  final _dateOfIncorporationController = TextEditingController();
 
   // Step 2 – Address (shared)
   final _addressController = TextEditingController();
@@ -39,8 +42,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _postalCodeController = TextEditingController();
   final _tinController = TextEditingController();
 
-  // Contact & Work (Individual only)
-  final _phoneController = TextEditingController(); // reused as mobile wallet number (individual) / company phone (corporate)
+  // Contact & Work (Individual / Minor)
+  final _phoneController = TextEditingController(); // general contact number (all types); also doubles as the wallet number for Individual
+  final _walletMobileNumberController = TextEditingController(); // Mobile Money Wallet number (Corporate & Minor banking step)
   final _faxController = TextEditingController();
   final _emailController = TextEditingController();
   final _occupationController = TextEditingController();
@@ -55,9 +59,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool _isBseEmployeeOrRelative = false;
   final _employeeDeclarationDetailsController = TextEditingController();
 
-  // Signatories (Corporate only) – each row holds a name + identification controller
+  // Guardian details (Minor only)
+  final _guardianForenamesController = TextEditingController();
+  final _guardianSurnameController = TextEditingController();
+  final _guardianIdNumberController = TextEditingController();
+  final _guardianRelationshipController = TextEditingController();
+
+  // Signatories (Corporate/Institutional only) – each row holds name + surname + identification controllers
   List<Map<String, TextEditingController>> _signatories = [
-    {'name': TextEditingController(), 'id': TextEditingController()},
+    {
+      'name': TextEditingController(),
+      'surname': TextEditingController(),
+      'id': TextEditingController(),
+    },
   ];
 
   // Dropdown values
@@ -110,13 +124,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
   File? _boardResolutionDocument;
   File? _taxCertificateDocument;
 
+  // Documents – Minor: reuses _idDocument ("National ID/Passport") and
+  // _proofOfAddressDocument ("Proof of Residence") declared above.
+
   // Hardcoded
   final String _branchCode = "HRE001";
   final String _preFunding = "1";
 
-  List<String> get _stepNames => _selectedAccountType == 'I'
-      ? ['Type', 'Basic Info', 'Address', 'Contact', 'Banking', 'Final']
-      : ['Type', 'Company', 'Address', 'Banking', 'Signatories', 'Final'];
+  List<String> get _stepNames {
+    if (_selectedAccountType == 'I') {
+      return ['Type', 'Basic Info', 'Address', 'Contact', 'Banking', 'Final'];
+    } else if (_selectedAccountType == 'C') {
+      return ['Type', 'Institution', 'Address', 'Banking', 'Signatories', 'Final'];
+    }
+    return ['Type', 'Minor Info', 'Address', 'Guardian', 'Banking', 'Final'];
+  }
 
   @override
   void initState() {
@@ -153,13 +175,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _idNumberController.dispose();
     _dobController.dispose();
     _cdsNumberController.dispose();
+    _birthPlaceController.dispose();
     _companyNameController.dispose();
     _bRegNoController.dispose();
+    _placeOfIncorporationController.dispose();
+    _dateOfIncorporationController.dispose();
     _addressController.dispose();
     _physicalAddressController.dispose();
     _postalCodeController.dispose();
     _tinController.dispose();
     _phoneController.dispose();
+    _walletMobileNumberController.dispose();
     _faxController.dispose();
     _emailController.dispose();
     _occupationController.dispose();
@@ -168,8 +194,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _ibanController.dispose();
     _accountNameController.dispose();
     _employeeDeclarationDetailsController.dispose();
+    _guardianForenamesController.dispose();
+    _guardianSurnameController.dispose();
+    _guardianIdNumberController.dispose();
+    _guardianRelationshipController.dispose();
     for (final row in _signatories) {
       row['name']?.dispose();
+      row['surname']?.dispose();
       row['id']?.dispose();
     }
     super.dispose();
@@ -469,6 +500,26 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return documents;
     }
 
+    if (_selectedAccountType == 'M') {
+      final idBase64 = await _convertFileToBase64(_idDocument);
+      if (idBase64 != null) {
+        documents.add({
+          "Name": "National ID/Passport",
+          "ContentType": _contentTypeForFile(_idDocument!),
+          "Data": idBase64
+        });
+      }
+      final addressBase64 = await _convertFileToBase64(_proofOfAddressDocument);
+      if (addressBase64 != null) {
+        documents.add({
+          "Name": "Proof of Residence",
+          "ContentType": _contentTypeForFile(_proofOfAddressDocument!),
+          "Data": addressBase64
+        });
+      }
+      return documents;
+    }
+
     final idBase64 = await _convertFileToBase64(_idDocument);
     if (idBase64 != null) {
       documents.add({
@@ -501,13 +552,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (_currentStep == 1) {
       if (_selectedAccountType == 'I') {
         if (!_validateStep1()) return;
-      } else {
+      } else if (_selectedAccountType == 'C') {
         if (!_validateCompanyInfo()) return;
+      } else {
+        if (!_validateMinorInfo()) return;
       }
     } else if (_currentStep == 2) {
       if (!_validateStep2()) return;
     } else if (_currentStep == 3) {
       if (_selectedAccountType == 'I' && !_validateStep3()) return;
+      if (_selectedAccountType == 'M' && !_validateGuardianInfo()) return;
     } else if (_currentStep == 4) {
       if (_selectedAccountType == 'C' && !_validateSignatories()) return;
     } else if (_currentStep == 5) {
@@ -569,8 +623,71 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _showSnackBar('Please enter the registration/certificate number');
       return false;
     }
+    if (_dateOfIncorporationController.text.trim().isEmpty) {
+      _showSnackBar('Please enter the date of incorporation/registration');
+      return false;
+    }
+    if (_placeOfIncorporationController.text.trim().isEmpty) {
+      _showSnackBar('Please enter the place of incorporation/registration');
+      return false;
+    }
+    if (_natureOfBusinessController.text.trim().isEmpty) {
+      _showSnackBar('Please describe the nature of business');
+      return false;
+    }
     if (_emailController.text.isEmpty) {
-      _showSnackBar('Please enter the company email');
+      _showSnackBar('Please enter the corporate email');
+      return false;
+    }
+    if (_phoneController.text.trim().isEmpty) {
+      _showSnackBar('Please enter the contact number');
+      return false;
+    }
+    return true;
+  }
+
+  bool _validateMinorInfo() {
+    if (_firstNameController.text.isEmpty ||
+        _lastNameController.text.isEmpty ||
+        _idNumberController.text.isEmpty ||
+        _dobController.text.isEmpty) {
+      _showSnackBar('Please fill all required fields');
+      return false;
+    }
+    if (_birthPlaceController.text.trim().isEmpty) {
+      _showSnackBar("Please enter the minor's birth place");
+      return false;
+    }
+    if (_emailController.text.trim().isEmpty) {
+      _showSnackBar("Please enter the minor's email");
+      return false;
+    }
+    if (_phoneController.text.trim().isEmpty) {
+      _showSnackBar("Please enter a contact number");
+      return false;
+    }
+    if (_selectedBrokerCode == null || _selectedBrokerCode!.isEmpty) {
+      _showSnackBar('Please select a broker');
+      return false;
+    }
+    return true;
+  }
+
+  bool _validateGuardianInfo() {
+    if (_guardianForenamesController.text.trim().isEmpty) {
+      _showSnackBar("Please enter the guardian's forenames");
+      return false;
+    }
+    if (_guardianSurnameController.text.trim().isEmpty) {
+      _showSnackBar("Please enter the guardian's surname");
+      return false;
+    }
+    if (_guardianIdNumberController.text.trim().isEmpty) {
+      _showSnackBar("Please enter the guardian's ID number");
+      return false;
+    }
+    if (_guardianRelationshipController.text.trim().isEmpty) {
+      _showSnackBar("Please enter the guardian's relationship to the minor");
       return false;
     }
     return true;
@@ -581,8 +698,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _showSnackBar('Please enter postal address');
       return false;
     }
-    // #5 - TIN/Tax code is mandatory when ID Type is Passport (individual only)
-    if (_selectedAccountType == 'I' &&
+    // #5 - TIN/Tax code is mandatory when ID Type is Passport (Individual/Minor),
+    // and always mandatory for Institutional/Corporate accounts.
+    if (_selectedAccountType == 'C' && _tinController.text.trim().isEmpty) {
+      _showSnackBar('Tax Code / TIN is required for institutional accounts');
+      return false;
+    }
+    if (_selectedAccountType != 'C' &&
         _selectedIdType == 'Passport' &&
         _tinController.text.trim().isEmpty) {
       _showSnackBar('Tax code / TIN is mandatory when ID Type is Passport');
@@ -615,6 +737,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
         _showSnackBar('Please enter the name for all signatories');
         return false;
       }
+      if (row['surname']!.text.trim().isEmpty) {
+        _showSnackBar('Please enter the surname for all signatories');
+        return false;
+      }
       if (row['id']!.text.trim().isEmpty) {
         _showSnackBar('Please enter an identification number for all signatories');
         return false;
@@ -628,8 +754,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _showSnackBar('Please agree to the Terms & Conditions');
       return false;
     }
-    // #10 - Employee declaration
-    if (_isBseEmployeeOrRelative &&
+    // #10 - Employee declaration (not applicable to Minor accounts)
+    if (_selectedAccountType != 'M' &&
+        _isBseEmployeeOrRelative &&
         _employeeDeclarationDetailsController.text.trim().isEmpty) {
       _showSnackBar(
           'Please provide details of the BSE employee / relationship');
@@ -649,6 +776,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
           _showSnackBar('Please upload Proof of Address document');
           return false;
         }
+      }
+    } else if (_selectedAccountType == 'M') {
+      if (_idDocument == null) {
+        _showSnackBar('Please upload the National ID / Passport');
+        return false;
+      }
+      if (_proofOfAddressDocument == null) {
+        _showSnackBar('Please upload Proof of Residence document');
+        return false;
       }
     } else {
       if (_certificateOfIncorporationDocument == null) {
@@ -720,14 +856,53 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ...common,
         "CompanyName": _companyNameController.text,
         "BRegNo": _bRegNoController.text,
+        "Nationality": _selectedNationality,
+        "NatureOfBusiness": _natureOfBusinessController.text,
+        "DateOfIncorporation": _dateOfIncorporationController.text,
+        "PlaceOfIncorporation": _placeOfIncorporationController.text,
+        "MobileWalletNumber": _walletMobileNumberController.text,
         "cdsnumber": "",
         "clientType": "new",
         "Signatories": _signatories
             .map((row) => {
           "Name": row['name']!.text,
+          "Surname": row['surname']!.text,
           "Identification": row['id']!.text,
         })
             .toList(),
+      };
+    }
+
+    if (_selectedAccountType == 'M') {
+      return {
+        ...common,
+        "Othernames": _firstNameController.text,
+        "Surname": _lastNameController.text,
+        "MiddleNames": "",
+        "title": _selectedTitle,
+        "Gender": _selectedGender,
+        "idtype": _selectedIdType,
+        "myIdentification": _idNumberController.text,
+        "IDExpiryDate": "",
+        "DOB": _dobController.text,
+        "BirthPlace": _birthPlaceController.text,
+        "Nationality": _selectedNationality,
+        "Occupation": "N/A",
+        "EmploymentStatus": "N/A",
+        "EmploymentStatusOther": "",
+        "EmployerName": "N/A",
+        "EmployerAddress": "N/A",
+        "Designation": "N/A",
+        "NatureOfBusiness": "N/A",
+        "sourceofIncome": "N/A",
+        "MaritalStatus": "",
+        "cdsnumber": "",
+        "clientType": "new",
+        "MobileWalletNumber": _walletMobileNumberController.text,
+        "GuardianForenames": _guardianForenamesController.text,
+        "GuardianSurname": _guardianSurnameController.text,
+        "GuardianIdNumber": _guardianIdNumberController.text,
+        "GuardianRelationship": _guardianRelationshipController.text,
       };
     }
 
@@ -1167,17 +1342,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
       case 0:
         return _buildAccountTypeStep();
       case 1:
-        return _selectedAccountType == 'I'
-            ? _buildStep1()
-            : _buildCompanyInfoStep();
+        if (_selectedAccountType == 'I') return _buildStep1();
+        if (_selectedAccountType == 'C') return _buildCompanyInfoStep();
+        return _buildMinorInfoStep();
       case 2:
         return _buildStep2();
       case 3:
-        return _selectedAccountType == 'I' ? _buildStep3() : _buildStep4();
+        if (_selectedAccountType == 'I') return _buildStep3();
+        if (_selectedAccountType == 'C') return _buildStep4();
+        return _buildGuardianStep();
       case 4:
-        return _selectedAccountType == 'I'
-            ? _buildStep4()
-            : _buildSignatoriesStep();
+        if (_selectedAccountType == 'I') return _buildStep4();
+        if (_selectedAccountType == 'C') return _buildSignatoriesStep();
+        return _buildStep4();
       case 5:
         return _buildStep5();
       default:
@@ -1208,9 +1385,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
           const SizedBox(height: 12),
           _buildAccountTypeCard(
             type: 'C',
-            title: 'Corporate',
+            title: 'Institutional',
             subtitle: 'For companies, trusts and organisations',
             icon: Icons.apartment_outlined,
+          ),
+          const SizedBox(height: 12),
+          _buildAccountTypeCard(
+            type: 'M',
+            title: 'Minor',
+            subtitle: 'Opened by a parent or guardian on behalf of a minor',
+            icon: Icons.child_care_outlined,
           ),
         ],
       ),
@@ -1407,7 +1591,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  // ── Step 1 (Corporate): Company Info ───────────────────────────────────────
+  // ── Step 1 (Institutional/Corporate): Company Info ─────────────────────────
   Widget _buildCompanyInfoStep() {
     return SingleChildScrollView(
       child: Column(
@@ -1416,32 +1600,198 @@ class _SignUpScreenState extends State<SignUpScreen> {
           _buildLabelWithField('Broker *', _buildBrokerDropdown()),
           const SizedBox(height: 15),
           _buildLabelWithField(
-              'Company Name *',
+              'Name of Institution *',
               _buildTextField(
-                  'Enter registered company name', _companyNameController)),
+                  'Enter registered institution name', _companyNameController)),
           const SizedBox(height: 15),
           _buildLabelWithField(
               'Registration / Certificate No. *',
               _buildTextField(
                   'Enter registration number', _bRegNoController)),
           const SizedBox(height: 15),
+          Row(children: [
+            Expanded(
+              child: _buildLabelWithField(
+                  'Date of Incorporation *',
+                  _buildTextField('YYYY-MM-DD', _dateOfIncorporationController,
+                      onTap: () async {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: DateTime.now(),
+                          firstDate: DateTime(1900),
+                          lastDate: DateTime.now(),
+                        );
+                        if (date != null) {
+                          _dateOfIncorporationController.text =
+                          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+                        }
+                      })),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildLabelWithField(
+                  'Place of Incorporation *',
+                  _buildTextField(
+                      'Enter place of incorporation', _placeOfIncorporationController)),
+            ),
+          ]),
+          const SizedBox(height: 15),
           _buildLabelWithField(
-              'Company Email *',
-              _buildTextField('Enter company email', _emailController,
+              'Nature of Business *',
+              _buildTextField(
+                  'Describe nature of business', _natureOfBusinessController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField(
+              'Corporate Email *',
+              _buildTextField('Enter corporate email', _emailController,
                   keyboardType: TextInputType.emailAddress)),
           const SizedBox(height: 15),
           _buildLabelWithField(
-              'Company Phone',
-              _buildTextField('Enter phone number', _phoneController,
+              'Contact Number *',
+              _buildTextField('Enter contact number', _phoneController,
                   keyboardType: TextInputType.phone)),
           const SizedBox(height: 15),
           _buildLabelWithField(
-              'Country *',
+              'Nationality',
               _buildDropdownField(
-                  'Country',
-                  _selectedCountry,
+                  'Nationality',
+                  _selectedNationality,
                   ['Botswana', 'Other'],
-                      (val) => setState(() => _selectedCountry = val!))),
+                      (val) => setState(() => _selectedNationality = val!))),
+        ],
+      ),
+    );
+  }
+
+  // ── Step 1 (Minor): Minor's Info ───────────────────────────────────────────
+  Widget _buildMinorInfoStep() {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildLabelWithField('Broker *', _buildBrokerDropdown()),
+          const SizedBox(height: 15),
+          Row(children: [
+            Expanded(
+                child: _buildLabelWithField(
+                    'Title',
+                    _buildDropdownField(
+                        'Title',
+                        _selectedTitle,
+                        ['Master', 'Miss', 'Mr.', 'Mrs.', 'Ms.', 'Dr.'],
+                            (val) => setState(() => _selectedTitle = val!)))),
+            const SizedBox(width: 10),
+            Expanded(
+                child: _buildLabelWithField(
+                    'Gender',
+                    _buildDropdownField(
+                        'Gender',
+                        _selectedGender,
+                        ['Male', 'Female'],
+                            (val) => setState(() => _selectedGender = val!)))),
+          ]),
+          const SizedBox(height: 15),
+          _buildLabelWithField('Forenames *',
+              _buildTextField("Enter minor's forenames", _firstNameController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField('Surname *',
+              _buildTextField("Enter minor's surname", _lastNameController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField(
+              'Date of Birth *',
+              _buildTextField('YYYY-MM-DD', _dobController, onTap: () async {
+                final date = await showDatePicker(
+                  context: context,
+                  initialDate:
+                  DateTime.now().subtract(const Duration(days: 365 * 8)),
+                  firstDate: DateTime(1990),
+                  lastDate: DateTime.now(),
+                );
+                if (date != null) {
+                  _dobController.text =
+                  '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+                }
+              })),
+          const SizedBox(height: 15),
+          Row(children: [
+            Expanded(
+                child: _buildLabelWithField(
+                    'ID Type',
+                    _buildDropdownField(
+                        'ID Type',
+                        _selectedIdType,
+                        ['Birth Certificate', 'National Id', 'Passport'],
+                            (val) => setState(() => _selectedIdType = val!)))),
+            const SizedBox(width: 10),
+            Expanded(
+                child: _buildLabelWithField(
+                    'ID / Birth Cert No. *',
+                    _buildTextField('Enter ID number', _idNumberController))),
+          ]),
+          const SizedBox(height: 15),
+          _buildLabelWithField('Birth Place *',
+              _buildTextField('Enter place of birth', _birthPlaceController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField(
+              'Email *',
+              _buildTextField('Enter email address', _emailController,
+                  keyboardType: TextInputType.emailAddress)),
+          const SizedBox(height: 15),
+          _buildLabelWithField(
+              'Contact Number *',
+              _buildTextField('Enter contact number', _phoneController,
+                  keyboardType: TextInputType.phone)),
+          const SizedBox(height: 15),
+          _buildLabelWithField(
+              'Nationality',
+              _buildDropdownField(
+                  'Nationality',
+                  _selectedNationality,
+                  ['Botswana', 'Other'],
+                      (val) => setState(() => _selectedNationality = val!))),
+        ],
+      ),
+    );
+  }
+
+  // ── Step 3 (Minor): Guardian Details ───────────────────────────────────────
+  Widget _buildGuardianStep() {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Guardian Details',
+            style: TextStyle(
+                color: Color(0xFF2C1810),
+                fontSize: 15,
+                fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'The parent or legal guardian responsible for this account.',
+            style: TextStyle(color: Colors.grey[600], fontSize: 11),
+          ),
+          const SizedBox(height: 15),
+          _buildLabelWithField(
+              'Forenames *',
+              _buildTextField(
+                  "Enter guardian's forenames", _guardianForenamesController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField(
+              'Surname *',
+              _buildTextField(
+                  "Enter guardian's surname", _guardianSurnameController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField(
+              'Identification No *',
+              _buildTextField(
+                  "Enter guardian's ID number", _guardianIdNumberController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField(
+              'Relationship with Minor *',
+              _buildTextField('e.g. Mother, Father, Legal Guardian',
+                  _guardianRelationshipController)),
         ],
       ),
     );
@@ -1464,19 +1814,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
           const SizedBox(height: 15),
           _buildLabelWithField('Postal Code',
               _buildTextField('Enter postal code', _postalCodeController)),
-          if (_selectedAccountType == 'I') ...[
-            const SizedBox(height: 15),
-            _buildLabelWithField(
-                'Country *',
-                _buildDropdownField(
-                    'Country',
-                    _selectedCountry,
-                    ['Botswana', 'Other'],
-                        (val) => setState(() => _selectedCountry = val!))),
-          ],
           const SizedBox(height: 15),
           _buildLabelWithField(
-              _selectedIdType == 'Passport' ? 'TIN / Tax Code *' : 'TIN / Tax Code',
+              'Country *',
+              _buildDropdownField(
+                  'Country',
+                  _selectedCountry,
+                  ['Botswana', 'Other'],
+                      (val) => setState(() => _selectedCountry = val!))),
+          const SizedBox(height: 15),
+          _buildLabelWithField(
+              (_selectedAccountType == 'C' || _selectedIdType == 'Passport')
+                  ? 'TIN / Tax Code *'
+                  : 'TIN / Tax Code',
               _buildTextField('Enter TIN number', _tinController)),
         ],
       ),
@@ -1555,7 +1905,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   // ── Banking (shared) ───────────────────────────────────────────────────────
-  // #7 - Mobile Wallet Provider + Mobile Number now live here (individual)
+  // #7 - Mobile Wallet Provider + Mobile Number now live here (individual/minor)
   // #8 - Mobile number with country code
   // #9 - Account Name field
   Widget _buildStep4() {
@@ -1563,23 +1913,25 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_selectedAccountType == 'I') ...[
-            _buildLabelWithField(
-              'Mobile Wallet Provider *',
-              _buildDropdownField(
-                'Select MNO',
-                _selectedMNO,
-                ['Mascom- MyZaka', 'Orange Money', 'BTC Mobile Money/ Smega'],
-                    (val) => setState(() => _selectedMNO = val!),
-              ),
+          _buildLabelWithField(
+            'Mobile Network Operator *',
+            _buildDropdownField(
+              'Select MNO',
+              _selectedMNO,
+              ['Mascom- MyZaka', 'Orange Money', 'BTC Mobile Money/ Smega'],
+                  (val) => setState(() => _selectedMNO = val!),
             ),
-            const SizedBox(height: 15),
-            _buildLabelWithField(
-              'Mobile Number *',
-              _buildPhoneFieldWithCountryCode(),
+          ),
+          const SizedBox(height: 15),
+          _buildLabelWithField(
+            'Mobile Money Wallet *',
+            _buildPhoneFieldWithCountryCode(
+              _selectedAccountType == 'I'
+                  ? _phoneController
+                  : _walletMobileNumberController,
             ),
-            const SizedBox(height: 15),
-          ],
+          ),
+          const SizedBox(height: 15),
 
           // Bank Name Dropdown
           _buildLabelWithField('Bank Name', _buildBankDropdown()),
@@ -1650,7 +2002,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   // #8 - Mobile number field with country code selector
-  Widget _buildPhoneFieldWithCountryCode() {
+  Widget _buildPhoneFieldWithCountryCode(TextEditingController controller) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1701,14 +2053,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
         const SizedBox(width: 10),
         Expanded(
           child: _buildTextField(
-              'Enter phone number', _phoneController,
+              'Enter mobile money number', controller,
               keyboardType: TextInputType.phone),
         ),
       ],
     );
   }
 
-  // ── Step 4 (Corporate): Signatories ────────────────────────────────────────
+  // ── Step 4 (Institutional/Corporate): Signatories ──────────────────────────
   Widget _buildSignatoriesStep() {
     return SingleChildScrollView(
       child: Column(
@@ -1766,7 +2118,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    _buildTextField('Full name', row['name']!),
+                    _buildTextField('Name', row['name']!),
+                    const SizedBox(height: 8),
+                    _buildTextField('Surname', row['surname']!),
                     const SizedBox(height: 8),
                     _buildTextField('Identification number', row['id']!),
                   ],
@@ -1778,6 +2132,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
           OutlinedButton.icon(
             onPressed: () => setState(() => _signatories.add({
               'name': TextEditingController(),
+              'surname': TextEditingController(),
               'id': TextEditingController(),
             })),
             icon: const Icon(Icons.add, color: Color(0xFFD4A855), size: 18),
@@ -1825,6 +2180,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   'ProofOfEmployment'),
               const SizedBox(height: 25),
             ],
+          ] else if (_selectedAccountType == 'M') ...[
+            _buildDocumentUploadField(
+                '1. National ID / Passport', _idDocument, 'ID'),
+            const SizedBox(height: 15),
+            _buildDocumentUploadField('2. Proof of Residence',
+                _proofOfAddressDocument, 'ProofOfAddress'),
+            const SizedBox(height: 25),
           ] else ...[
             _buildDocumentUploadField('1. Certificate of Incorporation',
                 _certificateOfIncorporationDocument,
@@ -1841,74 +2203,76 @@ class _SignUpScreenState extends State<SignUpScreen> {
             const SizedBox(height: 25),
           ],
 
-          // #10 - Employee declaration
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFE8D7B8)),
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 5,
-                    offset: const Offset(0, 2))
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Employee Declaration *',
-                  style: TextStyle(
-                      color: Color(0xFF6B5D4F),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Are you a BSE employee, or a relative of a BSE employee?',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 11),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: RadioListTile<bool>(
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                        title: const Text('Yes', style: TextStyle(fontSize: 13)),
-                        value: true,
-                        groupValue: _isBseEmployeeOrRelative,
-                        activeColor: const Color(0xFFD4A855),
-                        onChanged: (val) =>
-                            setState(() => _isBseEmployeeOrRelative = val!),
-                      ),
-                    ),
-                    Expanded(
-                      child: RadioListTile<bool>(
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                        title: const Text('No', style: TextStyle(fontSize: 13)),
-                        value: false,
-                        groupValue: _isBseEmployeeOrRelative,
-                        activeColor: const Color(0xFFD4A855),
-                        onChanged: (val) =>
-                            setState(() => _isBseEmployeeOrRelative = val!),
-                      ),
-                    ),
-                  ],
-                ),
-                if (_isBseEmployeeOrRelative) ...[
-                  const SizedBox(height: 4),
-                  _buildTextField(
-                      'Employee name & relationship (e.g. self, spouse of John Doe)',
-                      _employeeDeclarationDetailsController),
+          // #10 - Employee declaration (not applicable to Minor accounts)
+          if (_selectedAccountType != 'M') ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE8D7B8)),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 5,
+                      offset: const Offset(0, 2))
                 ],
-              ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Employee Declaration *',
+                    style: TextStyle(
+                        color: Color(0xFF6B5D4F),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Are you a BSE employee, or a relative of a BSE employee?',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: RadioListTile<bool>(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          title: const Text('Yes', style: TextStyle(fontSize: 13)),
+                          value: true,
+                          groupValue: _isBseEmployeeOrRelative,
+                          activeColor: const Color(0xFFD4A855),
+                          onChanged: (val) =>
+                              setState(() => _isBseEmployeeOrRelative = val!),
+                        ),
+                      ),
+                      Expanded(
+                        child: RadioListTile<bool>(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          title: const Text('No', style: TextStyle(fontSize: 13)),
+                          value: false,
+                          groupValue: _isBseEmployeeOrRelative,
+                          activeColor: const Color(0xFFD4A855),
+                          onChanged: (val) =>
+                              setState(() => _isBseEmployeeOrRelative = val!),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_isBseEmployeeOrRelative) ...[
+                    const SizedBox(height: 4),
+                    _buildTextField(
+                        'Employee name & relationship (e.g. self, spouse of John Doe)',
+                        _employeeDeclarationDetailsController),
+                  ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
+            const SizedBox(height: 20),
+          ],
 
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,

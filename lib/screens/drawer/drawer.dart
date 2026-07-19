@@ -5,7 +5,6 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:provider/provider.dart';
 import '../../theme_provider.dart';
-import '../auth/minor/create_minor.dart';
 import '../market_watch/advanced.dart';
 import '../settings /settings.dart';
 
@@ -258,23 +257,23 @@ class _AppDrawerState extends State<AppDrawer> {
               padding: const EdgeInsets.symmetric(vertical: 10),
               child: Divider(color: dividerColor, height: 1),
             ),
-            _buildDrawerItem(
-              context: context,
-              icon: Icons.child_care_outlined,
-              title: 'Create Minor Account',
-              onTap: () {
-                Navigator.pop(context); // Close drawer first
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const CreateMinorAccountScreen(),
-                  ),
-                );
-              },
-              textColor: textColor,
-              iconColor: iconColor,
-              trailingIconColor: trailingIconColor,
-            ),
+            // _buildDrawerItem(
+            //   context: context,
+            //   icon: Icons.child_care_outlined,
+            //   title: 'Create Minor Account',
+            //   onTap: () {
+            //     Navigator.pop(context); // Close drawer first
+            //     Navigator.push(
+            //       context,
+            //       MaterialPageRoute(
+            //         builder: (context) => const CreateMinorAccountScreen(),
+            //       ),
+            //     );
+            //   },
+            //   textColor: textColor,
+            //   iconColor: iconColor,
+            //   trailingIconColor: trailingIconColor,
+            // ),
             _buildDrawerItem(
               context: context,
               icon: Icons.ad_units_sharp,
