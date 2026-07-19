@@ -754,8 +754,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _showSnackBar('Please agree to the Terms & Conditions');
       return false;
     }
-    // #10 - Employee declaration (not applicable to Minor accounts)
-    if (_selectedAccountType != 'M' &&
+    // #10 - Employee declaration (Individual accounts only)
+    if (_selectedAccountType == 'I' &&
         _isBseEmployeeOrRelative &&
         _employeeDeclarationDetailsController.text.trim().isEmpty) {
       _showSnackBar(
@@ -2203,8 +2203,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
             const SizedBox(height: 25),
           ],
 
-          // #10 - Employee declaration (not applicable to Minor accounts)
-          if (_selectedAccountType != 'M') ...[
+          // #10 - Employee declaration (Individual accounts only)
+          if (_selectedAccountType == 'I') ...[
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
