@@ -65,13 +65,39 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _guardianIdNumberController = TextEditingController();
   final _guardianRelationshipController = TextEditingController();
 
-  // Signatories (Corporate/Institutional only) – each row holds name + surname + identification controllers
+  // Signatories (Corporate/Institutional only) – each row holds:
+  // Forenames, Surname, Identification, Role, Email, Mobile controllers.
+  // IdType, Nationality and Mobile country code are dropdown-driven and kept
+  // in parallel lists below (synced with _signatories by index).
   List<Map<String, TextEditingController>> _signatories = [
     {
-      'name': TextEditingController(),
+      'forenames': TextEditingController(),
       'surname': TextEditingController(),
       'id': TextEditingController(),
+      'role': TextEditingController(),
+      'email': TextEditingController(),
+      'mobile': TextEditingController(),
     },
+  ];
+  List<String> _signatoryIdTypes = ['National ID'];
+  List<String> _signatoryNationalities = ['Motswana'];
+  List<String> _signatoryMobileCodes = ['+267'];
+
+  static const List<String> _signatoryIdTypeOptions = [
+    'National ID',
+    'Passport',
+    'Foreign ID',
+  ];
+
+  // Demonym-style nationality options for signatories.
+  static const List<String> _signatoryNationalityOptions = [
+    'Motswana',
+    'South African',
+    'Zimbabwean',
+    'Zambian',
+    'Namibian',
+    'Tanzanian',
+    'Other',
   ];
 
   // Dropdown values
@@ -84,8 +110,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
   String _selectedSourceOfIncome = 'Employment';
   String _selectedMNO = 'Mascom- MyZaka';
 
-  // #8 - Mobile number country code
+  // #8 - Mobile number country codes
+  // _selectedMobileCountryCode -> Mobile Money Wallet number (Banking step)
+  // _selectedContactCountryCode -> general Contact number (Minor & Institutional)
   String _selectedMobileCountryCode = '+267';
+  String _selectedContactCountryCode = '+267';
   final List<Map<String, String>> _countryCodes = const [
     {'code': '+267', 'label': 'Botswana (+267)'},
     {'code': '+27', 'label': 'South Africa (+27)'},
@@ -93,6 +122,50 @@ class _SignUpScreenState extends State<SignUpScreen> {
     {'code': '+260', 'label': 'Zambia (+260)'},
     {'code': '+264', 'label': 'Namibia (+264)'},
     {'code': '+255', 'label': 'Tanzania (+255)'},
+  ];
+
+  // Full country list – Botswana first, then alphabetical.
+  // Used for Nationality and Country of Residence dropdowns.
+  static const List<String> _countries = [
+    'Botswana',
+    'Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola',
+    'Antigua and Barbuda', 'Argentina', 'Armenia', 'Australia', 'Austria',
+    'Azerbaijan', 'Bahamas', 'Bahrain', 'Bangladesh', 'Barbados', 'Belarus',
+    'Belgium', 'Belize', 'Benin', 'Bhutan', 'Bolivia',
+    'Bosnia and Herzegovina', 'Brazil', 'Brunei', 'Bulgaria', 'Burkina Faso',
+    'Burundi', 'Cabo Verde', 'Cambodia', 'Cameroon', 'Canada',
+    'Central African Republic', 'Chad', 'Chile', 'China', 'Colombia',
+    'Comoros', 'Congo (DRC)', 'Congo (Republic)', 'Costa Rica', 'Croatia',
+    'Cuba', 'Cyprus', 'Czech Republic', 'Denmark', 'Djibouti', 'Dominica',
+    'Dominican Republic', 'Ecuador', 'Egypt', 'El Salvador',
+    'Equatorial Guinea', 'Eritrea', 'Estonia', 'Eswatini', 'Ethiopia',
+    'Fiji', 'Finland', 'France', 'Gabon', 'Gambia', 'Georgia', 'Germany',
+    'Ghana', 'Greece', 'Grenada', 'Guatemala', 'Guinea', 'Guinea-Bissau',
+    'Guyana', 'Haiti', 'Honduras', 'Hungary', 'Iceland', 'India',
+    'Indonesia', 'Iran', 'Iraq', 'Ireland', 'Israel', 'Italy',
+    'Ivory Coast', 'Jamaica', 'Japan', 'Jordan', 'Kazakhstan', 'Kenya',
+    'Kiribati', 'Kuwait', 'Kyrgyzstan', 'Laos', 'Latvia', 'Lebanon',
+    'Lesotho', 'Liberia', 'Libya', 'Liechtenstein', 'Lithuania',
+    'Luxembourg', 'Madagascar', 'Malawi', 'Malaysia', 'Maldives', 'Mali',
+    'Malta', 'Marshall Islands', 'Mauritania', 'Mauritius', 'Mexico',
+    'Micronesia', 'Moldova', 'Monaco', 'Mongolia', 'Montenegro', 'Morocco',
+    'Mozambique', 'Myanmar', 'Namibia', 'Nauru', 'Nepal', 'Netherlands',
+    'New Zealand', 'Nicaragua', 'Niger', 'Nigeria', 'North Korea',
+    'North Macedonia', 'Norway', 'Oman', 'Pakistan', 'Palau', 'Panama',
+    'Papua New Guinea', 'Paraguay', 'Peru', 'Philippines', 'Poland',
+    'Portugal', 'Qatar', 'Romania', 'Russia', 'Rwanda',
+    'Saint Kitts and Nevis', 'Saint Lucia',
+    'Saint Vincent and the Grenadines', 'Samoa', 'San Marino',
+    'Sao Tome and Principe', 'Saudi Arabia', 'Senegal', 'Serbia',
+    'Seychelles', 'Sierra Leone', 'Singapore', 'Slovakia', 'Slovenia',
+    'Solomon Islands', 'Somalia', 'South Africa', 'South Korea',
+    'South Sudan', 'Spain', 'Sri Lanka', 'Sudan', 'Suriname', 'Sweden',
+    'Switzerland', 'Syria', 'Taiwan', 'Tajikistan', 'Tanzania', 'Thailand',
+    'Timor-Leste', 'Togo', 'Tonga', 'Trinidad and Tobago', 'Tunisia',
+    'Turkey', 'Turkmenistan', 'Tuvalu', 'Uganda', 'Ukraine',
+    'United Arab Emirates', 'United Kingdom', 'United States', 'Uruguay',
+    'Uzbekistan', 'Vanuatu', 'Vatican City', 'Venezuela', 'Vietnam',
+    'Yemen', 'Zambia', 'Zimbabwe',
   ];
 
   // Broker
@@ -199,9 +272,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _guardianIdNumberController.dispose();
     _guardianRelationshipController.dispose();
     for (final row in _signatories) {
-      row['name']?.dispose();
+      row['forenames']?.dispose();
       row['surname']?.dispose();
       row['id']?.dispose();
+      row['role']?.dispose();
+      row['email']?.dispose();
+      row['mobile']?.dispose();
     }
     super.dispose();
   }
@@ -562,8 +638,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
     } else if (_currentStep == 3) {
       if (_selectedAccountType == 'I' && !_validateStep3()) return;
       if (_selectedAccountType == 'M' && !_validateGuardianInfo()) return;
+      // Institutional flow has Banking at step 3.
+      if (_selectedAccountType == 'C' && !_validateBanking()) return;
     } else if (_currentStep == 4) {
       if (_selectedAccountType == 'C' && !_validateSignatories()) return;
+      // Individual & Minor flows have Banking at step 4.
+      if (_selectedAccountType != 'C' && !_validateBanking()) return;
     } else if (_currentStep == 5) {
       if (!_validateStep5()) return;
     }
@@ -591,16 +671,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _showSnackBar('Please fill all required fields');
       return false;
     }
-    if (_idNumberController.text.length != 9) {
-      _showSnackBar('ID number must be exactly 9 digits');
-      return false;
-    }
-    if (!RegExp(r'^[0-9]+$').hasMatch(_idNumberController.text)) {
-      _showSnackBar('ID number must contain only numbers');
-      return false;
+    // Botswana National ID (Omang) = exactly 9 digits. Passport is free text.
+    if (_selectedIdType == 'National Id') {
+      if (!RegExp(r'^[0-9]{9}$').hasMatch(_idNumberController.text)) {
+        _showSnackBar('National ID number must be exactly 9 digits');
+        return false;
+      }
     }
     if (!_isNewClient && _cdsNumberController.text.isEmpty) {
-      _showSnackBar('Please enter CDS number for existing client');
+      _showSnackBar('Please enter CSD number for existing client');
       return false;
     }
     if (_selectedBrokerCode == null || _selectedBrokerCode!.isEmpty) {
@@ -611,6 +690,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   bool _validateCompanyInfo() {
+    if (!_isNewClient && _cdsNumberController.text.trim().isEmpty) {
+      _showSnackBar('Please enter the CSD number for the existing account');
+      return false;
+    }
     if (_selectedBrokerCode == null || _selectedBrokerCode!.isEmpty) {
       _showSnackBar('Please select a broker');
       return false;
@@ -647,12 +730,24 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   bool _validateMinorInfo() {
+    if (!_isNewClient && _cdsNumberController.text.trim().isEmpty) {
+      _showSnackBar('Please enter the CSD number for the existing account');
+      return false;
+    }
     if (_firstNameController.text.isEmpty ||
         _lastNameController.text.isEmpty ||
         _idNumberController.text.isEmpty ||
         _dobController.text.isEmpty) {
       _showSnackBar('Please fill all required fields');
       return false;
+    }
+    // Botswana National ID (Omang) = exactly 9 digits.
+    // Birth Certificate / Passport / Foreign ID have no format validation.
+    if (_selectedIdType == 'National Id') {
+      if (!RegExp(r'^[0-9]{9}$').hasMatch(_idNumberController.text.trim())) {
+        _showSnackBar('National ID number must be exactly 9 digits');
+        return false;
+      }
     }
     if (_birthPlaceController.text.trim().isEmpty) {
       _showSnackBar("Please enter the minor's birth place");
@@ -689,6 +784,32 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (_guardianRelationshipController.text.trim().isEmpty) {
       _showSnackBar("Please enter the guardian's relationship to the minor");
       return false;
+    }
+    return true;
+  }
+
+  // Mobile Money Wallet validation (all account types).
+  // Botswana (+267) numbers are exactly 8 digits, e.g. 71245676.
+  bool _validateBanking() {
+    final controller = _selectedAccountType == 'I'
+        ? _phoneController
+        : _walletMobileNumberController;
+    final number = controller.text.trim();
+    if (number.isEmpty) {
+      _showSnackBar('Please enter the Mobile Money Wallet number');
+      return false;
+    }
+    if (_selectedMobileCountryCode == '+267') {
+      if (!RegExp(r'^[0-9]{8}$').hasMatch(number)) {
+        _showSnackBar(
+            'Botswana mobile wallet number must be exactly 8 digits, e.g. 71245676');
+        return false;
+      }
+    } else {
+      if (!RegExp(r'^[0-9]{6,15}$').hasMatch(number)) {
+        _showSnackBar('Please enter a valid mobile wallet number (digits only)');
+        return false;
+      }
     }
     return true;
   }
@@ -732,9 +853,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _showSnackBar('Please add at least one signatory');
       return false;
     }
-    for (final row in _signatories) {
-      if (row['name']!.text.trim().isEmpty) {
-        _showSnackBar('Please enter the name for all signatories');
+    for (int i = 0; i < _signatories.length; i++) {
+      final row = _signatories[i];
+      if (row['forenames']!.text.trim().isEmpty) {
+        _showSnackBar('Please enter the forenames for all signatories');
         return false;
       }
       if (row['surname']!.text.trim().isEmpty) {
@@ -743,6 +865,37 @@ class _SignUpScreenState extends State<SignUpScreen> {
       }
       if (row['id']!.text.trim().isEmpty) {
         _showSnackBar('Please enter an identification number for all signatories');
+        return false;
+      }
+      // National ID must be exactly 9 digits; Passport/Foreign ID are free text.
+      if (_signatoryIdTypes[i] == 'National ID' &&
+          !RegExp(r'^[0-9]{9}$').hasMatch(row['id']!.text.trim())) {
+        _showSnackBar(
+            'Signatory ${i + 1}: National ID must be exactly 9 digits');
+        return false;
+      }
+      if (row['role']!.text.trim().isEmpty) {
+        _showSnackBar('Please enter the role for all signatories');
+        return false;
+      }
+      if (row['email']!.text.trim().isEmpty) {
+        _showSnackBar('Please enter the email for all signatories');
+        return false;
+      }
+      if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+          .hasMatch(row['email']!.text.trim())) {
+        _showSnackBar('Signatory ${i + 1}: please enter a valid email');
+        return false;
+      }
+      final mobile = row['mobile']!.text.trim();
+      if (mobile.isEmpty) {
+        _showSnackBar('Please enter the mobile number for all signatories');
+        return false;
+      }
+      if (_signatoryMobileCodes[i] == '+267' &&
+          !RegExp(r'^[0-9]{8}$').hasMatch(mobile)) {
+        _showSnackBar(
+            'Signatory ${i + 1}: Botswana mobile number must be exactly 8 digits, e.g. 71234567');
         return false;
       }
     }
@@ -754,28 +907,28 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _showSnackBar('Please agree to the Terms & Conditions');
       return false;
     }
-    // #10 - Employee declaration (Individual accounts only)
+    // #10 - Employee / market exposure declaration (Individual accounts only)
     if (_selectedAccountType == 'I' &&
         _isBseEmployeeOrRelative &&
         _employeeDeclarationDetailsController.text.trim().isEmpty) {
       _showSnackBar(
-          'Please provide details of the BSE employee / relationship');
+          'Please provide details of the BSE employee / market exposure');
       return false;
     }
     if (_selectedAccountType == 'I') {
-      if (_isNewClient) {
-        if (_idDocument == null) {
-          _showSnackBar('Please upload ID document');
-          return false;
-        }
-        if (_proofOfAddressDocument == null) {
-          _showSnackBar('Please upload Proof of Address document');
-          return false;
-        }
-        if (_proofOfEmploymentDocument == null) {
-          _showSnackBar('Please upload Proof of Address document');
-          return false;
-        }
+      // Attachments are always required for Individual accounts.
+      if (_idDocument == null) {
+        _showSnackBar('Please upload ID document');
+        return false;
+      }
+      if (_proofOfAddressDocument == null) {
+        _showSnackBar('Please upload Proof of Address document');
+        return false;
+      }
+      if (_proofOfEmploymentDocument == null) {
+        _showSnackBar(
+            'Please upload Proof of Source of Income / Employment document');
+        return false;
       }
     } else if (_selectedAccountType == 'M') {
       if (_idDocument == null) {
@@ -823,7 +976,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
       "myDistrict": "",
       "Landmark": "",
       "Tel": _phoneController.text,
-      "TelCountryCode": _selectedMobileCountryCode,
+      // Individual: the phone field IS the wallet number, so the wallet code
+      // applies. Minor/Institutional: the contact number has its own code.
+      "TelCountryCode": _selectedAccountType == 'I'
+          ? _selectedMobileCountryCode
+          : _selectedContactCountryCode,
       "MNO": _getMNOCode(_selectedMNO),
       "Fax": _faxController.text,
       "Email": _emailController.text,
@@ -861,19 +1018,38 @@ class _SignUpScreenState extends State<SignUpScreen> {
         "DateOfIncorporation": _dateOfIncorporationController.text,
         "PlaceOfIncorporation": _placeOfIncorporationController.text,
         "MobileWalletNumber": _walletMobileNumberController.text,
-        "cdsnumber": "",
-        "clientType": "new",
-        "Signatories": _signatories
-            .map((row) => {
-          "Name": row['name']!.text,
-          "Surname": row['surname']!.text,
-          "Identification": row['id']!.text,
-        })
-            .toList(),
+        "cdsnumber": _isNewClient ? "" : _cdsNumberController.text,
+        "clientType": _isNewClient ? "new" : "existing",
+        "Signatories": List.generate(_signatories.length, (i) {
+          final row = _signatories[i];
+          final mobileCode = _signatoryMobileCodes[i];
+          final mobileNumber = row['mobile']!.text.trim();
+          // Mobile sent without the leading '+' and without a leading
+          // trunk zero, e.g. +267 71234567 -> "26771234567".
+          final normalizedMobile =
+              '${mobileCode.replaceAll('+', '')}$mobileNumber';
+          return {
+            "Surname": row['surname']!.text.trim(),
+            "Forenames": row['forenames']!.text.trim(),
+            "Identification": row['id']!.text.trim(),
+            "IdType": _signatoryIdTypes[i],
+            "Nationality": _signatoryNationalities[i],
+            "Role": row['role']!.text.trim(),
+            "Email": row['email']!.text.trim(),
+            "Mobile": normalizedMobile,
+          };
+        }),
       };
     }
 
     if (_selectedAccountType == 'M') {
+      // The API expects a single combined "GuardianFullNames" field and
+      // "GuardianIdentification".
+      final guardianFullNames = [
+        _guardianForenamesController.text.trim(),
+        _guardianSurnameController.text.trim(),
+      ].where((s) => s.isNotEmpty).join(' ');
+
       return {
         ...common,
         "Othernames": _firstNameController.text,
@@ -896,12 +1072,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
         "NatureOfBusiness": "N/A",
         "sourceofIncome": "N/A",
         "MaritalStatus": "",
-        "cdsnumber": "",
-        "clientType": "new",
+        "cdsnumber": _isNewClient ? "" : _cdsNumberController.text,
+        "clientType": _isNewClient ? "new" : "existing",
         "MobileWalletNumber": _walletMobileNumberController.text,
-        "GuardianForenames": _guardianForenamesController.text,
-        "GuardianSurname": _guardianSurnameController.text,
-        "GuardianIdNumber": _guardianIdNumberController.text,
+        "GuardianFullNames": guardianFullNames,
+        "GuardianIdentification": _guardianIdNumberController.text,
         "GuardianRelationship": _guardianRelationshipController.text,
       };
     }
@@ -1482,8 +1657,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
           _buildClientTypeToggle(),
           const SizedBox(height: 15),
           if (!_isNewClient) ...[
-            _buildLabelWithField('CDS Number *',
-                _buildTextField('Enter CDS number', _cdsNumberController)),
+            _buildLabelWithField('CSD Number *',
+                _buildTextField('Enter CSD number', _cdsNumberController)),
             const SizedBox(height: 15),
           ],
           _buildLabelWithField('Broker *', _buildBrokerDropdown()),
@@ -1543,39 +1718,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
             Expanded(
               child: _buildLabelWithField(
                 'ID Number *',
-                Container(
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE8D7B8)),
-                    boxShadow: [
-                      BoxShadow(
-                          color: Colors.black.withOpacity(0.03),
-                          blurRadius: 5,
-                          offset: const Offset(0, 2))
-                    ],
-                  ),
-                  child: TextField(
-                    controller: _idNumberController,
-                    keyboardType: TextInputType.number,
-                    maxLength: 9,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(9)
-                    ],
-                    style: const TextStyle(color: Colors.black87, fontSize: 14),
-                    decoration: InputDecoration(
-                      hintText: '9-digit ID',
-                      hintStyle:
-                      TextStyle(color: Colors.grey[400], fontSize: 14),
-                      border: InputBorder.none,
-                      counterText: '',
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 12),
-                    ),
-                  ),
-                ),
+                _selectedIdType == 'National Id'
+                    ? _buildNationalIdField()
+                    : _buildTextField(
+                    'Enter passport number', _idNumberController),
               ),
             ),
           ]),
@@ -1591,12 +1737,56 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
+  // 9-digit numeric National ID (Omang) input – shared by Individual, Minor
+  // and Signatories. Defaults to _idNumberController when none is passed.
+  Widget _buildNationalIdField({TextEditingController? controller}) {
+    return Container(
+      height: 50,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE8D7B8)),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 5,
+              offset: const Offset(0, 2))
+        ],
+      ),
+      child: TextField(
+        controller: controller ?? _idNumberController,
+        keyboardType: TextInputType.number,
+        maxLength: 9,
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          LengthLimitingTextInputFormatter(9)
+        ],
+        style: const TextStyle(color: Colors.black87, fontSize: 14),
+        decoration: InputDecoration(
+          hintText: '9-digit ID',
+          hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+          border: InputBorder.none,
+          counterText: '',
+          contentPadding:
+          const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+      ),
+    );
+  }
+
   // ── Step 1 (Institutional/Corporate): Company Info ─────────────────────────
   Widget _buildCompanyInfoStep() {
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildClientTypeToggle(),
+          const SizedBox(height: 15),
+          if (!_isNewClient) ...[
+            _buildLabelWithField('CSD Number *',
+                _buildTextField('Enter CSD number', _cdsNumberController)),
+            const SizedBox(height: 15),
+          ],
           _buildLabelWithField('Broker *', _buildBrokerDropdown()),
           const SizedBox(height: 15),
           _buildLabelWithField(
@@ -1647,16 +1837,22 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   keyboardType: TextInputType.emailAddress)),
           const SizedBox(height: 15),
           _buildLabelWithField(
-              'Contact Number *',
-              _buildTextField('Enter contact number', _phoneController,
-                  keyboardType: TextInputType.phone)),
+            'Contact Number *',
+            _buildPhoneFieldWithCountryCode(
+              _phoneController,
+              code: _selectedContactCountryCode,
+              onCodeChanged: (val) =>
+                  setState(() => _selectedContactCountryCode = val),
+              hint: 'Enter contact number',
+            ),
+          ),
           const SizedBox(height: 15),
           _buildLabelWithField(
               'Nationality',
               _buildDropdownField(
                   'Nationality',
                   _selectedNationality,
-                  ['Botswana', 'Other'],
+                  _countries,
                       (val) => setState(() => _selectedNationality = val!))),
         ],
       ),
@@ -1669,6 +1865,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildClientTypeToggle(),
+          const SizedBox(height: 15),
+          if (!_isNewClient) ...[
+            _buildLabelWithField('CSD Number *',
+                _buildTextField('Enter CSD number', _cdsNumberController)),
+            const SizedBox(height: 15),
+          ],
           _buildLabelWithField('Broker *', _buildBrokerDropdown()),
           const SizedBox(height: 15),
           Row(children: [
@@ -1720,14 +1923,31 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     _buildDropdownField(
                         'ID Type',
                         _selectedIdType,
-                        ['Birth Certificate', 'National Id', 'Passport'],
+                        // 'Foreign ID' has no format validation so it can
+                        // accommodate identification from any country.
+                        [
+                          'Birth Certificate',
+                          'National Id',
+                          'Passport',
+                          'Foreign ID'
+                        ],
                             (val) => setState(() => _selectedIdType = val!)))),
             const SizedBox(width: 10),
             Expanded(
                 child: _buildLabelWithField(
                     'ID / Birth Cert No. *',
-                    _buildTextField('Enter ID number', _idNumberController))),
+                    _selectedIdType == 'National Id'
+                        ? _buildNationalIdField()
+                        : _buildTextField(
+                        'Enter ID number', _idNumberController))),
           ]),
+          if (_selectedIdType == 'National Id') ...[
+            const SizedBox(height: 6),
+            const Text(
+              'Botswana National ID must be exactly 9 digits.',
+              style: TextStyle(color: Color(0xFFD4A855), fontSize: 11),
+            ),
+          ],
           const SizedBox(height: 15),
           _buildLabelWithField('Birth Place *',
               _buildTextField('Enter place of birth', _birthPlaceController)),
@@ -1738,16 +1958,22 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   keyboardType: TextInputType.emailAddress)),
           const SizedBox(height: 15),
           _buildLabelWithField(
-              'Contact Number *',
-              _buildTextField('Enter contact number', _phoneController,
-                  keyboardType: TextInputType.phone)),
+            'Contact Number *',
+            _buildPhoneFieldWithCountryCode(
+              _phoneController,
+              code: _selectedContactCountryCode,
+              onCodeChanged: (val) =>
+                  setState(() => _selectedContactCountryCode = val),
+              hint: 'Enter contact number',
+            ),
+          ),
           const SizedBox(height: 15),
           _buildLabelWithField(
               'Nationality',
               _buildDropdownField(
                   'Nationality',
                   _selectedNationality,
-                  ['Botswana', 'Other'],
+                  _countries,
                       (val) => setState(() => _selectedNationality = val!))),
         ],
       ),
@@ -1755,6 +1981,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   // ── Step 3 (Minor): Guardian Details ───────────────────────────────────────
+  // Alignment fix: fields grouped inside a card with consistent labels/spacing.
   Widget _buildGuardianStep() {
     return SingleChildScrollView(
       child: Column(
@@ -1772,33 +1999,52 @@ class _SignUpScreenState extends State<SignUpScreen> {
             'The parent or legal guardian responsible for this account.',
             style: TextStyle(color: Colors.grey[600], fontSize: 11),
           ),
-          const SizedBox(height: 15),
-          _buildLabelWithField(
-              'Forenames *',
-              _buildTextField(
-                  "Enter guardian's forenames", _guardianForenamesController)),
-          const SizedBox(height: 15),
-          _buildLabelWithField(
-              'Surname *',
-              _buildTextField(
-                  "Enter guardian's surname", _guardianSurnameController)),
-          const SizedBox(height: 15),
-          _buildLabelWithField(
-              'Identification No *',
-              _buildTextField(
-                  "Enter guardian's ID number", _guardianIdNumberController)),
-          const SizedBox(height: 15),
-          _buildLabelWithField(
-              'Relationship with Minor *',
-              _buildTextField('e.g. Mother, Father, Legal Guardian',
-                  _guardianRelationshipController)),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE8D7B8)),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 5,
+                    offset: const Offset(0, 2))
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildLabelWithField(
+                    'Forenames *',
+                    _buildTextField("Enter guardian's forenames",
+                        _guardianForenamesController)),
+                const SizedBox(height: 15),
+                _buildLabelWithField(
+                    'Surname *',
+                    _buildTextField(
+                        "Enter guardian's surname", _guardianSurnameController)),
+                const SizedBox(height: 15),
+                _buildLabelWithField(
+                    'Identification No *',
+                    _buildTextField("Enter guardian's ID number",
+                        _guardianIdNumberController)),
+                const SizedBox(height: 15),
+                _buildLabelWithField(
+                    'Relationship with Minor *',
+                    _buildTextField('e.g. Mother, Father, Legal Guardian',
+                        _guardianRelationshipController)),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
   // ── Step 2: Address (shared) ───────────────────────────────────────────────
-  // #4 - Village, Town/City and Resides In fields removed
   Widget _buildStep2() {
     return SingleChildScrollView(
       child: Column(
@@ -1816,11 +2062,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
               _buildTextField('Enter postal code', _postalCodeController)),
           const SizedBox(height: 15),
           _buildLabelWithField(
-              'Country *',
+              'Country of Residence *',
               _buildDropdownField(
-                  'Country',
+                  'Country of Residence',
                   _selectedCountry,
-                  ['Botswana', 'Other'],
+                  _countries,
                       (val) => setState(() => _selectedCountry = val!))),
           const SizedBox(height: 15),
           _buildLabelWithField(
@@ -1834,9 +2080,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   // ── Step 3 (Individual): Contact & Work ────────────────────────────────────
-  // #3 - Occupation hidden for Student/Unemployed
-  // #6 - "Other" employment status with specify field
-  // #7 - Mobile wallet fields moved to Banking step
   Widget _buildStep3() {
     final bool showOccupation = _selectedEmploymentStatus != 'Student' &&
         _selectedEmploymentStatus != 'Unemployed';
@@ -1905,9 +2148,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   // ── Banking (shared) ───────────────────────────────────────────────────────
-  // #7 - Mobile Wallet Provider + Mobile Number now live here (individual/minor)
-  // #8 - Mobile number with country code
-  // #9 - Account Name field
   Widget _buildStep4() {
     return SingleChildScrollView(
       child: Column(
@@ -1929,8 +2169,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
               _selectedAccountType == 'I'
                   ? _phoneController
                   : _walletMobileNumberController,
+              code: _selectedMobileCountryCode,
+              onCodeChanged: (val) =>
+                  setState(() => _selectedMobileCountryCode = val),
+              hint: _selectedMobileCountryCode == '+267'
+                  ? '8 digits, e.g. 71245676'
+                  : 'Enter mobile money number',
+              digitsOnly: true,
+              maxLength: _selectedMobileCountryCode == '+267' ? 8 : 15,
             ),
           ),
+          if (_selectedMobileCountryCode == '+267') ...[
+            const SizedBox(height: 6),
+            const Text(
+              'Botswana mobile numbers are 8 digits (e.g. 71245676).',
+              style: TextStyle(color: Color(0xFFD4A855), fontSize: 11),
+            ),
+          ],
           const SizedBox(height: 15),
 
           // Bank Name Dropdown
@@ -2001,8 +2256,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  // #8 - Mobile number field with country code selector
-  Widget _buildPhoneFieldWithCountryCode(TextEditingController controller) {
+  // #8 - Mobile/contact number field with country code selector.
+  // Parameterised so the wallet number and contact number can each keep
+  // their own country code.
+  Widget _buildPhoneFieldWithCountryCode(
+      TextEditingController controller, {
+        required String code,
+        required ValueChanged<String> onCodeChanged,
+        String hint = 'Enter mobile number',
+        bool digitsOnly = false,
+        int? maxLength,
+      }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2023,7 +2287,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
-              value: _selectedMobileCountryCode,
+              value: code,
               isExpanded: true,
               dropdownColor: Colors.white,
               style: const TextStyle(color: Colors.black87, fontSize: 13),
@@ -2038,7 +2302,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   .toList(),
               onChanged: (val) {
                 if (val == null) return;
-                setState(() => _selectedMobileCountryCode = val);
+                onCodeChanged(val);
               },
               selectedItemBuilder: (context) => _countryCodes
                   .map((c) => Align(
@@ -2052,15 +2316,46 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: _buildTextField(
-              'Enter mobile money number', controller,
-              keyboardType: TextInputType.phone),
+          child: Container(
+            height: 50,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE8D7B8)),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 5,
+                    offset: const Offset(0, 2))
+              ],
+            ),
+            child: TextField(
+              controller: controller,
+              keyboardType: TextInputType.phone,
+              maxLength: maxLength,
+              inputFormatters: [
+                if (digitsOnly) FilteringTextInputFormatter.digitsOnly,
+                if (maxLength != null)
+                  LengthLimitingTextInputFormatter(maxLength),
+              ],
+              style: const TextStyle(color: Colors.black87, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: hint,
+                hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+                border: InputBorder.none,
+                counterText: '',
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 12),
+              ),
+            ),
+          ),
         ),
       ],
     );
   }
 
   // ── Step 4 (Institutional/Corporate): Signatories ──────────────────────────
+  // Alignment fix: labelled fields with consistent spacing inside each card.
   Widget _buildSignatoriesStep() {
     return SingleChildScrollView(
       child: Column(
@@ -2069,9 +2364,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
           const Text(
             'Signatories *',
             style: TextStyle(
-                color: Color(0xFF6B5D4F),
-                fontSize: 12,
-                fontWeight: FontWeight.w500),
+                color: Color(0xFF2C1810),
+                fontSize: 15,
+                fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 4),
           Text(
@@ -2085,10 +2380,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Container(
-                padding: const EdgeInsets.all(12),
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: const Color(0xFFE8D7B8)),
                   boxShadow: [
                     BoxShadow(
@@ -2102,6 +2398,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Text('Signatory ${index + 1}',
                             style: const TextStyle(
@@ -2110,38 +2407,128 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 fontSize: 13)),
                         if (_signatories.length > 1)
                           GestureDetector(
-                            onTap: () =>
-                                setState(() => _signatories.removeAt(index)),
+                            onTap: () => setState(() {
+                              final removed = _signatories.removeAt(index);
+                              removed['forenames']?.dispose();
+                              removed['surname']?.dispose();
+                              removed['id']?.dispose();
+                              removed['role']?.dispose();
+                              removed['email']?.dispose();
+                              removed['mobile']?.dispose();
+                              _signatoryIdTypes.removeAt(index);
+                              _signatoryNationalities.removeAt(index);
+                              _signatoryMobileCodes.removeAt(index);
+                            }),
                             child: const Icon(Icons.delete_outline,
                                 color: Colors.redAccent, size: 20),
                           ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    _buildTextField('Name', row['name']!),
-                    const SizedBox(height: 8),
-                    _buildTextField('Surname', row['surname']!),
-                    const SizedBox(height: 8),
-                    _buildTextField('Identification number', row['id']!),
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Expanded(
+                          child: _buildLabelWithField(
+                              'Forenames *',
+                              _buildTextField(
+                                  'Enter forenames', row['forenames']!))),
+                      const SizedBox(width: 10),
+                      Expanded(
+                          child: _buildLabelWithField(
+                              'Surname *',
+                              _buildTextField(
+                                  'Enter surname', row['surname']!))),
+                    ]),
+                    const SizedBox(height: 12),
+                    Row(children: [
+                      Expanded(
+                        child: _buildLabelWithField(
+                          'ID Type *',
+                          _buildDropdownField(
+                            'ID Type',
+                            _signatoryIdTypes[index],
+                            _signatoryIdTypeOptions,
+                                (val) => setState(
+                                    () => _signatoryIdTypes[index] = val!),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _buildLabelWithField(
+                          'Identification No *',
+                          _signatoryIdTypes[index] == 'National ID'
+                              ? _buildNationalIdField(controller: row['id']!)
+                              : _buildTextField(
+                              'Enter identification number', row['id']!),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 12),
+                    _buildLabelWithField(
+                      'Nationality *',
+                      _buildDropdownField(
+                        'Nationality',
+                        _signatoryNationalities[index],
+                        _signatoryNationalityOptions,
+                            (val) => setState(
+                                () => _signatoryNationalities[index] = val!),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildLabelWithField('Role *',
+                        _buildTextField('e.g. Director, Trustee', row['role']!)),
+                    const SizedBox(height: 12),
+                    _buildLabelWithField(
+                        'Email *',
+                        _buildTextField('Enter email address', row['email']!,
+                            keyboardType: TextInputType.emailAddress)),
+                    const SizedBox(height: 12),
+                    _buildLabelWithField(
+                      'Mobile *',
+                      _buildPhoneFieldWithCountryCode(
+                        row['mobile']!,
+                        code: _signatoryMobileCodes[index],
+                        onCodeChanged: (val) => setState(
+                                () => _signatoryMobileCodes[index] = val),
+                        hint: _signatoryMobileCodes[index] == '+267'
+                            ? '8 digits, e.g. 71234567'
+                            : 'Enter mobile number',
+                        digitsOnly: true,
+                        maxLength:
+                        _signatoryMobileCodes[index] == '+267' ? 8 : 15,
+                      ),
+                    ),
                   ],
                 ),
               ),
             );
           }),
           const SizedBox(height: 4),
-          OutlinedButton.icon(
-            onPressed: () => setState(() => _signatories.add({
-              'name': TextEditingController(),
-              'surname': TextEditingController(),
-              'id': TextEditingController(),
-            })),
-            icon: const Icon(Icons.add, color: Color(0xFFD4A855), size: 18),
-            label: const Text('Add signatory',
-                style: TextStyle(color: Color(0xFFD4A855))),
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: Color(0xFFD4A855)),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => setState(() {
+                _signatories.add({
+                  'forenames': TextEditingController(),
+                  'surname': TextEditingController(),
+                  'id': TextEditingController(),
+                  'role': TextEditingController(),
+                  'email': TextEditingController(),
+                  'mobile': TextEditingController(),
+                });
+                _signatoryIdTypes.add('National ID');
+                _signatoryNationalities.add('Motswana');
+                _signatoryMobileCodes.add('+267');
+              }),
+              icon: const Icon(Icons.add, color: Color(0xFFD4A855), size: 18),
+              label: const Text('Add signatory',
+                  style: TextStyle(color: Color(0xFFD4A855))),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                side: const BorderSide(color: Color(0xFFD4A855)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
             ),
           ),
         ],
@@ -2150,7 +2537,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   // ── Step 5: Documents & Final ──────────────────────────────────────────────
-  // #10 - Employee declaration added before terms checkbox
   Widget _buildStep5() {
     return SingleChildScrollView(
       child: Column(
@@ -2165,21 +2551,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ),
           const SizedBox(height: 8),
           if (_selectedAccountType == 'I') ...[
-            if (_isNewClient) ...[
-              _buildDocumentUploadField(
-                  '1. Certified Copy of National Identity Card',
-                  _idDocument,
-                  'ID'),
-              const SizedBox(height: 15),
-              _buildDocumentUploadField('2. Proof of Address',
-                  _proofOfAddressDocument, 'ProofOfAddress'),
-              const SizedBox(height: 15),
-              _buildDocumentUploadField(
-                  '3. Proof of Source of Income / Employment',
-                  _proofOfEmploymentDocument,
-                  'ProofOfEmployment'),
-              const SizedBox(height: 25),
-            ],
+            // Attachments always shown for Individual accounts.
+            _buildDocumentUploadField(
+                '1. Certified Copy of National Identity Card',
+                _idDocument,
+                'ID'),
+            const SizedBox(height: 15),
+            _buildDocumentUploadField('2. Proof of Address',
+                _proofOfAddressDocument, 'ProofOfAddress'),
+            const SizedBox(height: 15),
+            _buildDocumentUploadField(
+                '3. Proof of Source of Income / Employment',
+                _proofOfEmploymentDocument,
+                'ProofOfEmployment'),
+            const SizedBox(height: 25),
           ] else if (_selectedAccountType == 'M') ...[
             _buildDocumentUploadField(
                 '1. National ID / Passport', _idDocument, 'ID'),
@@ -2203,7 +2588,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
             const SizedBox(height: 25),
           ],
 
-          // #10 - Employee declaration (Individual accounts only)
+          // #10 - Employee / market exposure declaration (Individual only)
           if (_selectedAccountType == 'I') ...[
             Container(
               padding: const EdgeInsets.all(12),
@@ -2222,7 +2607,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Employee Declaration *',
+                    'Employee / Market Exposure Declaration *',
                     style: TextStyle(
                         color: Color(0xFF6B5D4F),
                         fontSize: 12,
@@ -2230,7 +2615,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Are you a BSE employee, or a relative of a BSE employee?',
+                    'Are you a BSE employee, a relative of a BSE employee, or otherwise exposed to the markets?',
                     style: TextStyle(color: Colors.grey[600], fontSize: 11),
                   ),
                   const SizedBox(height: 8),
@@ -2265,7 +2650,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   if (_isBseEmployeeOrRelative) ...[
                     const SizedBox(height: 4),
                     _buildTextField(
-                        'Employee name & relationship (e.g. self, spouse of John Doe)',
+                        'Details, e.g. self, spouse of John Doe, market exposure',
                         _employeeDeclarationDetailsController),
                   ],
                 ],
@@ -2586,9 +2971,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: value,
+          value: items.contains(value) ? value : items.first,
           isExpanded: true,
           dropdownColor: Colors.white,
+          menuMaxHeight: 400,
           style: const TextStyle(color: Colors.black87, fontSize: 14),
           icon: Icon(Icons.arrow_drop_down, color: Colors.grey[600], size: 20),
           items: items
