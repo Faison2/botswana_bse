@@ -23,6 +23,10 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
   String? _errorMessage;
   String? _token;
 
+  // ✅ AssetClass tab state
+  List<String> _assetClasses = [];
+  String? _selectedAssetClass;
+
   final String _apiUrl = '$baseUrl/Home/getMarketData';
 
   @override
@@ -102,31 +106,48 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
           // ✅ Also handle if MdataItem itself is a Map instead of a List
           final List<dynamic> itemList = items is List ? items : [items];
 
+          final List<Map<String, dynamic>> parsedData = itemList.map((item) {
+            final Map<String, dynamic> raw = Map<String, dynamic>.from(item as Map);
+
+            final closePrice = double.tryParse(raw['VwapPrice']?.toString() ?? '0') ?? 0;
+            final openPrice = double.tryParse(raw['OpeningPrice']?.toString() ?? '0') ?? 0;
+            final maxPrice = double.tryParse(raw['MaxPrice']?.toString() ?? '0') ?? 0;
+            final minPrice = double.tryParse(raw['MinPrice']?.toString() ?? '0') ?? 0;
+
+            return {
+              ...raw,
+              'priceHistory': _generateRealisticPriceHistory(closePrice, openPrice),
+              'candlestickData': _generateCandlestickData(closePrice, openPrice, maxPrice, minPrice),
+              'currentPrice': closePrice,
+              'iconData': _getIconForCompany(raw['Symbol'] ?? ''),
+              'iconBg': _getColorForCompany(raw['Symbol'] ?? ''),
+              'volume': _generateVolumeData(),
+              'marketCap': _calculateMarketCap(closePrice),
+              'peRatio': _generatePERatio(),
+              'dayHigh': maxPrice,
+              'dayLow': minPrice,
+              'weekHigh52': maxPrice * 1.15,
+              'weekLow52': minPrice * 0.85,
+            };
+          }).toList();
+
+          // ✅ Derive AssetClass tabs from the data, preserving first-seen order
+          final Set<String> classSet = <String>{};
+          for (final item in parsedData) {
+            final ac = (item['AssetClass'] ?? '').toString().trim();
+            if (ac.isNotEmpty) classSet.add(ac);
+          }
+          final List<String> classes = classSet.toList();
+
           setState(() {
-            _marketData = itemList.map((item) {
-              final Map<String, dynamic> raw = Map<String, dynamic>.from(item as Map);
+            _marketData = parsedData;
+            _assetClasses = classes;
 
-              final closePrice = double.tryParse(raw['VwapPrice']?.toString() ?? '0') ?? 0;
-              final openPrice = double.tryParse(raw['OpeningPrice']?.toString() ?? '0') ?? 0;
-              final maxPrice = double.tryParse(raw['MaxPrice']?.toString() ?? '0') ?? 0;
-              final minPrice = double.tryParse(raw['MinPrice']?.toString() ?? '0') ?? 0;
+            // Keep current selection if still valid, otherwise default to first tab
+            if (_selectedAssetClass == null || !classes.contains(_selectedAssetClass)) {
+              _selectedAssetClass = classes.isNotEmpty ? classes.first : null;
+            }
 
-              return {
-                ...raw,
-                'priceHistory': _generateRealisticPriceHistory(closePrice, openPrice),
-                'candlestickData': _generateCandlestickData(closePrice, openPrice, maxPrice, minPrice),
-                'currentPrice': closePrice,
-                'iconData': _getIconForCompany(raw['Symbol'] ?? ''),
-                'iconBg': _getColorForCompany(raw['Symbol'] ?? ''),
-                'volume': _generateVolumeData(),
-                'marketCap': _calculateMarketCap(closePrice),
-                'peRatio': _generatePERatio(),
-                'dayHigh': maxPrice,
-                'dayLow': minPrice,
-                'weekHigh52': maxPrice * 1.15,
-                'weekLow52': minPrice * 0.85,
-              };
-            }).toList();
             _isLoading = false;
             _errorMessage = null;
           });
@@ -153,6 +174,14 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  // ✅ Stocks filtered by the currently selected AssetClass tab
+  List<Map<String, dynamic>> get _filteredMarketData {
+    if (_selectedAssetClass == null) return _marketData;
+    return _marketData
+        .where((item) => (item['AssetClass']?.toString() ?? '') == _selectedAssetClass)
+        .toList();
   }
 
   // Generate more realistic price history with trends
@@ -361,6 +390,11 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                   ],
                 ),
               ),
+
+              // ✅ Dynamic AssetClass pill tabs (scrollable)
+              if (!_isLoading && _errorMessage == null && _assetClasses.length > 1)
+                _buildAssetClassTabs(isDark, textColor, accentColor),
+
               const SizedBox(height: 8),
 
               // Content
@@ -407,10 +441,12 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                     ],
                   ),
                 )
-                    : _marketData.isEmpty
+                    : _filteredMarketData.isEmpty
                     ? Center(
                   child: Text(
-                    'No market data available',
+                    _selectedAssetClass != null
+                        ? 'No $_selectedAssetClass stocks available'
+                        : 'No market data available',
                     style: TextStyle(
                       color: textColor,
                       fontSize: 16,
@@ -419,9 +455,9 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
                 )
                     : ListView.builder(
                   padding: const EdgeInsets.only(bottom: 100),
-                  itemCount: _marketData.length,
+                  itemCount: _filteredMarketData.length,
                   itemBuilder: (context, index) {
-                    final stock = _marketData[index];
+                    final stock = _filteredMarketData[index];
                     return _buildStockCard(stock, isDark);
                   },
                 ),
@@ -429,6 +465,69 @@ class _MarketWatchScreenState extends State<MarketWatchScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // ✅ Scrollable pill-style AssetClass tab bar
+  Widget _buildAssetClassTabs(bool isDark, Color textColor, Color accentColor) {
+    return SizedBox(
+      height: 40,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: _assetClasses.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final label = _assetClasses[index];
+          final isSelected = label == _selectedAssetClass;
+
+          return GestureDetector(
+            onTap: () {
+              if (!isSelected) {
+                setState(() {
+                  _selectedAssetClass = label;
+                });
+              }
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? accentColor
+                    : (isDark ? const Color(0xFF2A2A2A) : Colors.white),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isSelected
+                      ? accentColor
+                      : (isDark ? Colors.white24 : Colors.black12),
+                  width: 1,
+                ),
+                boxShadow: isSelected
+                    ? [
+                  BoxShadow(
+                    color: accentColor.withOpacity(0.3),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+                    : [],
+              ),
+              child: Center(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : textColor,
+                    fontSize: 13,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
