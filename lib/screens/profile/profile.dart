@@ -1,9 +1,11 @@
+import 'package:bse/screens/profile/update_kyc.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../theme_provider.dart';
 import 'package:provider/provider.dart';
+
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -33,6 +35,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // Brokers now come from the profile response
   List<Map<String, dynamic>> _brokersList = [];
+
+  // ← NEW: raw profile response, passed to KycUpdateScreen for prefill
+  Map<String, dynamic> _rawProfileData = {};
 
   @override
   void initState() {
@@ -99,6 +104,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 responseData['employmentStatus'] ?? '';
 
             _brokersList = brokers;
+
+            // ← NEW: keep the raw map so KycUpdateScreen can prefill from it
+            _rawProfileData = Map<String, dynamic>.from(responseData);
+
             _isLoading = false;
           });
         } else {
@@ -171,6 +180,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
         duration: const Duration(seconds: 3),
       ),
     );
+  }
+
+  // ← NEW: opens the multi-step KYC update screen, prefilled from the
+  // profile data we already fetched, and refreshes the profile on return.
+  Future<void> _openKycUpdate() async {
+    final updated = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => KycUpdateScreen(
+          initialProfileData: _rawProfileData,
+          // lockedAccountType: 'Individual', // uncomment to lock account type
+        ),
+      ),
+    );
+
+    if (updated == true) {
+      _loadProfileData();
+    }
   }
 
   void _showBrokerLinkDialog(bool isDark) {
@@ -519,38 +546,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         decoration: BoxDecoration(gradient: bgGradient),
         child: Column(
           children: [
-            AppBar(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              centerTitle: true,
-              title: Text(
-                "My Profile",
-                style: TextStyle(
-                  color: isDark ? Colors.white : Colors.black87,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              leading: GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Icon(
-                  Icons.arrow_back,
-                  color: isDark ? Colors.white : Colors.black87,
-                ),
-              ),
-              actions: [
-                GestureDetector(
-                  onTap: _loadProfileData,
-                  child: const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Icon(Icons.refresh, color: Colors.amber),
-                  ),
-                ),
-              ],
-              flexibleSpace: Container(
-                decoration: BoxDecoration(gradient: bgGradient),
-              ),
-            ),
             Expanded(
               child: _isLoading
                   ? const Center(
@@ -723,6 +718,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ]),
 
           const SizedBox(height: 30),
+
+          // ← NEW: Update KYC button
+          _buildActionButton(
+            "Update KYC",
+            Icons.assignment_ind_outlined,
+            const Color(0xFFD4A855),
+            _openKycUpdate,
+            isDark,
+          ),
+
+          const SizedBox(height: 12),
 
           _buildActionButton(
             "Link Broker",
