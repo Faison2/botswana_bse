@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:bse/contants/constants.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -53,6 +54,17 @@ class _TradingPageState extends State<TradingPage> {
 
   static const String apiUrl        = '$baseUrl/Home/OrderPosting';
   static const String marketDataUrl = '$baseUrl/Home/getMarketData';
+  static const String chargesUrl =
+      'https://zamagm.escrowagm.com/MainAPI/Home/OrderCharges';
+
+  // ── Live charges (from OrderCharges API) ──
+  bool _isFetchingCharges = false;
+  double? _apiConsideration;
+  double? _apiTotalCharges;
+  double? _apiNetValue;
+  List<Map<String, dynamic>> _chargeBreakdown = [];
+  String? _chargesError;
+  Timer? _chargesDebounce;
 
   @override
   void initState() {
@@ -61,8 +73,18 @@ class _TradingPageState extends State<TradingPage> {
     _initializeWithPrefilledData();
     _fetchStocksIfNeeded();
 
-    quantityController.addListener(updateCalculations);
-    priceController.addListener(updateCalculations);
+    quantityController.addListener(() {
+      updateCalculations();
+      _scheduleChargesFetch();
+    });
+    priceController.addListener(() {
+      updateCalculations();
+      _scheduleChargesFetch();
+    });
+
+    // Cover the case where prefilled data already set quantity/price/company
+    // before these listeners were attached.
+    _scheduleChargesFetch();
   }
 
   void _initializeWithPrefilledData() {
@@ -285,6 +307,8 @@ class _TradingPageState extends State<TradingPage> {
 
           updateCalculations();
         });
+
+        _scheduleChargesFetch();
       } else {
         if (widget.prefilledStockData != null) {
           setState(() {
@@ -394,6 +418,7 @@ class _TradingPageState extends State<TradingPage> {
 
   @override
   void dispose() {
+    _chargesDebounce?.cancel();
     quantityController.dispose();
     priceController.dispose();
     chargesController.dispose();
@@ -410,6 +435,28 @@ class _TradingPageState extends State<TradingPage> {
 
   void updateCalculations() => setState(() {});
 
+  /// Resolves the company code the backend expects (e.g. 'FNBB-EQO'),
+  /// using the same fallback chain used when placing an order.
+  String? _resolveCompanyCode() {
+    if (selectedCompany == null || selectedCompany!.isEmpty) return null;
+
+    final parts = selectedCompany!.split('-');
+    final index = int.tryParse(parts.last);
+
+    String companyCode = '';
+    if (index != null && index < _allStocks.length) {
+      final stock  = _allStocks[index];
+      final code   = stock['code']?.toString()   ?? '';
+      final ticker = stock['ticker']?.toString() ?? '';
+      final name   = stock['name']?.toString()   ?? '';
+      companyCode  = code.isNotEmpty ? code : (ticker.isNotEmpty ? ticker : name);
+    }
+
+    if (companyCode.isEmpty && parts.length >= 2) companyCode = parts[1];
+
+    return companyCode.isEmpty ? null : companyCode;
+  }
+
   void _onCompanyChanged(String? uniqueId) {
     if (uniqueId == null) return;
     setState(() {
@@ -422,6 +469,88 @@ class _TradingPageState extends State<TradingPage> {
         updateCalculations();
       }
     });
+    _scheduleChargesFetch();
+  }
+
+  // ─── Live charges (OrderCharges API) ──────────────────────────────────────
+
+  void _scheduleChargesFetch() {
+    _chargesDebounce?.cancel();
+    _chargesDebounce = Timer(const Duration(milliseconds: 500), _fetchCharges);
+  }
+
+  Future<void> _fetchCharges() async {
+    if (_token == null) return;
+
+    final companyCode = _resolveCompanyCode();
+    final quantity = double.tryParse(quantityController.text) ?? 0;
+    final price = double.tryParse(priceController.text) ?? 0;
+
+    if (companyCode == null || quantity <= 0 || price <= 0) {
+      if (mounted) {
+        setState(() {
+          _apiConsideration = null;
+          _apiTotalCharges = null;
+          _apiNetValue = null;
+          _chargeBreakdown = [];
+          _chargesError = null;
+        });
+      }
+      return;
+    }
+
+    setState(() => _isFetchingCharges = true);
+
+    try {
+      final response = await http.post(
+        Uri.parse(chargesUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: json.encode({
+          "Company": companyCode,
+          "OrderType": isBuy ? "BUY" : "SELL",
+          "Quantity": quantity,
+          "Price": price,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        if (data['responseCode'] == 0) {
+          if (mounted) {
+            setState(() {
+              _apiConsideration = (data['consideration'] as num?)?.toDouble();
+              _apiTotalCharges = (data['totalCharges'] as num?)?.toDouble();
+              _apiNetValue = (data['netValue'] as num?)?.toDouble();
+              _chargeBreakdown = List<Map<String, dynamic>>.from(
+                  (data['chargeBreakdown'] as List<dynamic>? ?? [])
+                      .map((e) => Map<String, dynamic>.from(e)));
+              _chargesError = null;
+            });
+          }
+        } else {
+          if (mounted) {
+            setState(() {
+              _chargesError =
+                  data['responseMessage']?.toString() ?? 'Unable to calculate charges';
+            });
+          }
+        }
+      } else {
+        if (mounted) {
+          setState(() => _chargesError = 'Unable to calculate charges');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _chargesError = 'Unable to calculate charges');
+      }
+    } finally {
+      if (mounted) setState(() => _isFetchingCharges = false);
+    }
   }
 
   // ─── Place Order ──────────────────────────────────────────────────────────
@@ -447,20 +576,7 @@ class _TradingPageState extends State<TradingPage> {
     setState(() => isLoading = true);
 
     try {
-      final parts = selectedCompany!.split('-');
-      final index = int.tryParse(parts.last);
-
-      String companyCode = '';
-
-      if (index != null && index < _allStocks.length) {
-        final stock  = _allStocks[index];
-        final code   = stock['code']?.toString()   ?? '';
-        final ticker = stock['ticker']?.toString() ?? '';
-        final name   = stock['name']?.toString()   ?? '';
-        companyCode  = code.isNotEmpty ? code : (ticker.isNotEmpty ? ticker : name);
-      }
-
-      if (companyCode.isEmpty && parts.length >= 2) companyCode = parts[1];
+      final companyCode = _resolveCompanyCode() ?? '';
 
       if (companyCode.isEmpty) {
         _showError('Could not determine company code. Please re-select the company.');
@@ -471,6 +587,9 @@ class _TradingPageState extends State<TradingPage> {
       final now            = DateTime.now().toUtc();
       final settlementDate = now.add(const Duration(days: 2));
       final maturityDate   = now.add(const Duration(days: 365));
+
+      final effectiveCharges  = _apiTotalCharges ?? charges;
+      final effectiveNetTotal = _apiNetValue ?? netTotal;
 
       final orderData = {
         "OrderType":        isBuy ? "BUY" : "SELL",
@@ -486,8 +605,8 @@ class _TradingPageState extends State<TradingPage> {
         "ClientName":       _userName   ?? 'N/A',
         "BrokerRef":        "BRREF${now.millisecondsSinceEpoch}",
         "SettlementDate":   settlementDate.toIso8601String(),
-        "SettlementAmount": netTotal,
-        "Charges":          charges,
+        "SettlementAmount": effectiveNetTotal,
+        "Charges":          effectiveCharges,
         "Brokerage":        0.0,
         "MaturityDate":     maturityDate.toIso8601String().split('T')[0],
         "Currency":         "BWP",
@@ -717,6 +836,17 @@ class _TradingPageState extends State<TradingPage> {
     final dropdownBgColor  = isDark ? const Color(0xFF2A2A2A) : Colors.white;
     final fieldBgColor     = isDark ? Colors.transparent      : Colors.grey.shade50;
 
+    // Charges shown in the summary card, preferring live API values,
+    // falling back to a local estimate while the API hasn't responded yet.
+    final displayConsideration = _apiConsideration ?? grossTotal;
+    final displayTotalCharges  = _apiTotalCharges ?? charges;
+    final displayNetTotal      = _apiNetValue ?? netTotal;
+    final canPlaceOrder = !isLoading &&
+        !isFetchingStocks &&
+        !_isFetchingCharges &&
+        _allStocks.isNotEmpty &&
+        _agreedToDeclaration;
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(gradient: bgGradient),
@@ -745,7 +875,10 @@ class _TradingPageState extends State<TradingPage> {
                             children: [
                               Expanded(
                                 child: GestureDetector(
-                                  onTap: () => setState(() => isBuy = true),
+                                  onTap: () {
+                                    setState(() => isBuy = true);
+                                    _scheduleChargesFetch();
+                                  },
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(vertical: 12),
                                     decoration: isBuy
@@ -773,7 +906,10 @@ class _TradingPageState extends State<TradingPage> {
                               ),
                               Expanded(
                                 child: GestureDetector(
-                                  onTap: () => setState(() => isBuy = false),
+                                  onTap: () {
+                                    setState(() => isBuy = false);
+                                    _scheduleChargesFetch();
+                                  },
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(vertical: 12),
                                     decoration: !isBuy
@@ -902,7 +1038,7 @@ class _TradingPageState extends State<TradingPage> {
                         ),
                         const SizedBox(height: 16),
 
-                        // ── Summary Card ───────────────────────────────────
+                        // ── Summary Card (live charges via OrderCharges API) ─
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
@@ -918,19 +1054,59 @@ class _TradingPageState extends State<TradingPage> {
                           child: Column(
                             children: [
                               _summaryRow('GROSS TOTAL:',
-                                  'BWP ${grossTotal.toStringAsFixed(2)}',
+                                  'BWP ${displayConsideration.toStringAsFixed(2)}',
                                   subtextColor),
                               const SizedBox(height: 8),
-                              _summaryRow('CUSTODIAL FEE (1%):',
-                                  'BWP ${custodialFee.toStringAsFixed(2)}',
-                                  subtextColor),
-                              const SizedBox(height: 8),
-                              _summaryRow('CHARGES:',
-                                  'BWP ${charges.toStringAsFixed(2)}',
-                                  subtextColor),
-                              const SizedBox(height: 12),
+
+                              if (_chargeBreakdown.isNotEmpty) ...[
+                                for (final c in _chargeBreakdown) ...[
+                                  _summaryRow(
+                                    (c['ChargeName'] ?? 'Charge').toString(),
+                                    'BWP ${((c['ChargeValue'] as num?) ?? 0).toDouble().toStringAsFixed(2)}',
+                                    subtextColor,
+                                  ),
+                                  const SizedBox(height: 8),
+                                ],
+                              ] else if (_isFetchingCharges) ...[
+                                Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 14, height: 14,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2, color: accentColor),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text('Calculating charges…',
+                                        style: TextStyle(color: subtextColor, fontSize: 12)),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                              ] else ...[
+                                _summaryRow('CHARGES:',
+                                    'BWP ${displayTotalCharges.toStringAsFixed(2)}',
+                                    subtextColor),
+                                const SizedBox(height: 8),
+                              ],
+
+                              const SizedBox(height: 4),
                               Divider(color: subtextColor),
                               const SizedBox(height: 12),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('TOTAL CHARGES:',
+                                      style: TextStyle(
+                                          color: textColor,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600)),
+                                  Text('BWP ${displayTotalCharges.toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                          color: textColor,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
@@ -939,13 +1115,18 @@ class _TradingPageState extends State<TradingPage> {
                                           color: textColor,
                                           fontSize: 16,
                                           fontWeight: FontWeight.bold)),
-                                  Text('BWP ${netTotal.toStringAsFixed(2)}',
+                                  Text('BWP ${displayNetTotal.toStringAsFixed(2)}',
                                       style: TextStyle(
                                           color: accentColor,
                                           fontSize: 16,
                                           fontWeight: FontWeight.bold)),
                                 ],
                               ),
+                              if (_chargesError != null) ...[
+                                const SizedBox(height: 8),
+                                Text(_chargesError!,
+                                    style: const TextStyle(color: Colors.red, fontSize: 12)),
+                              ],
                             ],
                           ),
                         ),
@@ -992,12 +1173,7 @@ class _TradingPageState extends State<TradingPage> {
                                   shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12)),
                                 ),
-                                onPressed: (isLoading ||
-                                    isFetchingStocks ||
-                                    _allStocks.isEmpty ||
-                                    !_agreedToDeclaration)
-                                    ? null
-                                    : placeOrder,
+                                onPressed: canPlaceOrder ? placeOrder : null,
                                 child: isLoading
                                     ? const SizedBox(
                                     height: 20, width: 20,
@@ -1163,7 +1339,12 @@ class _TradingPageState extends State<TradingPage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: TextStyle(color: color, fontSize: 14)),
+        Expanded(
+          child: Text(label,
+              style: TextStyle(color: color, fontSize: 14),
+              overflow: TextOverflow.ellipsis),
+        ),
+        const SizedBox(width: 8),
         Text(value, style: TextStyle(color: color, fontSize: 14)),
       ],
     );
