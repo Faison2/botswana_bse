@@ -33,6 +33,9 @@ class _TradingPageState extends State<TradingPage> {
   String? _brokerCode;
   String? _brokerName;
 
+  // ── Trading eligibility declaration ──
+  bool _agreedToDeclaration = false;
+
   // ── Multi-broker ──
   List<Map<String, String>> _activeBrokers    = [];
   int                       _selectedBrokerIndex = 0;
@@ -436,6 +439,10 @@ class _TradingPageState extends State<TradingPage> {
       _showError('Broker code not available. Please log in again.');
       return;
     }
+    if (!_agreedToDeclaration) {
+      _showError('Please confirm the Trading Eligibility Declaration');
+      return;
+    }
 
     setState(() => isLoading = true);
 
@@ -539,6 +546,148 @@ class _TradingPageState extends State<TradingPage> {
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
+  // ─── Trading eligibility declaration dialog ────────────────────────────
+
+  List<String> _declarationPoints() => const [
+    'I am entitled to trade in the security concerned',
+    'I have complied with all applicable laws, regulations, insider trading '
+        'restrictions, closed periods, and organisational policies relevant '
+        'to this transaction',
+    'Where required, I have obtained all necessary internal approvals and '
+        'clearances prior to placing this order',
+    'The information provided is true and complete to the best of my knowledge.',
+  ];
+
+  void _showDeclarationDialog({
+    required Color accentColor,
+    required Color cardColor,
+    required Color textColor,
+    required Color subtextColor,
+  }) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: cardColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Trading Eligibility Declaration',
+                  style: TextStyle(
+                      color: textColor, fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'By submitting this order, I declare that:',
+                  style: TextStyle(color: subtextColor, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                ..._declarationPoints().asMap().entries.map((entry) {
+                  final i = entry.key + 1;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('$i.',
+                            style: TextStyle(color: textColor, fontSize: 13)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(entry.value,
+                              style: TextStyle(color: textColor, fontSize: 13)),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accentColor,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Close', style: TextStyle(color: Colors.white)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDeclarationCheckbox({
+    required Color accentColor,
+    required Color cardColor,
+    required Color textColor,
+    required Color subtextColor,
+    required Color fieldBorderColor,
+  }) {
+    return GestureDetector(
+      onTap: () => _showDeclarationDialog(
+        accentColor: accentColor,
+        cardColor: cardColor,
+        textColor: textColor,
+        subtextColor: subtextColor,
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _agreedToDeclaration
+                ? accentColor.withOpacity(0.6)
+                : fieldBorderColor,
+          ),
+        ),
+        child: Row(
+          children: [
+            Checkbox(
+              value: _agreedToDeclaration,
+              activeColor: accentColor,
+              onChanged: (value) {
+                setState(() => _agreedToDeclaration = value ?? false);
+              },
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: RichText(
+                  text: TextSpan(
+                    style: TextStyle(color: textColor, fontSize: 12.5),
+                    children: [
+                      const TextSpan(text: 'I confirm and accept this '),
+                      TextSpan(
+                        text: 'Trading Eligibility Declaration',
+                        style: TextStyle(
+                            color: accentColor,
+                            fontWeight: FontWeight.w700,
+                            decoration: TextDecoration.underline,
+                            decorationColor: accentColor),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -800,6 +949,16 @@ class _TradingPageState extends State<TradingPage> {
                             ],
                           ),
                         ),
+                        const SizedBox(height: 16),
+
+                        // ── Trading eligibility declaration checkbox ───────
+                        _buildDeclarationCheckbox(
+                          accentColor: accentColor,
+                          cardColor: cardColor,
+                          textColor: textColor,
+                          subtextColor: subtextColor,
+                          fieldBorderColor: fieldBorderColor,
+                        ),
                         const SizedBox(height: 32),
 
                         // ── Action Buttons ─────────────────────────────────
@@ -835,7 +994,8 @@ class _TradingPageState extends State<TradingPage> {
                                 ),
                                 onPressed: (isLoading ||
                                     isFetchingStocks ||
-                                    _allStocks.isEmpty)
+                                    _allStocks.isEmpty ||
+                                    !_agreedToDeclaration)
                                     ? null
                                     : placeOrder,
                                 child: isLoading
