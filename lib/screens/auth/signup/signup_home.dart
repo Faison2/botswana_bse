@@ -34,12 +34,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _companyNameController = TextEditingController();
   final _bRegNoController = TextEditingController();
   final _placeOfIncorporationController = TextEditingController();
-  final _dateOfIncorporationController = TextEditingController();
+  final _dateOfIncorporationController = TextEditingController(); // -> BRegDate
 
   // Step 2 – Address (shared)
-  final _addressController = TextEditingController();
-  final _physicalAddressController = TextEditingController();
-  final _postalCodeController = TextEditingController();
+  // Address1 (physical/street) -> _physicalAddressController
+  // City                        -> _cityController
+  // PostCode                    -> _postalCodeController
+  // PostalAddress (P.O. Box)    -> _addressController
+  final _addressController = TextEditingController(); // Postal address (P.O. Box) -> API "PostalAddress"
+  final _physicalAddressController = TextEditingController(); // Physical/street address -> API "Address1"
+  final _cityController = TextEditingController(); // -> API "City"
+  final _postalCodeController = TextEditingController(); // -> API "PostCode"
   final _tinController = TextEditingController();
 
   // Contact & Work (Individual / Minor)
@@ -48,8 +53,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _faxController = TextEditingController();
   final _emailController = TextEditingController();
   final _occupationController = TextEditingController();
+  final _employerNameController = TextEditingController(); // -> API "EmployerName"
   final _natureOfBusinessController = TextEditingController();
   final _otherEmploymentController = TextEditingController(); // #6 - "specify" when Employment Status = Other
+  final _sourceOfIncomeOtherController = TextEditingController(); // -> API "SourceOfIncomeOther"
 
   // Banking (shared)
   final _ibanController = TextEditingController();
@@ -196,9 +203,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
   File? _certificateOfIncorporationDocument;
   File? _boardResolutionDocument;
   File? _taxCertificateDocument;
+  File? _signatoryIdDocument; // "Certified ID/Passport of Signatories"
+  File? _companyFinancialsDocument; // "Company Financials/Bank Statement"
 
   // Documents – Minor: reuses _idDocument ("National ID/Passport") and
-  // _proofOfAddressDocument ("Proof of Residence") declared above.
+  // _proofOfAddressDocument ("Proof of Residence") declared above, plus:
+  File? _guardianshipProofDocument; // "Proof of Guardianship"
+  File? _guardianIdDocument; // "Guardian's ID"
+  File? _guardianProofOfResidenceDocument; // "Guardian's Proof of Residence"
+  File? _guardianProofOfFundsDocument; // "Guardian's Proof of Funds"
 
   // Hardcoded
   final String _branchCode = "HRE001";
@@ -211,6 +224,34 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return ['Type', 'Institution', 'Address', 'Banking', 'Signatories', 'Final'];
     }
     return ['Type', 'Minor Info', 'Address', 'Guardian', 'Banking', 'Final'];
+  }
+
+  // Maps internal short codes to the exact strings the API expects.
+  String get _accountTypeApiValue {
+    switch (_selectedAccountType) {
+      case 'C':
+        return 'Corporate';
+      case 'M':
+        return 'Minor';
+      case 'I':
+      default:
+        return 'Individual';
+    }
+  }
+
+  // Normalizes ID type labels to match the API's expected casing/wording.
+  String _normalizeIdType(String type) {
+    if (type == 'National Id') return 'National ID';
+    return type;
+  }
+
+  // Combines a country code (e.g. "+267") with a local number into the
+  // digits-only format the API expects, e.g. "267" + "71234567" ->
+  // "26771234567".
+  String _normalizedPhone(String code, String number) {
+    final cleanCode = code.replaceAll('+', '').trim();
+    final cleanNumber = number.trim();
+    return '$cleanCode$cleanNumber';
   }
 
   @override
@@ -255,6 +296,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _dateOfIncorporationController.dispose();
     _addressController.dispose();
     _physicalAddressController.dispose();
+    _cityController.dispose();
     _postalCodeController.dispose();
     _tinController.dispose();
     _phoneController.dispose();
@@ -262,8 +304,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _faxController.dispose();
     _emailController.dispose();
     _occupationController.dispose();
+    _employerNameController.dispose();
     _natureOfBusinessController.dispose();
     _otherEmploymentController.dispose();
+    _sourceOfIncomeOtherController.dispose();
     _ibanController.dispose();
     _accountNameController.dispose();
     _employeeDeclarationDetailsController.dispose();
@@ -411,6 +455,24 @@ class _SignUpScreenState extends State<SignUpScreen> {
             case 'TaxCertificate':
               _taxCertificateDocument = file;
               break;
+            case 'SignatoryIds':
+              _signatoryIdDocument = file;
+              break;
+            case 'CompanyFinancials':
+              _companyFinancialsDocument = file;
+              break;
+            case 'GuardianshipProof':
+              _guardianshipProofDocument = file;
+              break;
+            case 'GuardianId':
+              _guardianIdDocument = file;
+              break;
+            case 'GuardianProofOfResidence':
+              _guardianProofOfResidenceDocument = file;
+              break;
+            case 'GuardianProofOfFunds':
+              _guardianProofOfFundsDocument = file;
+              break;
           }
         });
         _showSnackBar('$documentType document selected successfully');
@@ -427,6 +489,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg';
     return 'application/octet-stream';
   }
+
+  String _fileNameFor(File file) => file.path.split('/').last;
 
   String _getMNOCode(String mno) {
     switch (mno) {
@@ -538,89 +602,42 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Future<List<Map<String, dynamic>>> _prepareDocuments() async {
     List<Map<String, dynamic>> documents = [];
 
+    Future<void> addDoc(String name, File? file) async {
+      if (file == null) return;
+      final data = await _convertFileToBase64(file);
+      if (data == null) return;
+      documents.add({
+        "Name": name,
+        "ContentType": _contentTypeForFile(file),
+        "FileName": _fileNameFor(file),
+        "Data": data,
+      });
+    }
+
     if (_selectedAccountType == 'C') {
-      final certBase64 =
-      await _convertFileToBase64(_certificateOfIncorporationDocument);
-      if (certBase64 != null) {
-        documents.add({
-          "Name": "Certificate of Incorporation",
-          "ContentType": _contentTypeForFile(_certificateOfIncorporationDocument!),
-          "Data": certBase64
-        });
-      }
-      final resolutionBase64 =
-      await _convertFileToBase64(_boardResolutionDocument);
-      if (resolutionBase64 != null) {
-        documents.add({
-          "Name": "Board Resolution",
-          "ContentType": _contentTypeForFile(_boardResolutionDocument!),
-          "Data": resolutionBase64
-        });
-      }
-      final addressBase64 = await _convertFileToBase64(_proofOfAddressDocument);
-      if (addressBase64 != null) {
-        documents.add({
-          "Name": "Proof of Address",
-          "ContentType": _contentTypeForFile(_proofOfAddressDocument!),
-          "Data": addressBase64
-        });
-      }
-      final taxCertBase64 = await _convertFileToBase64(_taxCertificateDocument);
-      if (taxCertBase64 != null) {
-        documents.add({
-          "Name": "Tax Certificate",
-          "ContentType": _contentTypeForFile(_taxCertificateDocument!),
-          "Data": taxCertBase64
-        });
-      }
+      await addDoc("Certificate of Incorporation", _certificateOfIncorporationDocument);
+      await addDoc("Board Resolution", _boardResolutionDocument);
+      await addDoc("Certified ID/Passport of Signatories", _signatoryIdDocument);
+      await addDoc("Proof of Address", _proofOfAddressDocument);
+      await addDoc("Tax Certificate", _taxCertificateDocument);
+      await addDoc("Company Financials/Bank Statement", _companyFinancialsDocument);
       return documents;
     }
 
     if (_selectedAccountType == 'M') {
-      final idBase64 = await _convertFileToBase64(_idDocument);
-      if (idBase64 != null) {
-        documents.add({
-          "Name": "National ID/Passport",
-          "ContentType": _contentTypeForFile(_idDocument!),
-          "Data": idBase64
-        });
-      }
-      final addressBase64 = await _convertFileToBase64(_proofOfAddressDocument);
-      if (addressBase64 != null) {
-        documents.add({
-          "Name": "Proof of Residence",
-          "ContentType": _contentTypeForFile(_proofOfAddressDocument!),
-          "Data": addressBase64
-        });
-      }
+      await addDoc("National ID/Passport", _idDocument);
+      await addDoc("Proof of Residence", _proofOfAddressDocument);
+      await addDoc("Proof of Guardianship", _guardianshipProofDocument);
+      await addDoc("Guardian's ID", _guardianIdDocument);
+      await addDoc("Guardian's Proof of Residence", _guardianProofOfResidenceDocument);
+      await addDoc("Guardian's Proof of Funds", _guardianProofOfFundsDocument);
       return documents;
     }
 
-    final idBase64 = await _convertFileToBase64(_idDocument);
-    if (idBase64 != null) {
-      documents.add({
-        "Name": "ID",
-        "ContentType": _contentTypeForFile(_idDocument!),
-        "Data": idBase64
-      });
-    }
-    final addressBase64 = await _convertFileToBase64(_proofOfAddressDocument);
-    if (addressBase64 != null) {
-      documents.add({
-        "Name": "Proof of Address",
-        "ContentType": _contentTypeForFile(_proofOfAddressDocument!),
-        "Data": addressBase64
-      });
-    }
-    final employmentBase64 =
-    await _convertFileToBase64(_proofOfEmploymentDocument);
-    if (employmentBase64 != null) {
-      documents.add({
-        "Name": "Proof of Employment",
-        "ContentType": _contentTypeForFile(_proofOfEmploymentDocument!),
-        "Data": employmentBase64
-      });
-    }
+    // Individual
+    await addDoc("ID", _idDocument);
+    await addDoc("Proof of Address", _proofOfAddressDocument);
+    await addDoc("Proof of Employment", _proofOfEmploymentDocument);
     return documents;
   }
 
@@ -815,8 +832,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   bool _validateStep2() {
-    if (_addressController.text.isEmpty) {
-      _showSnackBar('Please enter postal address');
+    if (_physicalAddressController.text.trim().isEmpty) {
+      _showSnackBar('Please enter your physical/street address');
+      return false;
+    }
+    if (_cityController.text.trim().isEmpty) {
+      _showSnackBar('Please enter your city');
+      return false;
+    }
+    if (_addressController.text.trim().isEmpty) {
+      _showSnackBar('Please enter your postal address (P.O. Box)');
       return false;
     }
     // #5 - TIN/Tax code is mandatory when ID Type is Passport (Individual/Minor),
@@ -843,6 +868,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (_selectedEmploymentStatus == 'Other' &&
         _otherEmploymentController.text.trim().isEmpty) {
       _showSnackBar('Please specify your employment status');
+      return false;
+    }
+    // Specify field required when Source of Income is "Other"
+    if (_selectedSourceOfIncome == 'Other' &&
+        _sourceOfIncomeOtherController.text.trim().isEmpty) {
+      _showSnackBar('Please specify your source of income');
       return false;
     }
     return true;
@@ -939,6 +970,22 @@ class _SignUpScreenState extends State<SignUpScreen> {
         _showSnackBar('Please upload Proof of Residence document');
         return false;
       }
+      if (_guardianshipProofDocument == null) {
+        _showSnackBar('Please upload Proof of Guardianship');
+        return false;
+      }
+      if (_guardianIdDocument == null) {
+        _showSnackBar("Please upload the Guardian's ID");
+        return false;
+      }
+      if (_guardianProofOfResidenceDocument == null) {
+        _showSnackBar("Please upload the Guardian's Proof of Residence");
+        return false;
+      }
+      if (_guardianProofOfFundsDocument == null) {
+        _showSnackBar("Please upload the Guardian's Proof of Funds");
+        return false;
+      }
     } else {
       if (_certificateOfIncorporationDocument == null) {
         _showSnackBar('Please upload the Certificate of Incorporation');
@@ -948,12 +995,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
         _showSnackBar('Please upload the Board Resolution');
         return false;
       }
+      if (_signatoryIdDocument == null) {
+        _showSnackBar('Please upload Certified ID/Passport of Signatories');
+        return false;
+      }
       if (_proofOfAddressDocument == null) {
         _showSnackBar('Please upload Proof of Address document');
         return false;
       }
       if (_taxCertificateDocument == null) {
         _showSnackBar('Please upload the Tax Certificate');
+        return false;
+      }
+      if (_companyFinancialsDocument == null) {
+        _showSnackBar('Please upload Company Financials/Bank Statement');
         return false;
       }
     }
@@ -965,74 +1020,72 @@ class _SignUpScreenState extends State<SignUpScreen> {
     final agreementDate =
         '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
 
+    // Tel / MobileMoneyWallet: the API expects full digits-only numbers
+    // (country code + local number, no '+').
+    late final String tel;
+    late final String mobileMoneyWallet;
+    if (_selectedAccountType == 'I') {
+      // The Individual form's phone field doubles as the wallet number, so
+      // both API fields use the same normalized value.
+      final normalized =
+      _normalizedPhone(_selectedMobileCountryCode, _phoneController.text);
+      tel = normalized;
+      mobileMoneyWallet = normalized;
+    } else {
+      tel = _normalizedPhone(
+          _selectedContactCountryCode, _phoneController.text);
+      mobileMoneyWallet = _normalizedPhone(
+          _selectedMobileCountryCode, _walletMobileNumberController.text);
+    }
+
     final common = {
-      "Address1": _addressController.text,
-      "PostalAddress": _postalCodeController.text,
-      "City": _physicalAddressController.text,
-      "Village": "",
-      "Town": "",
-      "ResidesIn": "",
-      "myRegion": "",
-      "myDistrict": "",
-      "Landmark": "",
-      "Tel": _phoneController.text,
-      // Individual: the phone field IS the wallet number, so the wallet code
-      // applies. Minor/Institutional: the contact number has its own code.
-      "TelCountryCode": _selectedAccountType == 'I'
-          ? _selectedMobileCountryCode
-          : _selectedContactCountryCode,
+      "AccountType": _accountTypeApiValue,
+      "Address1": _physicalAddressController.text.trim(),
+      "City": _cityController.text.trim(),
+      "PostCode": _postalCodeController.text.trim(),
+      "PostalAddress": _addressController.text.trim(),
+      "Tel": tel,
       "MNO": _getMNOCode(_selectedMNO),
+      "MobileMoneyWallet": mobileMoneyWallet,
       "Fax": _faxController.text,
-      "Email": _emailController.text,
+      "Email": _emailController.text.trim(),
       "Country": _selectedCountry,
-      "TIN": _tinController.text,
-      "IBAN": _ibanController.text,
-      "AccountName": _accountNameController.text,
-      "BankDiv": _selectedBankCode ?? '',
-      "BankBranch": _selectedBranchCode ?? '',
+      "TIN": _tinController.text.trim(),
+      "AccountName": _accountNameController.text.trim(),
+      "BankDiv": _selectedBankName ?? '',
+      "BankBranch": _selectedBranchName ?? '',
+      "IBAN": _ibanController.text.trim(),
       "SwiftCode": _selectedBankSwiftCode ?? '',
-      "InvestorType": "",
-      "AccountType": _selectedAccountType,
-      "accountClass": "",
       "branchcode": _branchCode,
-      "brokerlink": "0",
       "BrokerCode": _selectedBrokerCode,
       "PreFunding": _preFunding,
-      "PrincipalOfficer": "",
-      "myJointName": "",
-      "Payee2": "",
       "AgreementDate": agreementDate,
       "CreatedBy": "MOBILE",
-      "IsBseEmployeeOrRelative": _isBseEmployeeOrRelative,
-      "EmployeeDeclarationDetails":
-      _isBseEmployeeOrRelative ? _employeeDeclarationDetailsController.text : "",
+      // Kept for internal business logic even though not shown in the
+      // reference payloads; harmless extra fields for the backend.
+      "cdsnumber": _isNewClient ? "" : _cdsNumberController.text,
+      "clientType": _isNewClient ? "new" : "existing",
     };
 
     if (_selectedAccountType == 'C') {
       return {
         ...common,
-        "CompanyName": _companyNameController.text,
-        "BRegNo": _bRegNoController.text,
+        "CompanyName": _companyNameController.text.trim(),
+        "BRegNo": _bRegNoController.text.trim(),
+        "BRegDate": _dateOfIncorporationController.text.trim(),
+        "PlaceOfIncorporation": _placeOfIncorporationController.text.trim(),
+        "BNature": _natureOfBusinessController.text.trim(),
         "Nationality": _selectedNationality,
-        "NatureOfBusiness": _natureOfBusinessController.text,
-        "DateOfIncorporation": _dateOfIncorporationController.text,
-        "PlaceOfIncorporation": _placeOfIncorporationController.text,
-        "MobileWalletNumber": _walletMobileNumberController.text,
-        "cdsnumber": _isNewClient ? "" : _cdsNumberController.text,
-        "clientType": _isNewClient ? "new" : "existing",
         "Signatories": List.generate(_signatories.length, (i) {
           final row = _signatories[i];
           final mobileCode = _signatoryMobileCodes[i];
           final mobileNumber = row['mobile']!.text.trim();
-          // Mobile sent without the leading '+' and without a leading
-          // trunk zero, e.g. +267 71234567 -> "26771234567".
-          final normalizedMobile =
-              '${mobileCode.replaceAll('+', '')}$mobileNumber';
+          final normalizedMobile = _normalizedPhone(mobileCode, mobileNumber);
           return {
             "Surname": row['surname']!.text.trim(),
             "Forenames": row['forenames']!.text.trim(),
             "Identification": row['id']!.text.trim(),
-            "IdType": _signatoryIdTypes[i],
+            "IdType": _normalizeIdType(_signatoryIdTypes[i]),
             "Nationality": _signatoryNationalities[i],
             "Role": row['role']!.text.trim(),
             "Email": row['email']!.text.trim(),
@@ -1052,59 +1105,41 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       return {
         ...common,
-        "Othernames": _firstNameController.text,
-        "Surname": _lastNameController.text,
-        "MiddleNames": "",
-        "title": _selectedTitle,
+        "Title": _selectedTitle,
+        "Othernames": _firstNameController.text.trim(),
+        "Surname": _lastNameController.text.trim(),
         "Gender": _selectedGender,
-        "idtype": _selectedIdType,
-        "myIdentification": _idNumberController.text,
-        "IDExpiryDate": "",
-        "DOB": _dobController.text,
-        "BirthPlace": _birthPlaceController.text,
+        "idtype": _normalizeIdType(_selectedIdType),
+        "myIdentification": _idNumberController.text.trim(),
+        "DOB": _dobController.text.trim(),
+        "BirthPlace": _birthPlaceController.text.trim(),
         "Nationality": _selectedNationality,
-        "Occupation": "N/A",
-        "EmploymentStatus": "N/A",
-        "EmploymentStatusOther": "",
-        "EmployerName": "N/A",
-        "EmployerAddress": "N/A",
-        "Designation": "N/A",
-        "NatureOfBusiness": "N/A",
-        "sourceofIncome": "N/A",
-        "MaritalStatus": "",
-        "cdsnumber": _isNewClient ? "" : _cdsNumberController.text,
-        "clientType": _isNewClient ? "new" : "existing",
-        "MobileWalletNumber": _walletMobileNumberController.text,
         "GuardianFullNames": guardianFullNames,
-        "GuardianIdentification": _guardianIdNumberController.text,
-        "GuardianRelationship": _guardianRelationshipController.text,
+        "GuardianIdentification": _guardianIdNumberController.text.trim(),
+        "GuardianRelationship": _guardianRelationshipController.text.trim(),
       };
     }
 
+    // Individual
     return {
       ...common,
-      "Othernames": _firstNameController.text,
-      "Surname": _lastNameController.text,
-      "MiddleNames": "",
-      "title": _selectedTitle,
+      "Title": _selectedTitle,
+      "Othernames": _firstNameController.text.trim(),
+      "Surname": _lastNameController.text.trim(),
       "Gender": _selectedGender,
-      "idtype": _selectedIdType,
-      "myIdentification": _idNumberController.text,
-      "IDExpiryDate": "",
-      "DOB": _dobController.text,
-      "BirthPlace": "",
+      "idtype": _normalizeIdType(_selectedIdType),
+      "myIdentification": _idNumberController.text.trim(),
+      "DOB": _dobController.text.trim(),
       "Nationality": _selectedNationality,
-      "Occupation": _occupationController.text,
+      "Occupation": _occupationController.text.trim(),
       "EmploymentStatus": _selectedEmploymentStatus,
-      "EmploymentStatusOther": _otherEmploymentController.text,
-      "EmployerName": "",
-      "EmployerAddress": "",
-      "Designation": "",
-      "NatureOfBusiness": _natureOfBusinessController.text,
+      "EmploymentStatusOther": _otherEmploymentController.text.trim(),
+      "EmployerName": _employerNameController.text.trim(),
       "sourceofIncome": _selectedSourceOfIncome,
-      "MaritalStatus": "",
-      "cdsnumber": _isNewClient ? "" : _cdsNumberController.text,
-      "clientType": _isNewClient ? "new" : "existing",
+      "SourceOfIncomeOther": _selectedSourceOfIncome == 'Other'
+          ? _sourceOfIncomeOtherController.text.trim()
+          : '',
+     // "NatureOfBusiness": _natureOfBusinessController.text.trim(),
     };
   }
 
@@ -2045,21 +2080,28 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   // ── Step 2: Address (shared) ───────────────────────────────────────────────
+  // Maps directly onto the API's Address1 / City / PostCode / PostalAddress
+  // fields (see AccountOpening contract).
   Widget _buildStep2() {
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildLabelWithField('Postal Address *',
-              _buildTextField('Enter postal address', _addressController)),
+          _buildLabelWithField(
+              'Physical / Street Address *',
+              _buildTextField(
+                  'e.g. Plot 123, Extension 5', _physicalAddressController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField('City *',
+              _buildTextField('e.g. Gaborone', _cityController)),
+          const SizedBox(height: 15),
+          _buildLabelWithField('Post Code',
+              _buildTextField('e.g. 00000', _postalCodeController)),
           const SizedBox(height: 15),
           _buildLabelWithField(
-              'Physical Address',
+              'Postal Address (P.O. Box) *',
               _buildTextField(
-                  'Enter physical address', _physicalAddressController)),
-          const SizedBox(height: 15),
-          _buildLabelWithField('Postal Code',
-              _buildTextField('Enter postal code', _postalCodeController)),
+                  'e.g. P O Box 456', _addressController)),
           const SizedBox(height: 15),
           _buildLabelWithField(
               'Country of Residence *',
@@ -2101,7 +2143,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       _buildDropdownField(
                           'Employment Status',
                           _selectedEmploymentStatus,
-                          ['Student', 'Employed', 'Unemployed', 'Other'],
+                          ['Student', 'Employed', 'Unemployed', 'Self Employed'],
                               (val) => setState(
                                   () => _selectedEmploymentStatus = val!)))),
               const SizedBox(width: 10),
@@ -2117,9 +2159,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 _buildDropdownField(
                     'Employment Status',
                     _selectedEmploymentStatus,
-                    ['Student', 'Employed', 'Unemployed', 'Other'],
+                    ['Student', 'Employed', 'Unemployed', 'Self Employed'],
                         (val) =>
                         setState(() => _selectedEmploymentStatus = val!))),
+          ],
+          if (_selectedEmploymentStatus == 'Employed') ...[
+            const SizedBox(height: 15),
+            _buildLabelWithField(
+                'Employer Name',
+                _buildTextField(
+                    "Enter employer's name", _employerNameController)),
           ],
           if (_selectedEmploymentStatus == 'Other') ...[
             const SizedBox(height: 15),
@@ -2137,11 +2186,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   ['Employment', 'Business', 'Investments', 'Other'],
                       (val) =>
                       setState(() => _selectedSourceOfIncome = val!))),
-          const SizedBox(height: 15),
-          _buildLabelWithField(
-              'Nature & Location of Business Activities',
-              _buildTextField('Describe nature of business',
-                  _natureOfBusinessController)),
+          if (_selectedSourceOfIncome == 'Other') ...[
+            const SizedBox(height: 15),
+            _buildLabelWithField(
+                'Please specify *',
+                _buildTextField(
+                    'Specify source of income', _sourceOfIncomeOtherController)),
+          ],
+
         ],
       ),
     );
@@ -2149,35 +2201,66 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   // ── Banking (shared) ───────────────────────────────────────────────────────
   Widget _buildStep4() {
+    final walletController = _selectedAccountType == 'I'
+        ? _phoneController
+        : _walletMobileNumberController;
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildLabelWithField(
-            'Mobile Network Operator *',
-            _buildDropdownField(
-              'Select MNO',
-              _selectedMNO,
-              ['Mascom- MyZaka', 'Orange Money', 'BTC Mobile Money/ Smega'],
-                  (val) => setState(() => _selectedMNO = val!),
+          // Info banner
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE8F0FE),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFBBD4F5)),
+            ),
+            child: const Text(
+              'Mobile money details are required for deposits and withdrawals. Your bank name, branch and account number are optional.',
+              style: TextStyle(
+                  color: Color(0xFF1B4B91), fontSize: 12, height: 1.4),
             ),
           ),
-          const SizedBox(height: 15),
-          _buildLabelWithField(
-            'Mobile Money Wallet *',
-            _buildPhoneFieldWithCountryCode(
-              _selectedAccountType == 'I'
-                  ? _phoneController
-                  : _walletMobileNumberController,
-              code: _selectedMobileCountryCode,
-              onCodeChanged: (val) =>
-                  setState(() => _selectedMobileCountryCode = val),
-              hint: _selectedMobileCountryCode == '+267'
-                  ? '8 digits, e.g. 71245676'
-                  : 'Enter mobile money number',
-              digitsOnly: true,
-              maxLength: _selectedMobileCountryCode == '+267' ? 8 : 15,
-            ),
+          const SizedBox(height: 22),
+
+          // ── Mobile Money ──
+          _buildSectionLabel('MOBILE MONEY'),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildLabelWithField(
+                  'Mobile Wallet Number *',
+                  _buildPhoneFieldWithCountryCode(
+                    walletController,
+                    code: _selectedMobileCountryCode,
+                    onCodeChanged: (val) =>
+                        setState(() => _selectedMobileCountryCode = val),
+                    hint: _selectedMobileCountryCode == '+267'
+                        ? 'e.g. 71234567'
+                        : 'Enter mobile money number',
+                    digitsOnly: true,
+                    maxLength: _selectedMobileCountryCode == '+267' ? 8 : 15,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildLabelWithField(
+                  'Mobile Network Operator *',
+                  _buildDropdownField(
+                    'Select operator',
+                    _selectedMNO,
+                    ['Mascom- MyZaka', 'Orange Money', 'BTC Mobile Money/ Smega'],
+                        (val) => setState(() => _selectedMNO = val!),
+                  ),
+                ),
+              ),
+            ],
           ),
           if (_selectedMobileCountryCode == '+267') ...[
             const SizedBox(height: 6),
@@ -2186,15 +2269,50 @@ class _SignUpScreenState extends State<SignUpScreen> {
               style: TextStyle(color: Color(0xFFD4A855), fontSize: 11),
             ),
           ],
-          const SizedBox(height: 15),
 
-          // Bank Name Dropdown
-          _buildLabelWithField('Bank Name', _buildBankDropdown()),
-          const SizedBox(height: 15),
+          const SizedBox(height: 26),
 
-          // Swift Code – auto-filled, read-only
+          // ── Bank Payment ──
+          _buildSectionLabel('BANK PAYMENT'),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildLabelWithField(
+                    'Select Bank (Optional)', _buildBankDropdown()),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildLabelWithField(
+                    'Bank Branch (Optional)', _buildBranchDropdown()),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildLabelWithField(
+                  'Account Name *',
+                  _buildTextField(
+                      'Name on the bank account', _accountNameController),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildLabelWithField(
+                  'Account Number (Optional)',
+                  _buildTextField('Enter your account number', _ibanController,
+                      keyboardType: TextInputType.number),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
           _buildLabelWithField(
-            'Swift Code',
+            'Swift Code (Auto-filled from bank)',
             Container(
               height: 50,
               decoration: BoxDecoration(
@@ -2219,7 +2337,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       (_selectedBankSwiftCode != null &&
                           _selectedBankSwiftCode!.isNotEmpty)
                           ? _selectedBankSwiftCode!
-                          : 'Auto-filled on bank selection',
+                          : 'Select a bank to auto-fill',
                       style: TextStyle(
                         color: (_selectedBankSwiftCode != null &&
                             _selectedBankSwiftCode!.isNotEmpty)
@@ -2233,32 +2351,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 15),
 
-          // Bank Branch Dropdown
-          _buildLabelWithField('Bank Branch', _buildBranchDropdown()),
-          const SizedBox(height: 15),
-
-          // Account Name (#9)
-          _buildLabelWithField(
-              'Account Name',
-              _buildTextField(
-                  'Enter account holder name', _accountNameController)),
-          const SizedBox(height: 15),
-
-          // Account Number
-          _buildLabelWithField(
-              'Account Number',
-              _buildTextField('Enter account number', _ibanController,
-                  keyboardType: TextInputType.number)),
+          const SizedBox(height: 20),
+          const Divider(color: Color(0xFFE8D7B8)),
+          const SizedBox(height: 8),
+          Text(
+            '* Required fields | Bank name, branch and account number can be skipped',
+            style: TextStyle(color: Colors.grey[500], fontSize: 11),
+          ),
         ],
       ),
     );
   }
-
-  // #8 - Mobile/contact number field with country code selector.
-  // Parameterised so the wallet number and contact number can each keep
-  // their own country code.
   Widget _buildPhoneFieldWithCountryCode(
       TextEditingController controller, {
         required String code,
@@ -2571,6 +2675,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
             const SizedBox(height: 15),
             _buildDocumentUploadField('2. Proof of Residence',
                 _proofOfAddressDocument, 'ProofOfAddress'),
+            const SizedBox(height: 15),
+            _buildDocumentUploadField('3. Proof of Guardianship',
+                _guardianshipProofDocument, 'GuardianshipProof'),
+            const SizedBox(height: 15),
+            _buildDocumentUploadField("4. Guardian's ID",
+                _guardianIdDocument, 'GuardianId'),
+            const SizedBox(height: 15),
+            _buildDocumentUploadField("5. Guardian's Proof of Residence",
+                _guardianProofOfResidenceDocument, 'GuardianProofOfResidence'),
+            const SizedBox(height: 15),
+            _buildDocumentUploadField("6. Guardian's Proof of Funds",
+                _guardianProofOfFundsDocument, 'GuardianProofOfFunds'),
             const SizedBox(height: 25),
           ] else ...[
             _buildDocumentUploadField('1. Certificate of Incorporation',
@@ -2580,11 +2696,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
             _buildDocumentUploadField('2. Board Resolution',
                 _boardResolutionDocument, 'BoardResolution'),
             const SizedBox(height: 15),
-            _buildDocumentUploadField('3. Proof of Address',
+            _buildDocumentUploadField(
+                '3. Certified ID/Passport of Signatories',
+                _signatoryIdDocument,
+                'SignatoryIds'),
+            const SizedBox(height: 15),
+            _buildDocumentUploadField('4. Proof of Address',
                 _proofOfAddressDocument, 'ProofOfAddress'),
             const SizedBox(height: 15),
             _buildDocumentUploadField(
-                '4. Tax Certificate', _taxCertificateDocument, 'TaxCertificate'),
+                '5. Tax Certificate', _taxCertificateDocument, 'TaxCertificate'),
+            const SizedBox(height: 15),
+            _buildDocumentUploadField(
+                '6. Company Financials/Bank Statement',
+                _companyFinancialsDocument,
+                'CompanyFinancials'),
             const SizedBox(height: 25),
           ],
 
@@ -2619,33 +2745,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     style: TextStyle(color: Colors.grey[600], fontSize: 11),
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: RadioListTile<bool>(
-                          contentPadding: EdgeInsets.zero,
-                          dense: true,
-                          title: const Text('Yes', style: TextStyle(fontSize: 13)),
-                          value: true,
-                          groupValue: _isBseEmployeeOrRelative,
-                          activeColor: const Color(0xFFD4A855),
-                          onChanged: (val) =>
-                              setState(() => _isBseEmployeeOrRelative = val!),
-                        ),
-                      ),
-                      Expanded(
-                        child: RadioListTile<bool>(
-                          contentPadding: EdgeInsets.zero,
-                          dense: true,
-                          title: const Text('No', style: TextStyle(fontSize: 13)),
-                          value: false,
-                          groupValue: _isBseEmployeeOrRelative,
-                          activeColor: const Color(0xFFD4A855),
-                          onChanged: (val) =>
-                              setState(() => _isBseEmployeeOrRelative = val!),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 8),
+                  _buildDropdownField(
+                    'Select an option',
+                    _isBseEmployeeOrRelative ? 'Yes' : 'No',
+                    const ['Yes', 'No'],
+                        (val) => setState(
+                            () => _isBseEmployeeOrRelative = val == 'Yes'),
                   ),
                   if (_isBseEmployeeOrRelative) ...[
                     const SizedBox(height: 4),
@@ -2918,6 +3024,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
         const SizedBox(height: 4),
         field,
       ],
+    );
+  }
+  Widget _buildSectionLabel(String label) {
+    return Text(
+      label,
+      style: const TextStyle(
+        color: Color(0xFFD4A855),
+        fontSize: 11,
+        fontWeight: FontWeight.bold,
+        letterSpacing: 0.6,
+      ),
     );
   }
 
