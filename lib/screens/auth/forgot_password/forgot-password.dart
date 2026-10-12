@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../contants/constants.dart';
+import '../../../widgets/bse_snackbar.dart';
 
 
 class PasswordResetService {
@@ -156,7 +157,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
       if (result['success']) {
         setState(() => _currentStep = 1);
-        _showSnackBar(result['message'], isError: false);
+        _showSnackBar(result['message'], isError: false, isSuccess: true);
       } else {
         _showSnackBar(result['message'], isError: true);
       }
@@ -212,7 +213,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
       if (result['success']) {
         setState(() => _currentStep = 2);
-        _showSnackBar(result['message'], isError: false);
+        _showSnackBar(result['message'], isError: false, isSuccess: true);
       } else {
         // Check if it's an OTP error
         if (result['message'].toLowerCase().contains('otp')) {
@@ -247,7 +248,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         _otpController6.clear();
         _otpFocusNode1.requestFocus();
 
-        _showSnackBar('OTP resent successfully', isError: false);
+        _showSnackBar('OTP resent successfully', isError: false, isSuccess: true);
       } else {
         _showSnackBar(result['message'], isError: true);
       }
@@ -257,14 +258,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     }
   }
 
-  void _showSnackBar(String message, {required bool isError}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: isError ? Colors.red[700] : const Color(0xFFD4A855),
-        duration: const Duration(seconds: 3),
-      ),
+  void _showSnackBar(String message, {required bool isError, bool isSuccess = false}) {
+    showBseSnackBar(
+      context,
+      message: message,
+      type: isError
+          ? BseSnackType.error
+          : (isSuccess ? BseSnackType.success : BseSnackType.info),
     );
   }
 

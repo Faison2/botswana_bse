@@ -6,6 +6,8 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
+import '../../../widgets/app_message_dialog.dart';
+import '../../../widgets/bse_snackbar.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -475,7 +477,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               break;
           }
         });
-        _showSnackBar('$documentType document selected successfully');
+        _showSnackBar('$documentType document selected successfully', isSuccess: true);
       }
     } catch (e) {
       _showSnackBar('Error picking document: $e');
@@ -1217,54 +1219,34 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   void _showSuccessDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(children: [
-          Icon(Icons.check_circle, color: Colors.green),
-          SizedBox(width: 8),
-          Text('Success', style: TextStyle(color: Colors.green)),
-        ]),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop();
-            },
-            child: const Text('OK', style: TextStyle(color: Color(0xFFD4A855))),
-          ),
-        ],
-      ),
+    showAppMessageDialog(
+      context,
+      isDark: false,
+      type: AppMessageType.success,
+      title: 'Success',
+      message: message,
+      onButtonPressed: () => Navigator.of(context).pop(),
     );
   }
 
   void _showErrorDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(children: [
-          Icon(Icons.error, color: Colors.red),
-          SizedBox(width: 8),
-          Text('Error', style: TextStyle(color: Colors.red)),
-        ]),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK', style: TextStyle(color: Color(0xFFD4A855))),
-          ),
-        ],
-      ),
+    showAppMessageDialog(
+      context,
+      isDark: false,
+      type: AppMessageType.error,
+      title: 'Error',
+      message: message,
     );
   }
 
-  void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(message),
-      behavior: SnackBarBehavior.floating,
-      backgroundColor: const Color(0xFFD4A855),
-    ));
+  void _showSnackBar(String message, {bool isSuccess = false, bool isError = false}) {
+    showBseSnackBar(
+      context,
+      message: message,
+      type: isError
+          ? BseSnackType.error
+          : (isSuccess ? BseSnackType.success : BseSnackType.info),
+    );
   }
 
   Widget _buildStepIndicator() {

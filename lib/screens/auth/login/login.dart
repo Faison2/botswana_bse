@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../../dashboard/dashboard.dart';
+import '../../../widgets/bse_snackbar.dart';
 import '../forgot_password/forgot-password.dart';
 import '../signup/signup_home.dart';
 
@@ -157,7 +158,7 @@ class _LoginScreenState extends State<LoginScreen> {
           if (responseData['requirePasswordChange'] == true) {
             _showPasswordChangeDialog(responseData['email']);
           } else {
-            _showSnackBar('Login successful');
+            _showSnackBar('Login successful', isSuccess: true);
             if (mounted) {
               Navigator.pushReplacement(
                 context,
@@ -292,7 +293,7 @@ class _LoginScreenState extends State<LoginScreen> {
         final responseData = jsonDecode(response.body);
 
         if (responseData['responseCode'] == 200) {
-          _showSnackBar('Password changed successfully');
+          _showSnackBar('Password changed successfully', isSuccess: true);
           _clearPasswordFields();
 
           if (mounted) {
@@ -339,15 +340,13 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _showSnackBar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? const Color(0xFFC0392B) : BSEColors.marigoldDark,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        duration: const Duration(seconds: 3),
-      ),
+  void _showSnackBar(String message, {bool isError = false, bool isSuccess = false}) {
+    showBseSnackBar(
+      context,
+      message: message,
+      type: isError
+          ? BseSnackType.error
+          : (isSuccess ? BseSnackType.success : BseSnackType.info),
     );
   }
 

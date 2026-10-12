@@ -23,6 +23,9 @@ import '../../theme_provider.dart';
 import '../profile/profile.dart';
 import '../transactions /transactions.dart';
 import 'widgets/market_watch_widget.dart';
+import '../ipo/ipo_market_watch.dart';
+import '../ipo/ipo_models.dart';
+import 'widgets/ipo_banner_widget.dart';
 
 
 
@@ -73,12 +76,114 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     _startLiveDataUpdate();
     _bootstrap();
+    _maybeShowIpoPopup();
   }
 
   Future<void> _bootstrap() async {
     await _loadCachedUserData();
     await _fetchProfileData();
     await _loadPortfolioFromApi();
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  IPO announcement popup — shown exactly once per IPO (persisted
+  //  in SharedPreferences), not on every login.
+  // ─────────────────────────────────────────────────────────────
+
+  static const _kIpoPopupShownPrefix = 'ipo_popup_shown_';
+
+  Future<void> _maybeShowIpoPopup() async {
+    final ipo = await IpoRepository.fetchFeaturedListing();
+    if (!mounted || ipo == null) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final shownKey = '$_kIpoPopupShownPrefix${ipo.id}';
+    if (prefs.getBool(shownKey) == true) return;
+
+    await Future.delayed(const Duration(milliseconds: 700));
+    if (!mounted) return;
+
+    await prefs.setBool(shownKey, true);
+
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final isDark = themeProvider.isDarkMode;
+    final cardColor = isDark ? const Color(0xFF23201C) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subtextColor = isDark ? Colors.white70 : Colors.black54;
+    final accentColor = isDark ? const Color(0xFF8B6914) : const Color(0xFFD4A855);
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: cardColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 24, 22, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: accentColor.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.rocket_launch_rounded, color: accentColor, size: 32),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  ipo.status == IpoStatus.closingSoon ? 'IPO Closing Soon' : 'New IPO Open',
+                  style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${ipo.companyName} is now open for applications at '
+                  'BWP ${ipo.pricePerShare.toStringAsFixed(2)} per share. '
+                  '${ipo.daysRemaining} day${ipo.daysRemaining == 1 ? '' : 's'} left to apply.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: subtextColor, fontSize: 13.5),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: subtextColor.withOpacity(0.4)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () => Navigator.pop(ctx),
+                        child: Text('Close', style: TextStyle(color: textColor, fontSize: 13)),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: accentColor,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _navigateWithDebounce(const IpoMarketWatchScreen());
+                        },
+                        child: const Text('View IPOs',
+                            style: TextStyle(
+                                color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -426,6 +531,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _buildBuySellButtons(isDark),
           const SizedBox(height: 16),
           _buildQuickActions(isDark),
+          const SizedBox(height: 20),
+          IpoBannerWidget(isDark: isDark),
           const SizedBox(height: 30),
           // _buildSectionHeader('My Portfolio', 'View Details', isDark, null),
           //  const SizedBox(height: 15),
@@ -801,13 +908,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(width: 8),
           _buildActionButton(
-            icon: Icons.tune_rounded,
-            label: 'Advanced',
+            icon: Icons.rocket_launch_rounded,
+            label: 'IPO',
             isDark: isDark,
             accentColor: const Color(0xFFFFB300),
-            onTap: () {
-              // TODO: navigate to Advanced screen
-            },
+            onTap: () => _navigateWithDebounce(const IpoMarketWatchScreen()),
           ),
         ],
       ),
