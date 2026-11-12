@@ -347,7 +347,8 @@ class _QuickTradeScreenState extends State<QuickTradeScreen> {
     rawCode.isNotEmpty ? rawCode : (rawSymbol.isNotEmpty ? rawSymbol : rawName);
     String code = rawCode;
 
-    String closingPrice = item['ClosingPrice']?.toString() ?? '0';
+    // Changed: ClosingPrice → VwapPrice (ClosingPrice is empty while the market is open)
+    String closingPrice = item['VwapPrice']?.toString() ?? '0';
     String openingPrice = item['OpeningPrice']?.toString() ?? '0';
     String maxPrice = item['MaxPrice']?.toString() ?? '0';
     String minPrice = item['MinPrice']?.toString() ?? '0';

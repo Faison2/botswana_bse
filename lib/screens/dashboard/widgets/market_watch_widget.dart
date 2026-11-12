@@ -99,7 +99,8 @@ class _MarketWatchWidgetState extends State<MarketWatchWidget> {
     String code = item['Code']?.toString() ?? '';
     String logoUrl = item['LogoUrl']?.toString() ?? '';
 
-    String closingPrice = item['ClosingPrice']?.toString() ?? '0';
+    // Changed: ClosingPrice → VwapPrice (ClosingPrice is empty while the market is open)
+    String closingPrice = item['VwapPrice']?.toString() ?? '0';
     String openingPrice = item['OpeningPrice']?.toString() ?? '0';
     String maxPrice = item['MaxPrice']?.toString() ?? '0';
     String minPrice = item['MinPrice']?.toString() ?? '0';

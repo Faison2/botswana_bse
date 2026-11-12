@@ -1,4 +1,5 @@
 import 'package:bse/contants/constants.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -17,7 +18,57 @@ class SignUpScreen extends StatefulWidget {
 class _SignUpScreenState extends State<SignUpScreen> {
   int _currentStep = 0;
   bool _agreeToTerms = false;
+  bool _acceptedPrivacyNotice = false;
   bool _isNewClient = true;
+
+  static const String _privacyNoticeText = '''
+Botswana Stock Exchange Limited is committed to protecting your personal data. As part of our regulatory obligations under Financial Intelligence Act ("the FI Act"), we are legally required to collect and process specific personal data from individuals in positions of control or influence within listed companies. This Privacy Notice outlines how we collect, use, store, and protect such data exclusively for fulfilling Know Your Customer (KYC) obligations under the FI Act.
+
+CATEGORIES OF PERSONAL DATA COLLECTED
+We may collect the following categories of personal data as required by the FI Act for KYC purposes:
+full name, date of birth, nationality, identification number (e.g., passport number, national ID), and photographic identification;
+address, email, and telephone number;
+position, title, company name, business registration number;
+bank account information, source of funds or wealth, and any additional information required by regulatory authorities;
+details on shareholding, percentage of ownership and beneficial ownership; and
+certified copies of documents verifying your identity, address, and ownership status, as required by law or regulation.
+
+Purpose of PROCESSING
+The personal data collected is used solely for compliance with legal obligations under the FI Act and related regulations. This includes:
+verifying the identity and legitimacy of individuals associated with listed companies, to prevent financial crime and enhance corporate transparency;
+assessing and mitigating risks related to money laundering, terrorism financing, and other illicit financial activities; and
+complying with reporting, due diligence, and record-keeping requirements under the FI Act and other applicable laws.
+
+Legal Basis for Processing
+We process your personal data based on compliance with legal obligations. We are required to collect and process your personal data to comply with the FI Act and related regulatory requirements for KYC and AML purposes.
+
+RECIPIENTS OF PERSONAL DATA
+We may share your personal data with:
+government agencies, Financial Intelligence Authority, or law enforcement agencies as required or permitted by law, including for the purposes of AML and CTF compliance.
+our parent company or subsidiary, but only where necessary for regulatory compliance or risk management purposes directly related to KYC obligations.
+
+Data Retention
+We will retain your personal data for the period necessary to fulfil the purposes outlined in this Privacy Notice or as required by law. As required under the FI Act, your KYC data will be retained for a period of 20 years after the termination of a business relationship.
+
+Your Rights
+The rights available to you under data protection law may be limited where they conflict with legal obligations under the FI Act. In general, you have the following rights, which we will accommodate where lawful and practicable:
+Right of access: You may request access to the personal data we hold about you, except where the information is protected from disclosure by the Financial Intelligence Act.
+Right to rectification: You may request correction of any inaccurate or incomplete data.
+Right to deletion: This right is restricted during the statutory 20-year retention period under the FI Act. Your data will be securely deleted or anonymised after this period, unless otherwise required by law.
+Right to restriction of processing: Your right to request restricted processing may not override our legal duty to maintain and process data for anti-money laundering compliance.
+To exercise any of these rights where applicable, please contact us using the details provided below.
+
+International transfers
+We do not routinely transfer personal data outside Botswana. However, in certain cases, personal data may be stored or processed by service providers located outside Botswana. Where such transfers occur, we prioritise countries that have been granted adequacy status by the Minister or the Information and Data Protection Commission. In the absence of an adequacy decision, we implement appropriate safeguards in line with the Data Protection Act.
+
+CHANGES TO THIS PRIVACY NOTICE
+This Privacy Notice may be updated periodically to reflect changes in applicable laws, regulatory guidance, or our data processing practices. Any significant updates will be clearly communicated to you.
+
+Contact Us
+Our Data Protection Officer (DPO) oversees compliance with this privacy notice. For questions about the notice, processing activities, or exercising rights, please contact our DPO at:
+risk@bse.co.bw
++2673674400
+''';
 
   // Step 0 – Account Type ('I' = Individual, 'C' = Corporate, 'M' = Minor)
   String _selectedAccountType = 'I';
@@ -938,6 +989,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _showSnackBar('Please agree to the Terms & Conditions');
       return false;
     }
+    if (!_acceptedPrivacyNotice) {
+      _showSnackBar('Please acknowledge the Privacy Notice');
+      return false;
+    }
     // #10 - Employee / market exposure declaration (Individual accounts only)
     if (_selectedAccountType == 'I' &&
         _isBseEmployeeOrRelative &&
@@ -1253,6 +1308,30 @@ class _SignUpScreenState extends State<SignUpScreen> {
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('OK', style: TextStyle(color: Color(0xFFD4A855))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPrivacyNoticeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Privacy Notice'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Text(
+              _privacyNoticeText.trim(),
+              style: const TextStyle(fontSize: 13, height: 1.4),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close', style: TextStyle(color: Color(0xFFD4A855))),
           ),
         ],
       ),
@@ -2803,6 +2882,55 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       TextSpan(
                           text:
                           ' and confirm that all information provided is accurate.',
+                          style: TextStyle(
+                              color: Color(0xFF6B5D4F), fontSize: 13)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: Checkbox(
+                  value: _acceptedPrivacyNotice,
+                  onChanged: (value) =>
+                      setState(() => _acceptedPrivacyNotice = value ?? false),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4)),
+                  side: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                  fillColor: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.selected))
+                      return const Color(0xFFD4A855);
+                    return Colors.transparent;
+                  }),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: RichText(
+                  text: TextSpan(
+                    children: [
+                      const TextSpan(
+                          text: 'I have read and acknowledge the ',
+                          style: TextStyle(
+                              color: Color(0xFF6B5D4F), fontSize: 13)),
+                      TextSpan(
+                          text: 'Privacy Notice',
+                          style: const TextStyle(
+                              color: Color(0xFFD4A855),
+                              fontSize: 13,
+                              decoration: TextDecoration.underline),
+                          recognizer: TapGestureRecognizer()
+                            ..onTap = _showPrivacyNoticeDialog),
+                      const TextSpan(
+                          text:
+                          ' describing how BSE collects and processes my personal data under the Financial Intelligence Act for KYC purposes.',
                           style: TextStyle(
                               color: Color(0xFF6B5D4F), fontSize: 13)),
                     ],

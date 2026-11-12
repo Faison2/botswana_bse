@@ -231,7 +231,7 @@ class _ComparisonAnalysisScreenState extends State<ComparisonAnalysisScreen> wit
       ) {
     // Calculate performance metrics
     final performances = widget.selectedStocks.map((stock) {
-      final closePrice = double.tryParse(stock['ClosingPrice']?.toString() ?? '0') ?? 0;
+      final closePrice = double.tryParse(stock['VwapPrice']?.toString() ?? '0') ?? 0;
       final openPrice = double.tryParse(stock['OpeningPrice']?.toString() ?? '0') ?? 0;
       final priceChange = closePrice - openPrice;
       final priceChangePercent = openPrice != 0 ? (priceChange / openPrice) * 100 : 0;
@@ -495,7 +495,7 @@ class _ComparisonAnalysisScreenState extends State<ComparisonAnalysisScreen> wit
       Color subtextColor,
       Color cardBgColor,
       ) {
-    final closePrice = double.tryParse(stock['ClosingPrice']?.toString() ?? '0') ?? 0;
+    final closePrice = double.tryParse(stock['VwapPrice']?.toString() ?? '0') ?? 0;
     final openPrice = double.tryParse(stock['OpeningPrice']?.toString() ?? '0') ?? 0;
     final maxPrice = double.tryParse(stock['MaxPrice']?.toString() ?? '0') ?? 0;
     final minPrice = double.tryParse(stock['MinPrice']?.toString() ?? '0') ?? 0;
@@ -791,7 +791,7 @@ class PerformanceBarChartPainter extends CustomPainter {
 
     // Calculate changes
     final changes = stocks.map((stock) {
-      final closePrice = double.tryParse(stock['ClosingPrice']?.toString() ?? '0') ?? 0;
+      final closePrice = double.tryParse(stock['VwapPrice']?.toString() ?? '0') ?? 0;
       final openPrice = double.tryParse(stock['OpeningPrice']?.toString() ?? '0') ?? 0;
       final priceChange = closePrice - openPrice;
       final priceChangePercent = openPrice != 0 ? (priceChange / openPrice) * 100 : 0;
