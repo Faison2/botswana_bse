@@ -66,12 +66,6 @@ class _AbsaDepositScreenState extends State<AbsaDepositScreen>
     ).animate(CurvedAnimation(parent: _animController, curve: Curves.easeOut));
     _animController.forward();
 
-    // PREVIEW-SEED-START
-    _cardController.text = '4111  1111  1111  1111';
-    _expiryController.text = '12 / 2031';
-    _cvvController.text = '123';
-    _amountController.text = '1500.00';
-    // PREVIEW-SEED-END
     _brokers = List<Map<String, String>>.from(widget.brokers);
     _selectedBroker = widget.initialBrokerIndex < _brokers.length
         ? widget.initialBrokerIndex
@@ -831,46 +825,6 @@ class _AbsaDepositScreenState extends State<AbsaDepositScreen>
             ],
           ),
           Container(height: 1, color: isDark ? Colors.white12 : Colors.black12),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: ['100', '500', '1000', '5000'].map((amt) {
-              final selected = _amountController.text == amt;
-              return GestureDetector(
-                onTap: () => setState(() {
-                  _amountController.text = amt;
-                  _amountController.selection = TextSelection.collapsed(
-                    offset: _amountController.text.length,
-                  );
-                }),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? AbsaColors.red
-                        : AbsaColors.red.withOpacity(isDark ? 0.14 : 0.07),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: AbsaColors.red.withOpacity(selected ? 1 : 0.25),
-                    ),
-                  ),
-                  child: Text(
-                    'P $amt',
-                    style: TextStyle(
-                      color: selected ? Colors.white : AbsaColors.red,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
         ],
       ),
     );
@@ -954,8 +908,9 @@ class _AbsaDepositScreenState extends State<AbsaDepositScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Every line below is the stored value, verbatim.
                           Text(
-                            b['brokerName']?.isNotEmpty == true
+                            (b['brokerName']?.isNotEmpty ?? false)
                                 ? b['brokerName']!
                                 : (b['brokerCode'] ?? ''),
                             style: TextStyle(
@@ -964,14 +919,27 @@ class _AbsaDepositScreenState extends State<AbsaDepositScreen>
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${b['brokerCode']}  ·  ${b['cdsAccount']}',
-                            style: TextStyle(
-                              color: isDark ? Colors.white38 : Colors.black38,
-                              fontSize: 11.5,
+                          if ((b['brokerName']?.isNotEmpty ?? false) &&
+                              (b['brokerCode']?.isNotEmpty ?? false)) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              b['brokerCode']!,
+                              style: TextStyle(
+                                color: isDark ? Colors.white38 : Colors.black38,
+                                fontSize: 11.5,
+                              ),
                             ),
-                          ),
+                          ],
+                          if (b['cdsAccount']?.isNotEmpty ?? false) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              b['cdsAccount']!,
+                              style: TextStyle(
+                                color: isDark ? Colors.white38 : Colors.black38,
+                                fontSize: 11.5,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -1019,9 +987,10 @@ class _AbsaDepositScreenState extends State<AbsaDepositScreen>
                   style: TextStyle(color: labelColor, fontSize: 11.5),
                 ),
                 const SizedBox(height: 3),
+                // Stored values, verbatim — nothing composed or substituted.
                 Text(
-                  b['brokerName']?.isNotEmpty == true
-                      ? '${b['brokerName']} · ${b['brokerCode']}'
+                  (b['brokerName']?.isNotEmpty ?? false)
+                      ? b['brokerName']!
                       : (b['brokerCode'] ?? ''),
                   style: TextStyle(
                     color: textColor,
@@ -1029,6 +998,21 @@ class _AbsaDepositScreenState extends State<AbsaDepositScreen>
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                if ((b['brokerName']?.isNotEmpty ?? false) &&
+                    (b['brokerCode']?.isNotEmpty ?? false)) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    b['brokerCode']!,
+                    style: TextStyle(color: labelColor, fontSize: 11.5),
+                  ),
+                ],
+                if (b['cdsAccount']?.isNotEmpty ?? false) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    b['cdsAccount']!,
+                    style: TextStyle(color: labelColor, fontSize: 11.5),
+                  ),
+                ],
               ],
             ),
           ),

@@ -8,6 +8,8 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'screening.dart';
+
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
 
@@ -116,6 +118,15 @@ risk@bse.co.bw
   // Employee declaration (#10)
   bool _isBseEmployeeOrRelative = false;
   final _employeeDeclarationDetailsController = TextEditingController();
+
+  // CSDB screening (Account_Screening_Audit). The applicant sheet is used for
+  // Individual and Minor accounts; Corporate sends the entity sheet plus one
+  // sheet per signatory, kept index-aligned with _signatories.
+  final IndividualScreening _applicantScreening = IndividualScreening();
+  final EntityScreening _entityScreening = EntityScreening();
+  final List<IndividualScreening> _signatoryScreenings = [
+    IndividualScreening()
+  ];
 
   // Guardian details (Minor only)
   final _guardianForenamesController = TextEditingController();
@@ -373,6 +384,10 @@ risk@bse.co.bw
       row['role']?.dispose();
       row['email']?.dispose();
       row['mobile']?.dispose();
+    }
+    _applicantScreening.dispose();
+    for (final screening in _signatoryScreenings) {
+      screening.dispose();
     }
     super.dispose();
   }
@@ -980,6 +995,12 @@ risk@bse.co.bw
             'Signatory ${i + 1}: Botswana mobile number must be exactly 8 digits, e.g. 71234567');
         return false;
       }
+      final screeningError = _signatoryScreenings[i]
+          .validate(subject: "signatory ${i + 1}'s PEP declaration");
+      if (screeningError != null) {
+        _showSnackBar(screeningError);
+        return false;
+      }
     }
     return true;
   }
@@ -991,6 +1012,14 @@ risk@bse.co.bw
     }
     if (!_acceptedPrivacyNotice) {
       _showSnackBar('Please acknowledge the Privacy Notice');
+      return false;
+    }
+    // CSDB screening — required of every applicant before submitting.
+    final screeningError = _selectedAccountType == 'C'
+        ? _entityScreening.validate()
+        : _applicantScreening.validate();
+    if (screeningError != null) {
+      _showSnackBar(screeningError);
       return false;
     }
     // #10 - Employee / market exposure declaration (Individual accounts only)
@@ -1145,8 +1174,10 @@ risk@bse.co.bw
             "Role": row['role']!.text.trim(),
             "Email": row['email']!.text.trim(),
             "Mobile": normalizedMobile,
+            "Screening": _signatoryScreenings[i].toJson(),
           };
         }),
+        "EntityScreening": _entityScreening.toJson(),
       };
     }
 
@@ -1172,6 +1203,7 @@ risk@bse.co.bw
         "GuardianFullNames": guardianFullNames,
         "GuardianIdentification": _guardianIdNumberController.text.trim(),
         "GuardianRelationship": _guardianRelationshipController.text.trim(),
+        "IndividualScreening": _applicantScreening.toJson(),
       };
     }
 
@@ -1194,6 +1226,7 @@ risk@bse.co.bw
       "SourceOfIncomeOther": _selectedSourceOfIncome == 'Other'
           ? _sourceOfIncomeOtherController.text.trim()
           : '',
+      "IndividualScreening": _applicantScreening.toJson(),
      // "NatureOfBusiness": _natureOfBusinessController.text.trim(),
     };
   }
@@ -2601,6 +2634,9 @@ risk@bse.co.bw
                               _signatoryIdTypes.removeAt(index);
                               _signatoryNationalities.removeAt(index);
                               _signatoryMobileCodes.removeAt(index);
+                              _signatoryScreenings
+                                  .removeAt(index)
+                                  .dispose();
                             }),
                             child: const Icon(Icons.delete_outline,
                                 color: Colors.redAccent, size: 20),
@@ -2681,6 +2717,29 @@ risk@bse.co.bw
                         _signatoryMobileCodes[index] == '+267' ? 8 : 15,
                       ),
                     ),
+                    const SizedBox(height: 16),
+                    const Divider(color: Color(0xFFE8D7B8), height: 1),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'PEP Declaration *',
+                      style: TextStyle(
+                          color: Color(0xFF2C1810),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Required for every authorised signatory.',
+                      style:
+                          TextStyle(color: Colors.grey[600], fontSize: 11),
+                    ),
+                    const SizedBox(height: 12),
+                    IndividualScreeningForm(
+                      model: _signatoryScreenings[index],
+                      onChanged: () => setState(() {}),
+                      questions: kSignatoryPepRelationships,
+                      boxed: false,
+                    ),
                   ],
                 ),
               ),
@@ -2702,6 +2761,7 @@ risk@bse.co.bw
                 _signatoryIdTypes.add('National ID');
                 _signatoryNationalities.add('Motswana');
                 _signatoryMobileCodes.add('+267');
+                _signatoryScreenings.add(IndividualScreening());
               }),
               icon: const Icon(Icons.add, color: Color(0xFFD4A855), size: 18),
               label: const Text('Add signatory',
@@ -2843,6 +2903,24 @@ risk@bse.co.bw
             ),
             const SizedBox(height: 20),
           ],
+
+          // CSDB screening — the applicant PEP sheet for Individual and
+          // Minor, the entity high-risk sheet for Corporate. Corporate
+          // signatories answer their own sheet on the signatories step.
+          if (_selectedAccountType == 'C')
+            EntityScreeningForm(
+              model: _entityScreening,
+              onChanged: () => setState(() {}),
+            )
+          else
+            IndividualScreeningForm(
+              model: _applicantScreening,
+              onChanged: () => setState(() {}),
+              title: _selectedAccountType == 'M'
+                  ? 'Politically Exposed Person (PEP) Declaration — Minor *'
+                  : 'Politically Exposed Person (PEP) Declaration *',
+            ),
+          const SizedBox(height: 20),
 
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
