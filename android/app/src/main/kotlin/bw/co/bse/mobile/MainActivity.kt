@@ -1,4 +1,4 @@
-package com.example.bse
+package bw.co.bse.mobile
 
 import io.flutter.embedding.android.FlutterActivity
 

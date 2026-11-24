@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../theme_provider.dart';
 import '../../contants/constants.dart';
+import 'absa_deposit.dart';
 
 class DepositScreen extends StatefulWidget {
   const DepositScreen({super.key});
@@ -229,6 +230,15 @@ class _DepositScreenState extends State<DepositScreen>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            AbsaDepositButton(
+                              isDark: isDark,
+                              brokers: _activeBrokers,
+                              initialBrokerIndex: _selectedBrokerIndex,
+                              onCompleted: () => Navigator.pop(context),
+                            ),
+                            const SizedBox(height: 18),
+                            AbsaOrDivider(isDark: isDark),
+                            const SizedBox(height: 18),
                             _buildAmountHeroCard(
                                 isDark, fieldColor, hintColor, textColor, gold, goldLight),
                             const SizedBox(height: 24),

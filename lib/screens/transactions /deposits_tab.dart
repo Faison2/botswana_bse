@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'mascom.dart';
+import '../buy_sell/absa_deposit.dart';
 
 
 class DepositsTab extends StatefulWidget {
@@ -653,6 +654,26 @@ class _DepositsTabState extends State<DepositsTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+
+            // ── ABSA card deposit ──────────────────────────────────────────
+            AbsaDepositButton(
+              isDark: widget.isDark,
+              brokers: [
+                if ((_brokerCode ?? '').isNotEmpty)
+                  {
+                    'brokerCode': _brokerCode!,
+                    'cdsAccount': _cdsAccount ?? '',
+                    'brokerName': '',
+                  },
+              ],
+              onCompleted: () {
+                widget.onTransactionComplete?.call();
+                _loadRecentDeposits();
+              },
+            ),
+            const SizedBox(height: 18),
+            AbsaOrDivider(isDark: widget.isDark),
+            const SizedBox(height: 18),
 
             // ── Provider dropdown ──────────────────────────────────────────
             Text('Select Provider',
